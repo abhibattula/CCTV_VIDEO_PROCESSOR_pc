@@ -211,7 +211,7 @@ Export at 720p → output video height == 720. Browse output folder → native f
 - [X] T074 Run full test suite: `pytest tests/ -v --tb=short` → expect all pass, 0 failures
 - [X] T075 [P] Cross-platform smoke test: verify `get_ffmpeg()` returns existing path; verify `pathlib.Path` round-trip with space in filename; verify `tempfile.gettempdir()` is writable
 - [X] T076 [P] Update `specs/001-cctv-pc-processor/checklists/requirements.md` — mark all items complete; document final FR count (FR-001–FR-018) and validated SCs
-- [ ] T077 Final commit: `git add . && git commit -m "feat: CCTV PC Video Processor — complete implementation (US1+US2+US3)"`
+- [X] T077 Final commit: `git add . && git commit -m "feat: CCTV PC Video Processor — complete implementation (US1+US2+US3)"`
 
 ---
 
