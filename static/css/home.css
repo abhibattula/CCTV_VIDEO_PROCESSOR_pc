@@ -1,0 +1,70 @@
+/* Home page layout */
+.home-layout {
+  display: grid;
+  grid-template-columns: 1fr 320px;
+  gap: var(--gap);
+  padding: var(--gap);
+  height: 100vh;
+  overflow: hidden;
+}
+
+/* Drop zone */
+.drop-zone {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  border: 2px dashed var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  min-height: 240px;
+  transition: border-color 0.2s, background 0.2s;
+  cursor: pointer;
+  text-align: center;
+  padding: 32px;
+}
+.drop-zone.drag-over {
+  border-color: var(--accent);
+  background: rgba(79, 142, 247, 0.08);
+}
+.drop-zone__icon { font-size: 3rem; margin-bottom: 12px; opacity: 0.5; }
+.drop-zone__text { color: var(--text-dim); font-size: 13px; }
+.drop-zone__file {
+  margin-top: 12px;
+  color: var(--text);
+  font-weight: 500;
+  word-break: break-all;
+}
+
+/* Source info card */
+.source-info {
+  margin-top: var(--gap);
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+.source-info__item { font-size: 12px; }
+.source-info__label { color: var(--text-dim); }
+.source-info__value { font-weight: 500; }
+
+/* Settings panel */
+.settings-panel {
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: var(--gap);
+}
+.settings-panel .card { display: flex; flex-direction: column; gap: 12px; }
+
+.field { display: flex; flex-direction: column; gap: 4px; }
+
+.slider-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.slider-row input[type="range"] { flex: 1; }
+.slider-row span { min-width: 36px; text-align: right; font-size: 12px; color: var(--text-dim); }
+
+.start-btn-row { margin-top: 8px; }
+.start-btn-row .btn { width: 100%; justify-content: center; }

@@ -1,0 +1,55 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.Python
+*.egg-info/
+dist/
+build/
+.venv/
+venv/
+env/
+
+# PyQt6 / Qt
+*.qmlc
+*.jsc
+
+# Test artifacts
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+
+# App data (runtime, not source)
+.cctv_processor/
+data/
+outputs/
+*.writing
+
+# Temp preview clips
+static/previews/
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Editor
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Models (large binaries — download at runtime)
+*.pt
+*.onnx
+
+# Secrets / env
+.env
+.env.*
+
+# Logs
+*.log
+uvicorn.log
