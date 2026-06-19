@@ -15,6 +15,16 @@ The core loop (load → detect → review → export) stays the same. These feat
 
 ---
 
+## Clarifications
+
+### Session 2026-06-19
+
+- Q: When a label filter is active, how should non-matching event blocks appear on the canvas strip — hidden (gaps) or greyed out? → A: Grey out — non-matching blocks remain visible at ~20% opacity; matching blocks are full-opacity. This preserves event density context so users can see surrounding activity.
+- Q: How should the event list handle large event counts (300+)? → A: Virtual scrolling — only render cards in the visible viewport; activate when event count exceeds 100 events to keep filter and scroll response fast.
+- Q: Does the LabelFilter state persist when the user navigates away from the timeline page within the same session? → A: Yes — filter and score threshold survive navigation between pages (e.g., timeline → export → back to timeline) and reset only when a new job is loaded or "Clear Filters" is explicitly clicked.
+
+---
+
 ## User Scenarios & Testing
 
 ### User Story 1 — Tag Filtering on the Timeline (Priority: P1)
@@ -27,7 +37,7 @@ A security operator has a 4-hour overnight recording. Detection found 312 events
 
 **Acceptance Scenarios**:
 
-1. **Given** a timeline with events labelled "Person", "Car", and "Dog", **When** the user clicks the "Person" chip, **Then** only Person events are visible; canvas strip shows only Person event blocks; toolbar shows "17 shown / 312 total"
+1. **Given** a timeline with events labelled "Person", "Car", and "Dog", **When** the user clicks the "Person" chip, **Then** only Person events are visible in the event list; canvas strip renders Person event blocks at full opacity and all other blocks at ~20% opacity; toolbar shows "17 shown / 312 total"
 2. **Given** a label filter is active, **When** "Select All" is clicked, **Then** only the currently visible (filtered) events are selected
 3. **Given** multiple chips active (Person + Car), **When** the user clicks "Clear Filters", **Then** all events are visible again and all chips are deactivated
 4. **Given** an event has no label (MOG2 mode), **When** the filter bar is opened, **Then** a "Unlabelled" chip allows filtering those events
@@ -118,6 +128,8 @@ While a 2-hour recording processes, a user watches the processing page. A live m
 - "Quick Highlights" preset applied but fewer than 10 events exist: selects all events (no truncation)
 - Keyboard shortcut pressed when focus is on an input field: shortcut is suppressed (normal typing behaviour preserved)
 - YOLO labels not present (MOG2 mode): label filter bar is hidden; preset options that require label filtering show a tooltip "Requires Object Detection mode" and are greyed out
+- User navigates timeline → export → timeline within same session: active LabelFilter and ScoreThreshold are restored exactly as left; the event list re-renders with the same filter applied
+- New job loaded while a filter is active: LabelFilter and ScoreThreshold reset to defaults (all events visible) before the new job's timeline is rendered
 
 ---
 
@@ -128,7 +140,7 @@ While a 2-hour recording processes, a user watches the processing page. A live m
 **Tag Filtering (US1)**
 
 - **FR-P2-001**: The timeline page MUST display a label filter bar showing one chip per distinct `zone_label` value found in the current job's events, plus an "Unlabelled" chip when unlabelled events exist
-- **FR-P2-002**: Activating one or more label chips MUST restrict the visible event list and canvas strip to only events matching any active chip (OR logic between multiple active chips)
+- **FR-P2-002**: Activating one or more label chips MUST restrict the visible event list to only events matching any active chip (OR logic between multiple active chips); the canvas strip MUST render matching event blocks at full opacity and non-matching blocks at ~20% opacity (greyed out, not hidden) so the user retains density context for the full recording
 - **FR-P2-003**: The score threshold slider MUST hide (not exclude) events with `peak_motion_score` below the slider value; slider default is 0.0 (all events visible)
 - **FR-P2-004**: The event count display MUST update to "N shown / M total" whenever any filter or threshold changes
 - **FR-P2-005**: Clicking a label badge on an event card MUST instantly activate that label's filter chip
@@ -158,10 +170,11 @@ While a 2-hour recording processes, a user watches the processing page. A live m
 - **FR-P2-017**: The processing page MUST display a live label breakdown bar chart that updates each time a new event arrives via the SSE stream
 - **FR-P2-018**: The processing page MUST display an events-per-minute rate, calculated from event count and elapsed time, refreshed every 10 seconds
 - **FR-P2-019**: After detection completes, the timeline toolbar MUST show a compact label summary row (e.g., "Person×12  Car×47  Dog×3")
+- **FR-P2-020**: When the event list contains more than 100 events, the timeline page MUST use virtual scrolling — rendering only the cards in the visible viewport — so that scrolling and filter updates remain responsive regardless of total event count
 
 ### Key Entities
 
-- **LabelFilter**: Active set of label strings selected for filtering; ephemeral UI state, not persisted between sessions
+- **LabelFilter**: Active set of label strings selected for filtering; persists across page navigation within the same session (e.g., timeline → export → timeline retains the filter); resets to empty (all visible) when a new job is loaded or "Clear Filters" is clicked; not persisted between app launches
 - **ScoreThreshold**: Float 0.0–1.0; events below this threshold are hidden from view but not toggled to excluded
 - **SelectionSet**: Set of event indices the user has multi-selected; ephemeral UI state; cleared on navigation
 - **ExportPreset**: Named configuration — fields: `output_type`, `label_filter`, `quality`, `burn_in_enabled`, `auto_top_n`
@@ -179,6 +192,7 @@ While a 2-hour recording processes, a user watches the processing page. A live m
 - **SC-P2-004**: Exported clips with burn-in show legible timestamp and label text on any standard 1080p display when viewed at 100% zoom
 - **SC-P2-005**: The live detection chart updates within 3 seconds of each new event being detected
 - **SC-P2-006**: Selecting any export preset configures all associated settings in a single click with no additional required input
+- **SC-P2-007**: Scrolling through a 300-event timeline and applying a label filter both complete without perceptible lag (under 100ms visual response) regardless of total event count
 
 ---
 
@@ -193,3 +207,4 @@ While a 2-hour recording processes, a user watches the processing page. A live m
 - The live chart is driven entirely by SSE events already emitted in Phase 1; no new backend SSE changes are needed
 - Label-to-colour mapping is fixed in Phase 2 (Person=blue, Car=orange, Dog=green, Cat=purple, Bus=red, Bicycle=teal, default=grey)
 - The redesigned UI supports the existing dark theme only; a light theme toggle is Phase 3 scope
+- LabelFilter and ScoreThreshold state is held in the SPA's in-memory session store (not URL params, not localStorage); it survives client-side navigation but is lost on page reload or app restart
