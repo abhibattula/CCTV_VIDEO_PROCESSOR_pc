@@ -253,13 +253,17 @@ def generate_preview(
     token: str,
 ) -> str:
     """
-    Extract a temp clip for in-browser preview. Returns absolute path to clip.
+    Extract a short clip for in-browser preview, always re-encoded to H.264/AAC.
 
-    -ignore_editlist + +genpts fixes blank preview on iPhone/Android videos
-    that have MP4 edit lists offsetting PTS from 0.
+    WHY re-encode instead of stream-copy:
+    QWebEngineView embeds Chromium, which does NOT support HEVC/H.265, AV1, or
+    many CCTV-specific codecs. Stream-copying an HEVC source produces a clip that
+    "loads" (HTTP 200) but the <video> element silently fails to play.
+    H.264 + AAC is universally supported by every Chromium version.
+    ultrafast preset + crf 28 keeps re-encode time < 2s for a 15s preview clip.
     """
     PREVIEW_DIR.mkdir(parents=True, exist_ok=True)
-    out_path  = PREVIEW_DIR / f"{token}.mp4"
+    out_path   = PREVIEW_DIR / f"{token}.mp4"
     clip_start = max(0.0, start_s - 2)
     clip_dur   = (end_s - start_s) + 4
 
@@ -270,14 +274,19 @@ def generate_preview(
         "-ss", str(clip_start),
         "-i", source_path,
         "-t", str(clip_dur),
-        "-c", "copy",
+        # Always encode to H.264 + AAC — the only codec pair guaranteed to work
+        # in QWebEngineView / embedded Chromium regardless of source codec.
+        "-c:v", "libx264", "-preset", "ultrafast", "-crf", "28",
+        "-c:a", "aac", "-b:a", "96k",
         "-avoid_negative_ts", "make_zero",
         "-movflags", "faststart",
         "-y",
         str(out_path),
     ]
-    proc = subprocess.run(cmd, capture_output=True, timeout=60)
+    proc = subprocess.run(cmd, capture_output=True, timeout=120)
     if proc.returncode != 0:
-        raise RuntimeError(f"Preview generation failed: {proc.stderr.decode()[:200]}")
+        raise RuntimeError(
+            f"Preview generation failed: {proc.stderr.decode()[:400]}"
+        )
 
     return str(out_path)

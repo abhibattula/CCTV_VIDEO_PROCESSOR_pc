@@ -50,4 +50,8 @@ async def serve_preview(token: str):
     if not clip.exists():
         raise HTTPException(status_code=404, detail="Preview clip not found or expired")
 
-    return FileResponse(str(clip), media_type="video/mp4")
+    return FileResponse(
+        str(clip),
+        media_type="video/mp4",
+        headers={"Accept-Ranges": "bytes"},
+    )
