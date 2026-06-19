@@ -20,12 +20,12 @@ from PyQt6.QtWebEngineWidgets import QWebEngineView
 
 from app.config import BACKEND_HOST, BACKEND_PORT
 
-_BASE_URL = f"http://{BACKEND_HOST}:{BACKEND_PORT}"
-
 
 class MainWindow(QMainWindow):
-    def __init__(self):
+    def __init__(self, backend_port: int = BACKEND_PORT):
         super().__init__()
+        self._base_url = f"http://{BACKEND_HOST}:{backend_port}"
+
         self.setWindowTitle("CCTV Video Processor")
         self.resize(1280, 800)
 
@@ -49,7 +49,7 @@ class MainWindow(QMainWindow):
     def _wait_for_backend(self):
         for _ in range(100):  # up to 10 seconds
             try:
-                r = requests.get(f"{_BASE_URL}/api/health", timeout=1)
+                r = requests.get(f"{self._base_url}/api/health", timeout=1)
                 if r.ok:
                     QTimer.singleShot(0, self._load_ui)
                     return
@@ -59,7 +59,7 @@ class MainWindow(QMainWindow):
         QTimer.singleShot(0, self._load_ui)  # load anyway and let it show error
 
     def _load_ui(self):
-        self._view.load(QUrl(f"{_BASE_URL}/"))
+        self._view.load(QUrl(f"{self._base_url}/"))
         self._inject_js_bridge()
 
     # ── JS bridge ─────────────────────────────────────────────────────────────
@@ -111,7 +111,7 @@ class MainWindow(QMainWindow):
     def _post_path(self, path: str):
         try:
             requests.post(
-                f"{_BASE_URL}/api/shell/filepath",
+                f"{self._base_url}/api/shell/filepath",
                 json={"path": path},
                 timeout=2,
             )
@@ -135,12 +135,12 @@ class MainWindow(QMainWindow):
         # FR-017: if session is completed with uncollected events, navigate to home
         # so the web UI can show the confirmation modal before calling job/create
         try:
-            job = requests.get(f"{_BASE_URL}/api/job", timeout=1).json()
+            job = requests.get(f"{self._base_url}/api/job", timeout=1).json()
             if (job.get("status") == "completed"
                     and not job.get("output_path")
                     and job.get("events")):
                 # Navigate to home — JS there will handle the confirmation modal
-                self._view.load(QUrl(f"{_BASE_URL}/"))
+                self._view.load(QUrl(f"{self._base_url}/"))
                 # Post the pending path so the modal can pick it up after user confirms
                 self._post_path(path)
                 return
@@ -149,7 +149,7 @@ class MainWindow(QMainWindow):
 
         self._post_path(path)
         # Trigger job creation via the pending-path polling mechanism already in home.js
-        self._view.load(QUrl(f"{_BASE_URL}/"))
+        self._view.load(QUrl(f"{self._base_url}/"))
 
     # ── Close to tray ─────────────────────────────────────────────────────────
 

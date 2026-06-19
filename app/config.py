@@ -1,8 +1,9 @@
 """
-PC-adapted constants.  All values chosen for desktop hardware
-(multi-core CPU, ≥4 GB RAM) rather than Raspberry Pi constraints.
+Runtime constants — auto-tuned to available RAM so the same codebase
+runs acceptably on both a Windows PC (≥8 GB) and a Raspberry Pi 5 (2–4 GB).
 """
 import os
+import platform
 from pathlib import Path
 
 import psutil
@@ -15,9 +16,17 @@ if _total_gb >= 8:
 elif _total_gb >= 4:
     DETECT_WIDTH = 480
     DETECT_HEIGHT = 270
-else:
+elif _total_gb >= 2:
+    # Raspberry Pi 5 (2 GB) — keep detection frame small to leave RAM for Qt
     DETECT_WIDTH = 320
     DETECT_HEIGHT = 180
+else:
+    # Very constrained (Pi Zero / 1 GB devices)
+    DETECT_WIDTH = 160
+    DETECT_HEIGHT = 90
+
+# ── Platform flags ────────────────────────────────────────────────────────────
+IS_PI: bool = platform.machine().startswith(("aarch64", "armv")) and platform.system() == "Linux"
 
 # ── Server ────────────────────────────────────────────────────────────────────
 BACKEND_PORT: int = 5151
