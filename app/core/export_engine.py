@@ -14,6 +14,24 @@ from app.config import FFMPEG_THREADS, JOBS_DIR, PREVIEW_DIR, MP4_AUDIO_SAFE
 from app.utils.ffmpeg_path import get_ffmpeg
 
 
+def _build_burnin_filter(start_s: float, zone_label, recording_start) -> str:
+    """Return an FFmpeg drawtext filter string with timestamp [and label] overlay."""
+    from app.utils.time_utils import seconds_to_clock
+    if recording_start:
+        timestamp = seconds_to_clock(start_s, recording_start)
+    else:
+        h = int(start_s) // 3600
+        m = (int(start_s) % 3600) // 60
+        s = int(start_s) % 60
+        timestamp = f"{h:02d}:{m:02d}:{s:02d}"
+    # Explicit conditional per T029: use bullet separator when label present
+    text = f"{timestamp} - {zone_label}" if zone_label else timestamp
+    return (
+        f"drawtext=text='{text}':fontsize=18:fontcolor=white"
+        f":box=1:boxcolor=black@0.5:boxborderw=4:x=10:y=(h-th-10)"
+    )
+
+
 def _run_ffmpeg(cmd: list, logger: Optional[Callable] = None) -> None:
     """Run an ffmpeg command, streaming stderr to logger."""
     proc = subprocess.Popen(cmd, stderr=subprocess.PIPE, text=True)
@@ -35,6 +53,8 @@ def run(
     on_progress: Callable[[float], None],
     job_dir: Path,
     logger: Optional[Callable[[str], None]] = None,
+    burn_in: bool = False,
+    label_filter: Optional[list] = None,
 ) -> tuple:
     """
     Export included events to a merged MP4.
@@ -49,6 +69,12 @@ def run(
     included = [ev for ev in events if ev.get("included", True)]
     if not included:
         raise ValueError("All events are excluded — toggle at least one event on.")
+
+    # Apply label filter if provided (non-empty list)
+    if label_filter:
+        included = [ev for ev in included if ev.get("zone_label", "") in label_filter]
+        if not included:
+            raise ValueError("No events match the label filter.")
 
     source_path    = str(settings.get("source_path", ""))
     source_name    = Path(source_path).stem if source_path else "video"
@@ -109,14 +135,26 @@ def run(
                 out_name = f"{source_name}_event_{i+1:03d}_{ts_label}.mp4"
                 out_path = output_dir / out_name
 
-                if do_reencode:
+                if do_reencode or burn_in:
                     clip_video_flags = ["-c:v", "libx264", "-preset", "veryfast"]
+                    scale_filter = None
                     if output_quality == "720p":
-                        clip_video_flags += ["-vf", "scale=-2:720", "-crf", "28"]
+                        scale_filter = "scale=-2:720"
+                        clip_video_flags += ["-crf", "28"]
                     elif output_quality == "480p":
-                        clip_video_flags += ["-vf", "scale=-2:480", "-crf", "32"]
+                        scale_filter = "scale=-2:480"
+                        clip_video_flags += ["-crf", "32"]
                     else:
                         clip_video_flags += ["-crf", "23"]
+
+                    if burn_in:
+                        recording_start = settings.get("recording_start")
+                        zone_label = ev.get("zone_label")
+                        burnin_filter = _build_burnin_filter(start_s, zone_label, recording_start)
+                        vf = f"{scale_filter},{burnin_filter}" if scale_filter else burnin_filter
+                        clip_video_flags += ["-vf", vf]
+                    elif scale_filter:
+                        clip_video_flags += ["-vf", scale_filter]
                 else:
                     clip_video_flags = ["-c:v", "copy"]
 

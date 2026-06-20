@@ -4,6 +4,8 @@
  * FR-017: confirmation modal when a previous completed job has uncollected events.
  */
 
+import { resetUiState } from "/static/js/session-state.js";
+
 export function mount(container, params) {
   container.innerHTML = `
     <div class="home-layout">
@@ -17,41 +19,47 @@ export function mount(container, params) {
         <div class="source-info hidden card" id="source-info"></div>
       </div>
       <div class="settings-panel" id="settings-panel">
-        <div class="card">
-          <h3>Detection Mode</h3>
-          <div class="seg-group">
-            <button class="seg-btn active" data-mode="mog2">MOG2 (Fast)</button>
-            <button class="seg-btn" data-mode="yolo">Object Detection</button>
-          </div>
-        </div>
-        <div class="card">
-          <h3>Sensitivity</h3>
-          <div class="seg-group">
-            <button class="seg-btn" data-sens="low">Low</button>
-            <button class="seg-btn active" data-sens="medium">Medium</button>
-            <button class="seg-btn" data-sens="high">High</button>
-          </div>
-        </div>
-        <div class="card">
-          <div class="field">
-            <label>Padding (s)</label>
-            <div class="slider-row">
-              <input type="range" id="padding-slider" min="0" max="10" step="0.5" value="2">
-              <span id="padding-val">2.0s</span>
+        <div class="settings-grid">
+          <div class="settings-col">
+            <div class="card">
+              <h3>Detection Mode</h3>
+              <div class="seg-group">
+                <button class="seg-btn active" data-mode="mog2">MOG2 (Fast)</button>
+                <button class="seg-btn" data-mode="yolo">Object Detection</button>
+              </div>
+            </div>
+            <div class="card">
+              <h3>Sensitivity</h3>
+              <div class="seg-group">
+                <button class="seg-btn" data-sens="low">Low</button>
+                <button class="seg-btn active" data-sens="medium">Medium</button>
+                <button class="seg-btn" data-sens="high">High</button>
+              </div>
             </div>
           </div>
-          <div class="field" style="margin-top:10px">
-            <label>Min Event Duration (s)</label>
-            <div class="slider-row">
-              <input type="range" id="mindur-slider" min="0.5" max="30" step="0.5" value="2">
-              <span id="mindur-val">2.0s</span>
+          <div class="settings-col">
+            <div class="card">
+              <div class="field">
+                <label>Padding (s)</label>
+                <div class="slider-row">
+                  <input type="range" id="padding-slider" min="0" max="10" step="0.5" value="2">
+                  <span id="padding-val">2.0s</span>
+                </div>
+              </div>
+              <div class="field" style="margin-top:10px">
+                <label>Min Event Duration (s)</label>
+                <div class="slider-row">
+                  <input type="range" id="mindur-slider" min="0.5" max="30" step="0.5" value="2">
+                  <span id="mindur-val">2.0s</span>
+                </div>
+              </div>
             </div>
-          </div>
-        </div>
-        <div class="card">
-          <div class="field">
-            <label>Recording Start (HH:MM:SS) — optional</label>
-            <input type="text" id="recording-start" placeholder="e.g. 08:30:00">
+            <div class="card">
+              <div class="field">
+                <label>Recording Start (HH:MM:SS) — optional</label>
+                <input type="text" id="recording-start" placeholder="e.g. 08:30:00">
+              </div>
+            </div>
           </div>
         </div>
         <div class="start-btn-row">
@@ -175,6 +183,7 @@ export function mount(container, params) {
       container.querySelector("#start-btn").disabled = true;
       return;
     }
+    resetUiState();
 
     const si = data.source_info || {};
     infoEl.innerHTML = `

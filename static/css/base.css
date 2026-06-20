@@ -141,6 +141,22 @@ label {
   width: 0%;
 }
 
+/* ── Label colour tokens (Phase 2) ───────────────────────────────────────── */
+:root {
+  --label-person:  #4f8ef7;
+  --label-car:     #f7a24f;
+  --label-dog:     #4fd97a;
+  --label-cat:     #a24ff7;
+  --label-bus:     #f74f4f;
+  --label-bicycle: #4fcff7;
+  --label-default: #888888;
+}
+
+/* Confidence badge colour classes */
+.badge--green { color: #4fd97a; }
+.badge--amber { color: #f7c84f; }
+.badge--red   { color: #f74f4f; }
+
 /* ── Utility ─────────────────────────────────────────────────────────────── */
 .hidden  { display: none !important; }
 .muted   { color: var(--text-dim); }

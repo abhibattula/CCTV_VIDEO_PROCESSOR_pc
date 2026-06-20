@@ -39,10 +39,17 @@ class StartJobRequest(BaseModel):
     recording_start: Optional[str] = None
 
 
+class BulkToggleRequest(BaseModel):
+    indices: list[int]
+    include: bool
+
+
 class ExportRequest(BaseModel):
     output_type: str = "merged"
     quality: str = "original"
     output_dir: Optional[str] = None
+    burn_in: bool = False
+    label_filter: list[str] = []
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
@@ -174,6 +181,23 @@ async def get_events():
     return JSONResponse(snap["events"])
 
 
+@router.put("/job/events/bulk")
+async def bulk_toggle_events(req: BulkToggleRequest):
+    if not req.indices:
+        raise HTTPException(status_code=400, detail="indices must be non-empty")
+    snap = session.snapshot()
+    total = len(snap.get("events", []))
+    for idx in req.indices:
+        if idx < 0 or idx >= total:
+            raise HTTPException(status_code=404, detail=f"Event index {idx} not found")
+    try:
+        session.bulk_toggle_events(req.indices, req.include)
+    except (IndexError, KeyError) as exc:
+        raise HTTPException(status_code=404, detail=str(exc))
+    snap2 = session.snapshot()
+    return JSONResponse({"updated": len(req.indices), "events": snap2["events"]})
+
+
 @router.put("/job/events/{idx}/toggle")
 async def toggle_event(idx: int):
     try:
@@ -228,6 +252,8 @@ async def export_job(req: ExportRequest):
                 on_progress=lambda p: session.update(progress=p),
                 job_dir=_job_dir(job_id),
                 logger=log,
+                burn_in=req.burn_in,
+                label_filter=req.label_filter if req.label_filter else None,
             )
             session.update(
                 status="export_done",

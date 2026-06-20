@@ -51,3 +51,35 @@
   gap: var(--gap);
   align-items: center;
 }
+
+/* Phase 2: Detection Activity chart (T037) */
+.chart-wrap { padding: 14px 16px; }
+.chart-wrap h4 { font-size: 12px; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.05em; }
+
+.chart-bar-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+.chart-label {
+  width: 80px;
+  font-size: 12px;
+  color: var(--text-dim);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.chart-bar {
+  height: 14px;
+  background: var(--accent);
+  border-radius: 3px;
+  min-width: 4px;
+  transition: width 0.3s ease;
+}
+
+.eventsmin-counter {
+  font-size: 12px;
+  color: var(--text-dim);
+  margin-top: 8px;
+}

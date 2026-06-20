@@ -61,5 +61,12 @@ def toggle_event(idx: int) -> None:
         ev["included"] = not ev["included"]
 
 
+def bulk_toggle_events(indices: list, include: bool) -> None:
+    """Set included=include for all events at the given indices atomically. Raises IndexError on invalid idx."""
+    with _lock:
+        for idx in indices:
+            _state["events"][idx]["included"] = include
+
+
 # Initialise state on module import
 reset()

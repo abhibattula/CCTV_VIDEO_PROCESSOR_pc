@@ -1,5 +1,5 @@
 /**
- * Export page — output type, quality, folder picker, progress, done state.
+ * Export page — Phase 2: preset buttons, burn-in toggle, label scope selector.
  * FR-014: if ?quick=1 in URL, auto-start export with defaults on mount.
  */
 
@@ -12,6 +12,17 @@ export function mount(container, params) {
         <div class="card">
           <h2>Export</h2>
         </div>
+
+        <!-- Preset buttons (T032) -->
+        <div class="card export-section">
+          <h3>Presets</h3>
+          <div class="preset-row">
+            <button class="btn preset-btn" data-preset="security">Security Report</button>
+            <button class="btn preset-btn" data-preset="evidence">Evidence Pack</button>
+            <button class="btn preset-btn" data-preset="highlights">Quick Highlights</button>
+          </div>
+        </div>
+
         <div class="card export-section">
           <h3>Output Type</h3>
           <div class="seg-group">
@@ -27,6 +38,21 @@ export function mount(container, params) {
             <button class="seg-btn" data-quality="480p">480p</button>
           </div>
         </div>
+
+        <!-- Burn-in toggle + label scope (T035) -->
+        <div class="card export-section">
+          <h3>Options</h3>
+          <label class="burn-in-toggle" style="text-transform:none;letter-spacing:0;font-size:13px;display:flex;align-items:center;gap:8px;cursor:pointer">
+            <input type="checkbox" id="burn-in-check"> Burn-in timestamp &amp; label
+          </label>
+          <div class="field" style="margin-top:8px">
+            <label>Label Scope</label>
+            <select id="label-scope">
+              <option value="">All labels</option>
+            </select>
+          </div>
+        </div>
+
         <div class="card export-section">
           <h3>Output Folder</h3>
           <div class="output-folder-row">
@@ -60,6 +86,8 @@ export function mount(container, params) {
   let selectedType    = "merged";
   let selectedQuality = "original";
   let outputDir       = null;
+  let burnIn          = false;
+  let labelFilter     = [];
 
   // Type toggle
   container.querySelectorAll("[data-type]").forEach(btn => {
@@ -76,6 +104,52 @@ export function mount(container, params) {
       container.querySelectorAll("[data-quality]").forEach(b => b.classList.remove("active"));
       btn.classList.add("active");
       selectedQuality = btn.dataset.quality;
+    });
+  });
+
+  // Burn-in toggle (T035)
+  container.querySelector("#burn-in-check").addEventListener("change", (e) => {
+    burnIn = e.target.checked;
+  });
+
+  // Label scope selector (T035)
+  container.querySelector("#label-scope").addEventListener("change", (e) => {
+    labelFilter = e.target.value ? [e.target.value] : [];
+  });
+
+  // Helper: sync UI toggles to state
+  function setType(t) {
+    selectedType = t;
+    container.querySelectorAll("[data-type]").forEach(b => b.classList.toggle("active", b.dataset.type === t));
+  }
+  function setQuality(q) {
+    selectedQuality = q;
+    container.querySelectorAll("[data-quality]").forEach(b => b.classList.toggle("active", b.dataset.quality === q));
+  }
+
+  // Preset click handlers (T033)
+  container.querySelectorAll(".preset-btn").forEach(btn => {
+    btn.addEventListener("click", async () => {
+      container.querySelectorAll(".preset-btn").forEach(b => b.classList.remove("active"));
+      btn.classList.add("active");
+      const preset = btn.dataset.preset;
+      if (preset === "security") {
+        setType("merged"); setQuality("original");
+        burnIn = true; labelFilter = ["Person"];
+        container.querySelector("#burn-in-check").checked = true;
+        container.querySelector("#label-scope").value = "Person";
+      } else if (preset === "evidence") {
+        setType("individual"); setQuality("original");
+        burnIn = false; labelFilter = [];
+        container.querySelector("#burn-in-check").checked = false;
+        container.querySelector("#label-scope").value = "";
+      } else if (preset === "highlights") {
+        setType("merged"); setQuality("720p");
+        burnIn = false; labelFilter = [];
+        container.querySelector("#burn-in-check").checked = false;
+        container.querySelector("#label-scope").value = "";
+        await applyQuickHighlights();
+      }
     });
   });
 
@@ -104,7 +178,29 @@ export function mount(container, params) {
       });
   }
 
-  // Load summary
+  // Quick Highlights preset (T034)
+  async function applyQuickHighlights() {
+    const events = await fetch("/api/job/events").then(r => r.json());
+    const sorted = [...events.keys()].sort((a, b) =>
+      (events[b].peak_motion_score || 0) - (events[a].peak_motion_score || 0)
+    );
+    const top10 = sorted.slice(0, 10);
+    const rest  = sorted.slice(10);
+    if (top10.length) {
+      await fetch("/api/job/events/bulk", {
+        method: "PUT", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ indices: top10, include: true }),
+      });
+    }
+    if (rest.length) {
+      await fetch("/api/job/events/bulk", {
+        method: "PUT", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ indices: rest, include: false }),
+      });
+    }
+  }
+
+  // Load summary + populate label scope selector
   async function loadSummary() {
     const [job, events] = await Promise.all([
       fetch("/api/job").then(r => r.json()),
@@ -123,6 +219,16 @@ export function mount(container, params) {
       ${row("Audio", si.has_audio ? (si.audio_codec || "yes") : "none")}
       ${row("Mode", si.needs_reencode ? "Re-encode" : "Stream copy")}
     `;
+
+    // Populate label scope dropdown
+    const labels = [...new Set(events.map(e => e.zone_label).filter(Boolean))];
+    const scopeEl = container.querySelector("#label-scope");
+    labels.forEach(lbl => {
+      const opt = document.createElement("option");
+      opt.value = lbl; opt.textContent = lbl;
+      scopeEl.appendChild(opt);
+    });
+
     return job;
   }
 
@@ -138,9 +244,11 @@ export function mount(container, params) {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        output_type: selectedType,
-        quality:     selectedQuality,
-        output_dir:  outputDir || null,
+        output_type:  selectedType,
+        quality:      selectedQuality,
+        output_dir:   outputDir || null,
+        burn_in:      burnIn,
+        label_filter: labelFilter,
       }),
     });
     if (!resp.ok) {
