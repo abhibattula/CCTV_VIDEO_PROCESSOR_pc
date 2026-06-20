@@ -1,5 +1,6 @@
 /**
- * Export page — Phase 2: preset buttons, burn-in toggle, label scope selector.
+ * Export page — single-column, no right pane.
+ * Phase 2: preset buttons, burn-in toggle, label scope selector.
  * FR-014: if ?quick=1 in URL, auto-start export with defaults on mount.
  */
 
@@ -8,78 +9,88 @@ export function mount(container, params) {
 
   container.innerHTML = `
     <div class="export-layout">
-      <div class="export-left">
-        <div class="card">
-          <h2>Export</h2>
-        </div>
 
-        <!-- Preset buttons (T032) -->
-        <div class="card export-section">
-          <h3>Presets</h3>
-          <div class="preset-row">
-            <button class="btn preset-btn" data-preset="security">Security Report</button>
-            <button class="btn preset-btn" data-preset="evidence">Evidence Pack</button>
-            <button class="btn preset-btn" data-preset="highlights">Quick Highlights</button>
+      <!-- Summary stats strip -->
+      <div class="export-summary card" id="export-summary">
+        <p class="muted" style="font-size:13px">Loading job summary…</p>
+      </div>
+
+      <!-- Quick presets -->
+      <div class="card export-section">
+        <div class="section-label">Quick Presets</div>
+        <div class="preset-row">
+          <button class="btn preset-btn" data-preset="security">Security Report</button>
+          <button class="btn preset-btn" data-preset="evidence">Evidence Pack</button>
+          <button class="btn preset-btn" data-preset="highlights">Quick Highlights</button>
+        </div>
+      </div>
+
+      <!-- Main settings -->
+      <div class="card export-section">
+        <div class="export-opts-grid">
+          <div class="export-opts-group">
+            <div class="section-label">Output Type</div>
+            <div class="seg-group">
+              <button class="seg-btn active" data-type="merged">Merged MP4</button>
+              <button class="seg-btn" data-type="individual">Individual Clips</button>
+            </div>
+          </div>
+          <div class="export-opts-group">
+            <div class="section-label">Quality</div>
+            <div class="seg-group">
+              <button class="seg-btn active" data-quality="original">Original</button>
+              <button class="seg-btn" data-quality="720p">720p</button>
+              <button class="seg-btn" data-quality="480p">480p</button>
+            </div>
           </div>
         </div>
 
-        <div class="card export-section">
-          <h3>Output Type</h3>
-          <div class="seg-group">
-            <button class="seg-btn active" data-type="merged">Merged MP4</button>
-            <button class="seg-btn" data-type="individual">Individual Clips</button>
-          </div>
-        </div>
-        <div class="card export-section">
-          <h3>Quality</h3>
-          <div class="seg-group">
-            <button class="seg-btn active" data-quality="original">Original</button>
-            <button class="seg-btn" data-quality="720p">720p</button>
-            <button class="seg-btn" data-quality="480p">480p</button>
-          </div>
-        </div>
-
-        <!-- Burn-in toggle + label scope (T035) -->
-        <div class="card export-section">
-          <h3>Options</h3>
-          <label class="burn-in-toggle" style="text-transform:none;letter-spacing:0;font-size:13px;display:flex;align-items:center;gap:8px;cursor:pointer">
+        <div class="export-opts-row" style="margin-top:16px;padding-top:16px;border-top:1px solid var(--border)">
+          <label class="burn-in-toggle">
             <input type="checkbox" id="burn-in-check"> Burn-in timestamp &amp; label
           </label>
-          <div class="field" style="margin-top:8px">
-            <label>Label Scope</label>
-            <select id="label-scope">
+          <div class="field">
+            <label style="display:inline;text-transform:uppercase;font-size:10px;letter-spacing:.06em;color:var(--text-dim);font-weight:600">Label Scope</label>
+            <select id="label-scope" style="margin-top:4px;width:160px">
               <option value="">All labels</option>
             </select>
           </div>
         </div>
 
-        <div class="card export-section">
-          <h3>Output Folder</h3>
-          <div class="output-folder-row">
-            <input type="text" id="output-dir" placeholder="Default: Desktop" readonly>
-            <button class="btn" id="browse-folder-btn">Browse…</button>
+        <div class="output-folder-row" style="margin-top:16px;padding-top:16px;border-top:1px solid var(--border)">
+          <div style="flex:1">
+            <div class="section-label" style="margin-bottom:6px">Output Folder</div>
+            <div style="display:flex;gap:8px">
+              <input type="text" id="output-dir" placeholder="Default: Desktop" readonly style="flex:1">
+              <button class="btn" id="browse-folder-btn">Browse…</button>
+            </div>
           </div>
         </div>
-        <div class="card export-progress-wrap hidden" id="progress-wrap">
-          <h3>Exporting…</h3>
-          <div class="progress-bar"><div class="progress-bar__fill" id="export-progress-fill"></div></div>
-          <p class="muted" id="export-status-text" style="margin-top:8px">Starting…</p>
-        </div>
-        <div class="done-state hidden" id="done-state">
-          <div class="checkmark">✅</div>
-          <h2>Export Complete</h2>
-          <p id="done-path" class="muted"></p>
+      </div>
+
+      <!-- Export action -->
+      <div id="export-action-row">
+        <button class="btn btn-primary btn-lg" id="export-btn">Export Now</button>
+      </div>
+
+      <!-- Progress -->
+      <div class="card export-progress-wrap hidden" id="progress-wrap">
+        <div class="section-label">Exporting…</div>
+        <div class="progress-bar" style="margin:8px 0"><div class="progress-bar__fill" id="export-progress-fill"></div></div>
+        <p class="muted" id="export-status-text" style="font-size:13px">Starting…</p>
+      </div>
+
+      <!-- Done -->
+      <div class="done-state hidden" id="done-state">
+        <div class="checkmark">&#x2705;</div>
+        <h2>Export Complete</h2>
+        <p id="done-path" class="done-path"></p>
+        <div class="done-actions">
           <button class="btn btn-success" id="open-folder-btn">Open Folder</button>
           <button class="btn" onclick="window.go('/')">New Job</button>
         </div>
-        <div id="export-action-row" style="margin-top:auto">
-          <button class="btn btn-primary" id="export-btn" style="width:100%;justify-content:center">Export Now</button>
-        </div>
       </div>
-      <div class="export-summary card" id="export-summary">
-        <h3 style="margin-bottom:12px">Summary</h3>
-        <p class="muted">Loading…</p>
-      </div>
+
     </div>
   `;
 
@@ -89,45 +100,35 @@ export function mount(container, params) {
   let burnIn          = false;
   let labelFilter     = [];
 
-  // Type toggle
-  container.querySelectorAll("[data-type]").forEach(btn => {
-    btn.addEventListener("click", () => {
-      container.querySelectorAll("[data-type]").forEach(b => b.classList.remove("active"));
-      btn.classList.add("active");
-      selectedType = btn.dataset.type;
-    });
-  });
+  // ── Toggle helpers ──────────────────────────────────────────────────────────
 
-  // Quality toggle
-  container.querySelectorAll("[data-quality]").forEach(btn => {
-    btn.addEventListener("click", () => {
-      container.querySelectorAll("[data-quality]").forEach(b => b.classList.remove("active"));
-      btn.classList.add("active");
-      selectedQuality = btn.dataset.quality;
-    });
-  });
-
-  // Burn-in toggle (T035)
-  container.querySelector("#burn-in-check").addEventListener("change", (e) => {
-    burnIn = e.target.checked;
-  });
-
-  // Label scope selector (T035)
-  container.querySelector("#label-scope").addEventListener("change", (e) => {
-    labelFilter = e.target.value ? [e.target.value] : [];
-  });
-
-  // Helper: sync UI toggles to state
   function setType(t) {
     selectedType = t;
-    container.querySelectorAll("[data-type]").forEach(b => b.classList.toggle("active", b.dataset.type === t));
+    container.querySelectorAll("[data-type]").forEach(b =>
+      b.classList.toggle("active", b.dataset.type === t));
   }
   function setQuality(q) {
     selectedQuality = q;
-    container.querySelectorAll("[data-quality]").forEach(b => b.classList.toggle("active", b.dataset.quality === q));
+    container.querySelectorAll("[data-quality]").forEach(b =>
+      b.classList.toggle("active", b.dataset.quality === q));
   }
 
-  // Preset click handlers (T033)
+  container.querySelectorAll("[data-type]").forEach(btn =>
+    btn.addEventListener("click", () => setType(btn.dataset.type)));
+  container.querySelectorAll("[data-quality]").forEach(btn =>
+    btn.addEventListener("click", () => setQuality(btn.dataset.quality)));
+
+  // ── Options ─────────────────────────────────────────────────────────────────
+
+  container.querySelector("#burn-in-check").addEventListener("change", e => {
+    burnIn = e.target.checked;
+  });
+  container.querySelector("#label-scope").addEventListener("change", e => {
+    labelFilter = e.target.value ? [e.target.value] : [];
+  });
+
+  // ── Presets ─────────────────────────────────────────────────────────────────
+
   container.querySelectorAll(".preset-btn").forEach(btn => {
     btn.addEventListener("click", async () => {
       container.querySelectorAll(".preset-btn").forEach(b => b.classList.remove("active"));
@@ -153,7 +154,8 @@ export function mount(container, params) {
     });
   });
 
-  // Folder browse
+  // ── Folder browse ───────────────────────────────────────────────────────────
+
   container.querySelector("#browse-folder-btn").addEventListener("click", () => {
     window.dispatchEvent(new CustomEvent("cctv:browse-folder"));
     pollOutputDir();
@@ -178,12 +180,12 @@ export function mount(container, params) {
       });
   }
 
-  // Quick Highlights preset (T034)
+  // ── Quick Highlights preset ──────────────────────────────────────────────────
+
   async function applyQuickHighlights() {
     const events = await fetch("/api/job/events").then(r => r.json());
     const sorted = [...events.keys()].sort((a, b) =>
-      (events[b].peak_motion_score || 0) - (events[a].peak_motion_score || 0)
-    );
+      (events[b].peak_motion_score || 0) - (events[a].peak_motion_score || 0));
     const top10 = sorted.slice(0, 10);
     const rest  = sorted.slice(10);
     if (top10.length) {
@@ -200,24 +202,34 @@ export function mount(container, params) {
     }
   }
 
-  // Load summary + populate label scope selector
+  // ── Load summary ─────────────────────────────────────────────────────────────
+
   async function loadSummary() {
     const [job, events] = await Promise.all([
       fetch("/api/job").then(r => r.json()),
       fetch("/api/job/events").then(r => r.json()),
     ]);
-    const included = events.filter(e => e.included);
-    const totalDur = included.reduce((s, e) => s + (e.end_s - e.start_s), 0);
-    const si = job.source_info || {};
-    const summary = container.querySelector("#export-summary");
-    summary.innerHTML = `
-      <h3 style="margin-bottom:12px">Summary</h3>
-      ${row("Events", `${included.length} / ${events.length} selected`)}
-      ${row("Total Duration", fmt(totalDur))}
-      ${row("Codec", si.codec || "—")}
-      ${row("Resolution", si.width ? `${si.width}×${si.height}` : "—")}
-      ${row("Audio", si.has_audio ? (si.audio_codec || "yes") : "none")}
-      ${row("Mode", si.needs_reencode ? "Re-encode" : "Stream copy")}
+    const included  = events.filter(e => e.included);
+    const totalDur  = included.reduce((s, e) => s + (e.end_s - e.start_s), 0);
+    const si        = job.source_info || {};
+
+    const summaryEl = container.querySelector("#export-summary");
+    const strip = [
+      { value: `${included.length}`, sub: `/${events.length}`, label: "Events" },
+      { value: fmt(totalDur),                                    label: "Duration" },
+      { value: si.width ? `${si.width}×${si.height}` : "—",     label: "Resolution" },
+      { value: si.codec || "—",                                  label: "Codec" },
+      { value: si.has_audio ? (si.audio_codec || "yes") : "none", label: "Audio" },
+      { value: si.needs_reencode ? "Re-encode" : "Copy",         label: "Export mode" },
+    ];
+    summaryEl.innerHTML = `
+      <div class="stat-strip">
+        ${strip.map(s => `
+          <div class="stat-strip-item">
+            <div class="stat-strip-item__value">${s.value}${s.sub ? `<sub>${s.sub}</sub>` : ""}</div>
+            <div class="stat-strip-item__label">${s.label}</div>
+          </div>`).join("")}
+      </div>
     `;
 
     // Populate label scope dropdown
@@ -232,9 +244,7 @@ export function mount(container, params) {
     return job;
   }
 
-  function row(k, v) {
-    return `<div class="summary-row"><span class="key">${k}</span><span class="value">${v}</span></div>`;
-  }
+  // ── Export ───────────────────────────────────────────────────────────────────
 
   async function startExport() {
     container.querySelector("#export-action-row").classList.add("hidden");
@@ -259,7 +269,6 @@ export function mount(container, params) {
       return;
     }
 
-    // Poll for completion
     const poll = setInterval(async () => {
       const job = await fetch("/api/job").then(r => r.json());
       const pct = Math.round((job.progress || 0) * 100);
@@ -290,13 +299,12 @@ export function mount(container, params) {
   container.querySelector("#export-btn").addEventListener("click", startExport);
 
   loadSummary().then(() => {
-    // FR-014: auto-start if ?quick=1
     if (quick) startExport();
   });
 }
 
 function fmt(s) {
-  if (s == null) return "?";
+  if (s == null) return "—";
   const t = Math.round(s);
   const h = Math.floor(t / 3600);
   const m = Math.floor((t % 3600) / 60);

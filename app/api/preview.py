@@ -1,6 +1,9 @@
 """
 Preview clip endpoint — extract a short clip per event for in-browser playback.
+generate_preview() is CPU/IO-bound so it runs in an executor thread, keeping
+the asyncio event loop free for other requests during FFmpeg encoding.
 """
+import asyncio
 import re
 import secrets
 from pathlib import Path
@@ -26,14 +29,22 @@ async def create_preview(idx: int):
 
     ev          = events[idx]
     source_path = snap.get("source_path", "")
-    token       = secrets.token_hex(8)  # 16 hex chars
+    if not source_path:
+        raise HTTPException(status_code=400, detail="No source video loaded")
 
+    token = secrets.token_hex(8)  # 16 hex chars
+
+    # Run FFmpeg in a thread so the event loop stays responsive
+    loop = asyncio.get_running_loop()
     try:
-        generate_preview(
-            source_path=source_path,
-            start_s=float(ev["start_s"]),
-            end_s=float(ev["end_s"]),
-            token=token,
+        await loop.run_in_executor(
+            None,
+            lambda: generate_preview(
+                source_path=source_path,
+                start_s=float(ev["start_s"]),
+                end_s=float(ev["end_s"]),
+                token=token,
+            ),
         )
     except Exception as exc:
         raise HTTPException(status_code=500, detail=f"Preview extraction failed: {exc}")
@@ -53,5 +64,5 @@ async def serve_preview(token: str):
     return FileResponse(
         str(clip),
         media_type="video/mp4",
-        headers={"Accept-Ranges": "bytes"},
+        headers={"Accept-Ranges": "bytes", "Cache-Control": "no-store"},
     )

@@ -328,21 +328,64 @@ export function mount(container) {
     renderFiltered();
   }
 
-  // ── Preview (unchanged) ────────────────────────────────────────────────────
+  // ── Preview ────────────────────────────────────────────────────────────────
 
   async function showPreview(idx) {
-    const resp = await fetch(`/api/job/preview/${idx}`, { method: 'POST' });
-    if (!resp.ok) { alert('Could not generate preview'); return; }
-    const { url } = await resp.json();
+    // Open modal immediately with loading state — don't make user wait silently
     const overlay = document.createElement('div');
     overlay.className = 'modal-overlay';
     overlay.innerHTML = `
-      <div class="modal preview-modal" style="max-width:640px">
-        <video src="${url}" controls autoplay style="width:100%;border-radius:8px;background:#000"></video>
-        <button class="btn close-btn" style="width:100%;margin-top:12px;justify-content:center">Close</button>
+      <div class="modal preview-modal" style="max-width:680px;padding:20px">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
+          <h3 style="margin:0">Event #${idx + 1} Preview</h3>
+          <button class="btn" id="preview-close" style="padding:4px 12px;font-size:12px">✕ Close</button>
+        </div>
+        <div id="preview-body">
+          <div id="preview-loading" style="text-align:center;padding:48px 0;color:var(--text-dim)">
+            <div style="font-size:13px;margin-bottom:6px">Generating preview clip…</div>
+            <div style="font-size:11px;opacity:.6">This may take a few seconds</div>
+          </div>
+          <div id="preview-player" style="display:none">
+            <video id="preview-video"
+              controls playsinline
+              style="width:100%;border-radius:8px;background:#000;max-height:420px;display:block">
+            </video>
+          </div>
+          <div id="preview-error" style="display:none;color:var(--danger);text-align:center;padding:32px 0;font-size:13px"></div>
+        </div>
       </div>`;
     document.body.appendChild(overlay);
-    overlay.querySelector('.close-btn').onclick = () => document.body.removeChild(overlay);
+
+    function closePreview() {
+      const vid = overlay.querySelector('#preview-video');
+      if (vid) { vid.pause(); vid.removeAttribute('src'); vid.load(); }
+      if (document.body.contains(overlay)) document.body.removeChild(overlay);
+    }
+
+    overlay.querySelector('#preview-close').addEventListener('click', closePreview);
+    overlay.addEventListener('click', e => { if (e.target === overlay) closePreview(); });
+
+    try {
+      const resp = await fetch(`/api/job/preview/${idx}`, { method: 'POST' });
+      if (!resp.ok) {
+        const err = await resp.json().catch(() => ({}));
+        overlay.querySelector('#preview-loading').style.display = 'none';
+        overlay.querySelector('#preview-error').style.display   = '';
+        overlay.querySelector('#preview-error').textContent     = err.detail || 'Preview generation failed';
+        return;
+      }
+      const { url } = await resp.json();
+      overlay.querySelector('#preview-loading').style.display = 'none';
+      const playerEl = overlay.querySelector('#preview-player');
+      playerEl.style.display = '';
+      const video = overlay.querySelector('#preview-video');
+      video.src = url;
+      video.play().catch(() => {}); // autoplay; ignore policy rejections
+    } catch (err) {
+      overlay.querySelector('#preview-loading').style.display = 'none';
+      overlay.querySelector('#preview-error').style.display   = '';
+      overlay.querySelector('#preview-error').textContent     = 'Network error: ' + err.message;
+    }
   }
 
   // ── Wire bulk toolbar buttons ──────────────────────────────────────────────
