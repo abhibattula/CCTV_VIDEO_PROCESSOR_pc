@@ -76,9 +76,24 @@ export function mount(container, params) {
   let selectedMode = "mog2";
   let selectedSens = "medium";
 
+  // Check if YOLO is available and disable button if not
+  fetch("/api/system/capabilities").then(r => r.json()).then(caps => {
+    if (!caps.yolo_available) {
+      const yoloBtn = container.querySelector("[data-mode='yolo']");
+      if (yoloBtn) {
+        yoloBtn.disabled = true;
+        yoloBtn.title = "Requires: pip install ultralytics";
+        yoloBtn.style.opacity = "0.45";
+        yoloBtn.style.cursor = "not-allowed";
+        yoloBtn.textContent = "Object Detection (not installed)";
+      }
+    }
+  }).catch(() => {});
+
   // Mode toggle
   container.querySelectorAll("[data-mode]").forEach(btn => {
     btn.addEventListener("click", () => {
+      if (btn.disabled) return;
       container.querySelectorAll("[data-mode]").forEach(b => b.classList.remove("active"));
       btn.classList.add("active");
       selectedMode = btn.dataset.mode;

@@ -16,3 +16,13 @@ async def system_stats():
         "ram_pct":  get_ram_percent(),
         "cpu_temp": get_cpu_temp(),
     })
+
+
+@router.get("/system/capabilities")
+async def system_capabilities():
+    try:
+        import ultralytics  # noqa: F401
+        yolo_available = True
+    except Exception:
+        yolo_available = False
+    return JSONResponse({"yolo_available": yolo_available})
