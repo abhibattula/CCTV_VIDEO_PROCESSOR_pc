@@ -155,6 +155,19 @@ export function mount(container) {
       return;
     }
 
+    if (visible.length === 0) {
+      list.innerHTML = `
+        <div class="no-events-diag">
+          <h2>No events match this filter</h2>
+          <p>Try a different label or lower the score threshold.</p>
+          <button class="btn" id="empty-state-clear-btn" style="margin-top:16px">Clear Filters</button>
+        </div>`;
+      list.querySelector('#empty-state-clear-btn').addEventListener('click', () => {
+        container.querySelector('#clear-filters-btn').click();
+      });
+      return;
+    }
+
     list.innerHTML = '';
     visible.forEach((ev, visIdx) => {
       const idx = events.indexOf(ev);
