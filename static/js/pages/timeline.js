@@ -144,6 +144,7 @@ export function mount(container) {
       `${visible.length} shown / ${events.length} total`;
     drawCanvas();
     renderCards(visible);
+    checkZeroIncludedWarning();
   }
 
   function renderCards(visible) {
@@ -313,7 +314,6 @@ export function mount(container) {
       data.events.forEach((ev, i) => { events[i] = ev; });
     }
     updateBulkToolbar();
-    checkZeroIncludedWarning();
     renderFiltered();
   }
 
@@ -340,7 +340,6 @@ export function mount(container) {
     }
     uiState.lastBulkOp = null;
     updateBulkToolbar();
-    checkZeroIncludedWarning();
     renderFiltered();
   }
 
