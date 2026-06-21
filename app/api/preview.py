@@ -49,20 +49,20 @@ async def create_preview(idx: int):
     except Exception as exc:
         raise HTTPException(status_code=500, detail=f"Preview extraction failed: {exc}")
 
-    return JSONResponse({"url": f"/api/preview/{token}.mp4", "token": token})
+    return JSONResponse({"url": f"/api/preview/{token}.webm", "token": token})
 
 
-@router.get("/preview/{token}.mp4")
+@router.get("/preview/{token}.webm")
 async def serve_preview(token: str):
     if not _TOKEN_RE.match(token):
         raise HTTPException(status_code=400, detail="Invalid token format")
 
-    clip = PREVIEW_DIR / f"{token}.mp4"
+    clip = PREVIEW_DIR / f"{token}.webm"
     if not clip.exists():
         raise HTTPException(status_code=404, detail="Preview clip not found or expired")
 
     return FileResponse(
         str(clip),
-        media_type="video/mp4",
-        headers={"Accept-Ranges": "bytes", "Cache-Control": "no-store"},
+        media_type="video/webm",
+        headers={"Cache-Control": "private, max-age=300"},
     )

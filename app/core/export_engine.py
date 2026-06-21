@@ -291,17 +291,19 @@ def generate_preview(
     token: str,
 ) -> str:
     """
-    Extract a short clip for in-browser preview, always re-encoded to H.264/AAC.
+    Extract a short clip for in-browser preview, re-encoded to VP8/Opus (WebM).
 
-    WHY re-encode instead of stream-copy:
-    QWebEngineView embeds Chromium, which does NOT support HEVC/H.265, AV1, or
-    many CCTV-specific codecs. Stream-copying an HEVC source produces a clip that
-    "loads" (HTTP 200) but the <video> element silently fails to play.
-    H.264 + AAC is universally supported by every Chromium version.
-    ultrafast preset + crf 28 keeps re-encode time < 2s for a 15s preview clip.
+    WHY VP8/Opus instead of H.264/AAC:
+    QWebEngineView's bundled Chromium (PyPI PyQt6-WebEngine wheels) is built
+    WITHOUT proprietary codec support — confirmed via canPlayType(): H.264/AAC
+    return "" (unsupported) while VP8/VP9 + Opus/Vorbis return "probably".
+    Stream-copying or encoding to H.264 produces a clip that loads (HTTP 200)
+    but the <video> element rejects it with MEDIA_ERR_SRC_NOT_SUPPORTED.
+    VP8 + Opus is universally decodable by every QtWebEngine build.
+    deadline=realtime + cpu-used=8 keeps re-encode time fast for short clips.
     """
     PREVIEW_DIR.mkdir(parents=True, exist_ok=True)
-    out_path   = PREVIEW_DIR / f"{token}.mp4"
+    out_path   = PREVIEW_DIR / f"{token}.webm"
     clip_start = max(0.0, start_s - 2)
     clip_dur   = (end_s - start_s) + 4
 
@@ -312,12 +314,12 @@ def generate_preview(
         "-ss", str(clip_start),
         "-i", source_path,
         "-t", str(clip_dur),
-        # Always encode to H.264 + AAC — the only codec pair guaranteed to work
+        # Always encode to VP8 + Opus — the only codec pair guaranteed to work
         # in QWebEngineView / embedded Chromium regardless of source codec.
-        "-c:v", "libx264", "-preset", "ultrafast", "-crf", "28",
-        "-c:a", "aac", "-b:a", "96k",
+        "-c:v", "libvpx", "-deadline", "realtime", "-cpu-used", "8", "-b:v", "2M",
+        "-c:a", "libopus", "-b:a", "96k",
         "-avoid_negative_ts", "make_zero",
-        "-movflags", "faststart",
+        "-reset_timestamps", "1",   # force PTS to start at 0 so browser shows correct duration
         "-y",
         str(out_path),
     ]
