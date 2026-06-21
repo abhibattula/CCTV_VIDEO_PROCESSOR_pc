@@ -53,6 +53,9 @@ export function mount(container) {
         <button class="btn" id="btn-undo" disabled>Undo</button>
         <button class="btn" id="btn-clear-sel">Clear Selection</button>
       </div>
+      <div class="warning hidden" id="zero-included-warning" style="padding:8px 12px;font-size:12px">
+        No events selected for export — adjust filters or include more events
+      </div>
       <div class="canvas-strip-wrap">
         <canvas id="timeline-canvas"></canvas>
       </div>
@@ -284,6 +287,12 @@ export function mount(container) {
     listEl.classList.toggle('selecting', n > 0);
   }
 
+  function checkZeroIncludedWarning() {
+    const banner = container.querySelector('#zero-included-warning');
+    const allExcluded = events.length > 0 && events.every(ev => !ev.included);
+    banner.classList.toggle('hidden', !allExcluded);
+  }
+
   // ── Bulk actions (T019) ────────────────────────────────────────────────────
 
   async function bulkToggle(include) {
@@ -304,6 +313,7 @@ export function mount(container) {
       data.events.forEach((ev, i) => { events[i] = ev; });
     }
     updateBulkToolbar();
+    checkZeroIncludedWarning();
     renderFiltered();
   }
 
@@ -330,6 +340,7 @@ export function mount(container) {
     }
     uiState.lastBulkOp = null;
     updateBulkToolbar();
+    checkZeroIncludedWarning();
     renderFiltered();
   }
 
