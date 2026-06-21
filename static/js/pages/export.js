@@ -241,6 +241,17 @@ export function mount(container, params) {
       scopeEl.appendChild(opt);
     });
 
+    // MOG2 mode (no zone_label on any event) — Security Report needs a
+    // label to filter on, so disable it instead of letting it fail export
+    // with "No events match the label filter."
+    if (labels.length === 0) {
+      const securityBtn = container.querySelector('[data-preset="security"]');
+      securityBtn.disabled = true;
+      securityBtn.title = "Requires Object Detection mode";
+      securityBtn.style.opacity = "0.45";
+      securityBtn.style.cursor = "not-allowed";
+    }
+
     return job;
   }
 
