@@ -3,6 +3,8 @@
  * Pages register themselves via window._cctvPages[path] = { mount(container) }.
  * navigate(path) loads the page module if needed, then calls mount().
  */
+import { installDebugLog } from "/static/js/debug-log.js";
+installDebugLog();
 
 const routes = {
   "/":           "/static/js/pages/home.js",

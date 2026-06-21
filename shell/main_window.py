@@ -30,6 +30,17 @@ class MainWindow(QMainWindow):
         self.resize(1280, 800)
 
         self._view = QWebEngineView()
+        # Allow video autoplay without requiring a user gesture — needed so that
+        # preview clips can play automatically after the async POST completes.
+        from PyQt6.QtWebEngineCore import QWebEngineSettings
+        self._view.settings().setAttribute(
+            QWebEngineSettings.WebAttribute.PlaybackRequiresUserGesture, False
+        )
+        # Best-effort clipboard access for the debug log's Copy button — the
+        # JS side falls back to execCommand('copy') if this still gets denied.
+        self._view.settings().setAttribute(
+            QWebEngineSettings.WebAttribute.JavascriptCanAccessClipboard, True
+        )
         self.setCentralWidget(self._view)
 
         self.setAcceptDrops(True)

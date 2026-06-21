@@ -68,6 +68,91 @@ function installGlobalErrorCapture() {
   });
 }
 
+let drawerEl = null;
+let bodyEl   = null;
+let countEl  = null;
+
+function escapeHtml(s) {
+  return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+}
+
+function renderRows() {
+  if (countEl) countEl.textContent = `${buffer.length} entries`;
+  if (!bodyEl) return;
+  bodyEl.innerHTML = buffer.map(e =>
+    `<div class="debug-drawer__row debug-drawer__row--${e.type}">[${e.ts.slice(11, 19)}] ${e.type.toUpperCase()}: ${escapeHtml(e.text)}</div>`
+  ).join("");
+  bodyEl.scrollTop = bodyEl.scrollHeight;
+}
+
+async function copyToClipboard(text) {
+  try {
+    await navigator.clipboard.writeText(text);
+    return true;
+  } catch {
+    // Fallback for embedded WebViews where the async Clipboard API's
+    // permission model rejects the call even with a real user gesture —
+    // confirmed against this project's QtWebEngine build during planning.
+    try {
+      const ta = document.createElement("textarea");
+      ta.value = text;
+      ta.style.position = "fixed";
+      ta.style.left = "-9999px";
+      document.body.appendChild(ta);
+      ta.select();
+      const ok = document.execCommand("copy");
+      document.body.removeChild(ta);
+      return ok;
+    } catch {
+      return false;
+    }
+  }
+}
+
+function buildUI() {
+  const navBar = document.getElementById("app-nav");
+  if (!navBar) return; // no nav bar on this page — capture still active, just no UI
+
+  const toggle = document.createElement("button");
+  toggle.className   = "debug-toggle";
+  toggle.textContent = "🐛 Debug";
+  navBar.appendChild(toggle);
+
+  drawerEl = document.createElement("div");
+  drawerEl.className = "debug-drawer";
+  drawerEl.innerHTML = `
+    <div class="debug-drawer__header">
+      <h4>Debug Log</h4>
+      <span class="debug-drawer__count" id="debug-count">0 entries</span>
+      <button class="btn" id="debug-copy" style="padding:3px 10px;font-size:11px">Copy</button>
+      <button class="btn" id="debug-clear" style="padding:3px 10px;font-size:11px">Clear</button>
+      <button class="btn" id="debug-close" style="padding:3px 10px;font-size:11px">✕</button>
+    </div>
+    <div class="debug-drawer__body" id="debug-body"></div>
+  `;
+  document.body.appendChild(drawerEl);
+
+  bodyEl  = drawerEl.querySelector("#debug-body");
+  countEl = drawerEl.querySelector("#debug-count");
+
+  toggle.addEventListener("click", () => {
+    drawerEl.classList.toggle("open");
+    if (drawerEl.classList.contains("open")) renderRows();
+  });
+  drawerEl.querySelector("#debug-close").addEventListener("click", () => {
+    drawerEl.classList.remove("open");
+  });
+  drawerEl.querySelector("#debug-clear").addEventListener("click", clearDebugEntries);
+  drawerEl.querySelector("#debug-copy").addEventListener("click", async () => {
+    const text = buffer.map(e => `[${e.ts}] ${e.type.toUpperCase()}: ${e.text}`).join("\n");
+    const ok = await copyToClipboard(text);
+    countEl.textContent = ok ? `${buffer.length} entries (copied)` : "Copy failed — select text manually";
+  });
+
+  onAppend = renderRows;
+  renderRows();
+}
+
 let installed = false;
 
 export function installDebugLog() {
@@ -76,4 +161,5 @@ export function installDebugLog() {
   installConsolePatch();
   installFetchPatch();
   installGlobalErrorCapture();
+  buildUI();
 }

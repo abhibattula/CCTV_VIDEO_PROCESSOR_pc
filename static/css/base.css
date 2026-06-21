@@ -253,3 +253,53 @@ label {
 .modal h2 { margin-bottom: 10px; }
 .modal p  { margin-bottom: 20px; }
 .modal .actions { display: flex; gap: 10px; justify-content: flex-end; }
+
+/* ── Debug log panel ─────────────────────────────────────────────────────── */
+.debug-toggle {
+  margin-left: 12px;
+  padding: 5px 10px;
+  border-radius: var(--radius);
+  font-size: 12px;
+  color: var(--text-dim);
+  background: transparent;
+  border: 1px solid var(--border);
+  cursor: pointer;
+}
+.debug-toggle:hover { background: var(--surface2); color: var(--text); }
+
+.debug-drawer {
+  position: fixed;
+  left: 0; right: 0; bottom: 0;
+  height: 240px;
+  background: var(--surface);
+  border-top: 1px solid var(--border);
+  z-index: 2000;
+  display: none;
+  flex-direction: column;
+}
+.debug-drawer.open { display: flex; }
+
+.debug-drawer__header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+.debug-drawer__header h4 { font-size: 12px; flex: 1; }
+.debug-drawer__count { font-size: 11px; color: var(--text-dim); white-space: nowrap; }
+
+.debug-drawer__body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 8px 12px;
+  font-family: Consolas, "Courier New", monospace;
+  font-size: 11.5px;
+}
+.debug-drawer__row { padding: 2px 0; white-space: pre-wrap; word-break: break-all; }
+.debug-drawer__row--log   { color: var(--text-dim); }
+.debug-drawer__row--warn  { color: var(--warning); }
+.debug-drawer__row--error { color: var(--danger); }
+.debug-drawer__row--fetch { color: var(--accent); }
+.debug-drawer__row--video { color: var(--success); }
