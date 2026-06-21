@@ -163,3 +163,18 @@ export function installDebugLog() {
   installGlobalErrorCapture();
   buildUI();
 }
+
+const MEDIA_ERR_NAMES = { 1: "ABORTED", 2: "NETWORK", 3: "DECODE", 4: "SRC_NOT_SUPPORTED" };
+
+export function logVideoEvents(videoEl, label) {
+  ["loadstart", "loadedmetadata", "play", "stalled"].forEach(evt => {
+    videoEl.addEventListener(evt, () => {
+      const extra = evt === "loadedmetadata" ? ` duration=${videoEl.duration.toFixed(2)}` : "";
+      push("video", `[${label}] ${evt}${extra}`);
+    });
+  });
+  videoEl.addEventListener("error", () => {
+    const code = videoEl.error ? videoEl.error.code : "?";
+    push("video", `[${label}] ERROR code=${code} (${MEDIA_ERR_NAMES[code] || "?"})`);
+  });
+}

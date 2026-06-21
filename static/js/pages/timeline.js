@@ -5,6 +5,7 @@
  * keyboard navigation, CSS content-visibility virtual scroll.
  */
 import { uiState, resetUiState } from '/static/js/session-state.js';
+import { logVideoEvents } from '/static/js/debug-log.js';
 
 const LABEL_COLOURS = {
   person:  'var(--label-person)',
@@ -331,60 +332,103 @@ export function mount(container) {
   // ── Preview ────────────────────────────────────────────────────────────────
 
   async function showPreview(idx) {
-    // Open modal immediately with loading state — don't make user wait silently
     const overlay = document.createElement('div');
     overlay.className = 'modal-overlay';
     overlay.innerHTML = `
-      <div class="modal preview-modal" style="max-width:680px;padding:20px">
+      <div class="modal preview-modal" style="max-width:720px;padding:20px">
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
           <h3 style="margin:0">Event #${idx + 1} Preview</h3>
           <button class="btn" id="preview-close" style="padding:4px 12px;font-size:12px">✕ Close</button>
         </div>
-        <div id="preview-body">
-          <div id="preview-loading" style="text-align:center;padding:48px 0;color:var(--text-dim)">
-            <div style="font-size:13px;margin-bottom:6px">Generating preview clip…</div>
-            <div style="font-size:11px;opacity:.6">This may take a few seconds</div>
-          </div>
-          <div id="preview-player" style="display:none">
-            <video id="preview-video"
-              controls playsinline
-              style="width:100%;border-radius:8px;background:#000;max-height:420px;display:block">
-            </video>
-          </div>
-          <div id="preview-error" style="display:none;color:var(--danger);text-align:center;padding:32px 0;font-size:13px"></div>
+
+        <!-- Loading -->
+        <div id="preview-loading" style="text-align:center;padding:48px 0;color:var(--text-dim)">
+          <div style="font-size:13px;margin-bottom:6px">Generating preview clip…</div>
+          <div style="font-size:11px;opacity:.6">This may take a few seconds</div>
         </div>
+
+        <!-- Player — rendered in DOM immediately but hidden until clip is ready -->
+        <div id="preview-player" style="display:none">
+          <video id="preview-video"
+            controls playsinline muted
+            preload="auto"
+            style="width:100%;border-radius:8px;background:#000;max-height:420px;display:block">
+          </video>
+          <div id="preview-status" style="font-size:11px;color:var(--text-dim);margin-top:6px;text-align:center">
+            Click play or use the controls to start
+          </div>
+        </div>
+
+        <!-- Error -->
+        <div id="preview-error" style="display:none;color:var(--danger);text-align:center;padding:32px 0;font-size:13px"></div>
       </div>`;
     document.body.appendChild(overlay);
 
+    const loadingEl = overlay.querySelector('#preview-loading');
+    const playerEl  = overlay.querySelector('#preview-player');
+    const errorEl   = overlay.querySelector('#preview-error');
+    const statusEl  = overlay.querySelector('#preview-status');
+    const video     = overlay.querySelector('#preview-video');
+
+    logVideoEvents(video, 'preview');
+
+    function showError(msg) {
+      loadingEl.style.display = 'none';
+      playerEl.style.display  = 'none';
+      errorEl.style.display   = '';
+      errorEl.textContent     = msg;
+    }
+
     function closePreview() {
-      const vid = overlay.querySelector('#preview-video');
-      if (vid) { vid.pause(); vid.removeAttribute('src'); vid.load(); }
+      video.pause();
+      video.removeAttribute('src');
+      video.load();
       if (document.body.contains(overlay)) document.body.removeChild(overlay);
     }
 
     overlay.querySelector('#preview-close').addEventListener('click', closePreview);
     overlay.addEventListener('click', e => { if (e.target === overlay) closePreview(); });
 
+    // Listen for video errors — must be attached before src is set
+    video.addEventListener('error', () => {
+      const code = video.error ? video.error.code : '?';
+      const msgs = { 1: 'Aborted', 2: 'Network error', 3: 'Decode error', 4: 'Format not supported' };
+      showError(`Video error (${msgs[code] || code}). Try a different event.`);
+    });
+
     try {
       const resp = await fetch(`/api/job/preview/${idx}`, { method: 'POST' });
       if (!resp.ok) {
-        const err = await resp.json().catch(() => ({}));
-        overlay.querySelector('#preview-loading').style.display = 'none';
-        overlay.querySelector('#preview-error').style.display   = '';
-        overlay.querySelector('#preview-error').textContent     = err.detail || 'Preview generation failed';
+        const data = await resp.json().catch(() => ({}));
+        showError(data.detail || 'Preview generation failed');
         return;
       }
       const { url } = await resp.json();
-      overlay.querySelector('#preview-loading').style.display = 'none';
-      const playerEl = overlay.querySelector('#preview-player');
-      playerEl.style.display = '';
-      const video = overlay.querySelector('#preview-video');
+
+      // CRITICAL: show the player div BEFORE setting video.src.
+      // Chromium defers loading for video elements inside display:none containers —
+      // the element must be visible when src is assigned for metadata to load immediately.
+      loadingEl.style.display = 'none';
+      playerEl.style.display  = '';
+
+      // Set src now that the element is visible
       video.src = url;
-      video.play().catch(() => {}); // autoplay; ignore policy rejections
+      video.load();
+
+      // Once metadata is available, seek to event start (skip 2s pre-padding) and play
+      video.addEventListener('loadedmetadata', () => {
+        statusEl.style.display = 'none';
+        // Seek past the 2s pre-padding to show the actual event content
+        if (video.duration > 2) video.currentTime = 2;
+        video.play().catch(() => {
+          // If autoplay fails, show a hint; user can click the play button
+          statusEl.style.display = '';
+          statusEl.textContent   = 'Click ▶ to play';
+        });
+      }, { once: true });
+
     } catch (err) {
-      overlay.querySelector('#preview-loading').style.display = 'none';
-      overlay.querySelector('#preview-error').style.display   = '';
-      overlay.querySelector('#preview-error').textContent     = 'Network error: ' + err.message;
+      showError('Network error: ' + err.message);
     }
   }
 
