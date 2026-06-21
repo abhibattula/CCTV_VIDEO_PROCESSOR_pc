@@ -136,6 +136,19 @@
 
 ---
 
+## Phase 9: Edge Case Follow-ups (from /speckit.analyze, 2026-06-20)
+
+**Purpose**: Close 3 confirmed coverage gaps found by `/speckit.analyze` — each is an explicit `spec.md` Edge Case with no task in Phases 1-8 and confirmed absent from the shipped code via direct grep. Full task specs with exact code live in `docs/superpowers/plans/2026-06-20-edge-case-fixes.md` (executed via superpowers subagent-driven-development).
+
+- [X] T044 [P] [US1] Add "No events match this filter" empty-state message + Clear Filters button to `renderCards()` in `static/js/pages/timeline.js`, shown when `getVisibleEvents()` returns empty but `events.length > 0` (spec.md Edge Cases L124)
+- [X] T045 [US2] Add inline warning "No events selected for export — adjust filters or include more events" near the bulk toolbar in `static/js/pages/timeline.js`, shown when a bulk-exclude (or undo) leaves zero events with `included === true` across the whole job (spec.md Edge Cases L125)
+- [X] T046 [P] [US4] Grey out the "Security Report" preset button with tooltip "Requires Object Detection mode" in `static/js/pages/export.js` when no event has a `zone_label` (MOG2 mode) (spec.md Edge Cases L130)
+- [X] T047 Run `pytest tests/ -v` to confirm no regression (these are frontend-only changes); manually verify all 3 fixes in the live app
+
+**Checkpoint**: All 3 edge cases from the analyze report are closed; full test suite still green.
+
+---
+
 ## Dependencies & Execution Order
 
 ### Phase Dependencies
