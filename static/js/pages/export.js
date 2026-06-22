@@ -17,7 +17,10 @@ export function mount(container, params) {
 
       <!-- Quick presets -->
       <div class="card export-section">
-        <div class="section-label">Quick Presets</div>
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+          <div class="section-label">Quick Presets</div>
+          <button class="btn" id="save-preset-btn" style="font-size:12px;padding:6px 12px">Save as Preset</button>
+        </div>
         <div class="preset-row">
           <button class="btn preset-btn" data-preset="security">Security Report</button>
           <button class="btn preset-btn" data-preset="evidence">Evidence Pack</button>
@@ -153,6 +156,93 @@ export function mount(container, params) {
       }
     });
   });
+
+  // ── Load Custom Presets (T005) ──────────────────────────────────────────────
+
+  async function loadCustomPresets() {
+    try {
+      const customPresets = await fetch("/api/presets").then(r => r.json());
+      const presetRow = container.querySelector(".preset-row");
+
+      // Remove any existing custom preset buttons (but keep the 3 built-in ones)
+      const customBtns = presetRow.querySelectorAll(".preset-btn[data-custom]");
+      customBtns.forEach(btn => btn.remove());
+
+      // Add a custom preset button for each returned preset
+      customPresets.forEach(preset => {
+        const btn = document.createElement("button");
+        btn.className = "btn preset-btn";
+        btn.dataset.preset = preset.name;
+        btn.dataset.custom = "true";
+        btn.textContent = preset.name;
+
+        // Create a wrapper div to hold the button and delete control
+        const wrapper = document.createElement("div");
+        wrapper.style.position = "relative";
+        wrapper.style.display = "inline-block";
+
+        btn.addEventListener("click", async () => {
+          container.querySelectorAll(".preset-btn").forEach(b => b.classList.remove("active"));
+          btn.classList.add("active");
+
+          // Apply the preset settings
+          setType(preset.output_type || "merged");
+          setQuality(preset.quality || "original");
+          burnIn = preset.burn_in || false;
+          labelFilter = preset.label_filter || [];
+
+          // Update the DOM elements
+          container.querySelector("#burn-in-check").checked = burnIn;
+          container.querySelector("#label-scope").value = labelFilter.length > 0 ? labelFilter[0] : "";
+        });
+
+        wrapper.appendChild(btn);
+
+        // T007: Add delete control for custom presets
+        const deleteBtn = document.createElement("button");
+        deleteBtn.className = "btn";
+        deleteBtn.style.position = "absolute";
+        deleteBtn.style.top = "-8px";
+        deleteBtn.style.right = "-8px";
+        deleteBtn.style.width = "24px";
+        deleteBtn.style.height = "24px";
+        deleteBtn.style.padding = "0";
+        deleteBtn.style.display = "flex";
+        deleteBtn.style.alignItems = "center";
+        deleteBtn.style.justifyContent = "center";
+        deleteBtn.style.fontSize = "16px";
+        deleteBtn.style.backgroundColor = "var(--danger)";
+        deleteBtn.style.color = "white";
+        deleteBtn.style.border = "none";
+        deleteBtn.style.borderRadius = "50%";
+        deleteBtn.style.cursor = "pointer";
+        deleteBtn.textContent = "×";
+        deleteBtn.title = "Delete this preset";
+
+        deleteBtn.addEventListener("click", async (e) => {
+          e.stopPropagation();
+          try {
+            const resp = await fetch(`/api/presets/${encodeURIComponent(preset.name)}`, {
+              method: "DELETE",
+            });
+            if (resp.ok) {
+              await loadCustomPresets();
+            } else {
+              const err = await resp.json();
+              alert(err.detail || "Failed to delete preset");
+            }
+          } catch (err) {
+            alert("Error deleting preset: " + err.message);
+          }
+        });
+
+        wrapper.appendChild(deleteBtn);
+        presetRow.appendChild(wrapper);
+      });
+    } catch (err) {
+      console.error("Error loading custom presets:", err);
+    }
+  }
 
   // ── Folder browse ───────────────────────────────────────────────────────────
 
@@ -309,7 +399,39 @@ export function mount(container, params) {
 
   container.querySelector("#export-btn").addEventListener("click", startExport);
 
+  // ── Save as Preset (T006) ──────────────────────────────────────────────────
+
+  container.querySelector("#save-preset-btn").addEventListener("click", async () => {
+    const name = prompt("Enter a name for this preset:");
+    if (name === null) return; // User cancelled
+
+    try {
+      const resp = await fetch("/api/presets", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: name,
+          output_type: selectedType,
+          quality: selectedQuality,
+          burn_in: burnIn,
+          label_filter: labelFilter,
+        }),
+      });
+
+      if (!resp.ok) {
+        const err = await resp.json();
+        alert(err.detail || "Failed to save preset");
+      } else {
+        // Reload custom presets to show the new one
+        await loadCustomPresets();
+      }
+    } catch (err) {
+      alert("Error saving preset: " + err.message);
+    }
+  });
+
   loadSummary().then(() => {
+    loadCustomPresets();
     if (quick) startExport();
   });
 }
