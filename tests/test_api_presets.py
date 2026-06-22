@@ -9,17 +9,6 @@ from fastapi.testclient import TestClient
 
 
 @pytest.fixture
-def presets_file(monkeypatch, tmp_path):
-    """
-    Monkeypatch app.config.PRESETS_FILE to a tmp_path location.
-    Tests never touch the real ~/.cctv_processor/presets.json on this machine.
-    """
-    presets_file_path = tmp_path / "presets.json"
-    monkeypatch.setattr("app.config.PRESETS_FILE", presets_file_path)
-    return presets_file_path
-
-
-@pytest.fixture
 def client_with_temp_presets(monkeypatch, tmp_path):
     """
     Create a fresh TestClient with a monkeypatched temp PRESETS_FILE.
@@ -45,15 +34,36 @@ def test_list_presets_empty_when_file_missing(client_with_temp_presets):
     assert resp.json() == []
 
 
-def test_list_presets_empty_when_file_corrupted(client_with_temp_presets, tmp_path, monkeypatch):
+def test_list_presets_empty_when_file_corrupted(client_with_temp_presets):
     """GET /api/presets returns [] when file contains invalid JSON (not 500 error)."""
-    # Need to access the monkeypatched PRESETS_FILE location
     import app.config
-    presets_file = app.config.PRESETS_FILE
-    presets_file.write_text("{ invalid json", encoding="utf-8")
+    app.config.PRESETS_FILE.write_text("{ invalid json", encoding="utf-8")
     resp = client_with_temp_presets.get("/api/presets")
     assert resp.status_code == 200
     assert resp.json() == []
+
+
+def test_presets_empty_when_file_has_wrong_shape(client_with_temp_presets):
+    """
+    A presets.json containing syntactically-valid JSON that isn't a list of
+    dicts (e.g. an empty object, written by disk corruption or a future schema
+    change) must be treated as corrupt: GET returns [], and POST must not crash
+    trying to .append() onto a non-list.
+    """
+    import app.config
+    app.config.PRESETS_FILE.write_text("{}", encoding="utf-8")
+
+    resp = client_with_temp_presets.get("/api/presets")
+    assert resp.status_code == 200
+    assert resp.json() == []
+
+    resp = client_with_temp_presets.post("/api/presets", json={
+        "name": "After Corruption",
+        "output_type": "merged",
+        "quality": "original",
+    })
+    assert resp.status_code == 200
+    assert resp.json()["name"] == "After Corruption"
 
 
 def test_create_preset_success(client_with_temp_presets):

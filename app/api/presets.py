@@ -30,9 +30,12 @@ def _load() -> list[dict]:
     if not PRESETS_FILE.exists():
         return []
     try:
-        return json.loads(PRESETS_FILE.read_text(encoding="utf-8"))
+        data = json.loads(PRESETS_FILE.read_text(encoding="utf-8"))
     except (json.JSONDecodeError, OSError):
         return []  # corrupt/missing file → empty, never crash the app
+    if not isinstance(data, list) or not all(isinstance(p, dict) for p in data):
+        return []  # valid JSON but wrong shape → still treat as corrupt
+    return data
 
 
 def _save(presets: list[dict]) -> None:
