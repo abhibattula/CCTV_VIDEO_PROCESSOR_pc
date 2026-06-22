@@ -287,9 +287,18 @@ function writeStoredTheme(theme) {
   }
 }
 
+function setDomTheme(theme) {
+  if (theme === "light") document.documentElement.dataset.theme = "light";
+  else delete document.documentElement.dataset.theme;
+}
+
+let installed = false;
+
 export function installTheme() {
+  if (installed) return; // idempotency guard, same precedent as debug-log.js
+  installed = true;
   const saved = readStoredTheme();
-  applyTheme(saved);
+  setDomTheme(saved); // apply only — no write-back of the value we just read
   const navBar = document.getElementById("app-nav");
   if (!navBar) return;
   const toggle = document.createElement("button");
@@ -298,16 +307,11 @@ export function installTheme() {
   toggle.title = "Toggle theme";
   toggle.addEventListener("click", () => {
     const next = document.documentElement.dataset.theme === "light" ? "dark" : "light";
-    applyTheme(next);
+    setDomTheme(next);
+    writeStoredTheme(next); // persist only on an actual user-initiated change
     toggle.textContent = next === "light" ? "🌙" : "☀️";
   });
   navBar.appendChild(toggle);
-}
-
-function applyTheme(theme) {
-  if (theme === "light") document.documentElement.dataset.theme = "light";
-  else delete document.documentElement.dataset.theme;
-  writeStoredTheme(theme);
 }
 ```
 
