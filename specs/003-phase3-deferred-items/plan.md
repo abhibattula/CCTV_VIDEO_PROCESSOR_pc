@@ -53,7 +53,7 @@ not capped in this phase (per spec Assumptions)
 |-----------|--------|-------|
 | I. Session-First, No Persistence | ✅ COMPLIANT | Custom presets use the v1.1.0 user-configuration exemption — named, reusable, user-saved settings with no reference to any job, written only on explicit "Save as Preset" action, never automatically. Job state in `app/session.py` is completely untouched by this feature. Undo history and theme preference involve no persistence of job state either (undo is session-scoped client JS; theme is `localStorage`, never reaches the backend). |
 | II. Cross-Platform | ✅ COMPLIANT | `PRESETS_FILE` derived via `Path.home() / ".cctv_processor"`, same pattern as existing `MODEL_DIR`/`JOBS_DIR`/`PREVIEW_DIR` in `app/config.py`. No OS-specific code introduced. |
-| III. Test-First | ✅ COMPLIANT | New backend surface (`app/api/presets.py`) gets failing tests first (`tests/test_api_presets.py`), per Constitution Principle III. Frontend changes (undo, theme) have no test runner in this stack (established, unchanged Phase 2 precedent) — verified via direct app-driving instead, documented in quickstart.md. |
+| III. Test-First | ✅ COMPLIANT | New backend surface (`app/api/presets.py`) gets failing tests first (`tests/test_api_presets.py`), with no exception, per Constitution Principle III. Frontend changes (undo, theme) are covered by the explicit frontend exemption ratified in constitution v1.2.0 — verified via direct app-driving instead, documented in quickstart.md, rather than left as an unstated gap. |
 | IV. Callback-Driven | ✅ COMPLIANT | No detection/export engine changes at all in this feature — N/A. |
 | V. Simplicity & YAGNI | ✅ COMPLIANT | No redo (not requested); no preset count cap (no evidence it's needed yet); no `app/core/` module for presets (it's ~55 lines of JSON read/write, same register as `app/api/system.py`); undo capped at a fixed constant rather than made configurable (no use case for configuring it). |
 
@@ -271,8 +271,24 @@ optionally render the count on the button label.
 ```javascript
 const KEY = "cctv-theme";
 
+function readStoredTheme() {
+  try {
+    return localStorage.getItem(KEY) || "dark";
+  } catch {
+    return "dark"; // storage blocked — fall back to default, don't crash
+  }
+}
+
+function writeStoredTheme(theme) {
+  try {
+    localStorage.setItem(KEY, theme);
+  } catch {
+    // storage blocked — theme still applies for this session, just won't persist
+  }
+}
+
 export function installTheme() {
-  const saved = localStorage.getItem(KEY) || "dark";
+  const saved = readStoredTheme();
   applyTheme(saved);
   const navBar = document.getElementById("app-nav");
   if (!navBar) return;
@@ -291,7 +307,7 @@ export function installTheme() {
 function applyTheme(theme) {
   if (theme === "light") document.documentElement.dataset.theme = "light";
   else delete document.documentElement.dataset.theme;
-  localStorage.setItem(KEY, theme);
+  writeStoredTheme(theme);
 }
 ```
 

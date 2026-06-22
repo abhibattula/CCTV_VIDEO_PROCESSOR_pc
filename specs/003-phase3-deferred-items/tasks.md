@@ -45,6 +45,9 @@ Reject a built-in-name collision and a duplicate. Delete it.
   pytest fixture that monkeypatches `app.config.PRESETS_FILE` to a `tmp_path`
   location (so the real `~/.cctv_processor/presets.json` is never touched):
   `test_list_presets_empty_when_file_missing` (GET returns `[]`),
+  `test_list_presets_empty_when_file_corrupted` (write invalid JSON content to the
+  tmp_path file directly, then GET returns `[]` rather than a 500 — covers the
+  spec's "missing, deleted, **or corrupted**" edge case, not just the missing case),
   `test_create_preset_success` (POST then GET shows it),
   `test_create_preset_empty_name_rejected` (whitespace-only name → 400),
   `test_create_preset_builtin_name_rejected` (case-insensitive — try "security report"
@@ -130,7 +133,15 @@ times and confirm each step reverts exactly one operation in reverse order.
   press Escape, confirm Undo is still enabled, then press Undo 3 times and confirm
   after each press that exactly the most recent still-undoable operation's events
   revert (check `events[i].included` via the real `/api/job/events` response at
-  each step), ending with Undo disabled. Delete the script when done.
+  each step), ending with Undo disabled. **Also explicitly cover the 3 edge cases
+  added to spec.md during checklist resolution, not just the happy path**: (a)
+  apply a label/score filter that hides one of the bulk-excluded events, then Undo,
+  and confirm via `/api/job/events` that it reverts anyway even though it isn't
+  currently visible; (b) build a multi-selection (Ctrl+click some cards), then
+  press Undo, and confirm `uiState.selectedIndices` is unchanged by the Undo; (c)
+  build undo history, load a new job (`POST /api/job/create` on a different/same
+  source), and confirm the Undo button is disabled afterward. Delete the script
+  when done.
 
 **Checkpoint**: Scenario 2 from quickstart.md passes. `pytest tests/ -v` remains
 green (this story touches no Python files).
@@ -167,7 +178,13 @@ app and confirm the choice persisted.
   from Task A1 if still useful, or just confirm no page `load` event refired);
   navigate to another page and confirm theme persists; open a preview modal and
   confirm it's themed; fully restart the app process and confirm it opens in light
-  theme already. Delete the script when done.
+  theme already. **Also cover the storage-unavailable edge case**: inject
+  `Object.defineProperty(window, 'localStorage', { value: { getItem: () => { throw
+  new Error('blocked'); }, setItem: () => { throw new Error('blocked'); } } })`
+  before calling `installTheme()`, then click the toggle and confirm the theme
+  still switches for the current session (no uncaught exception, no crash) even
+  though persistence is impossible — `installTheme()`/`applyTheme()` must wrap the
+  `localStorage` calls in try/catch for this to pass. Delete the script when done.
 
 **Checkpoint**: Scenario 3 from quickstart.md passes. `pytest tests/ -v` remains
 green (this story touches no Python files).

@@ -1,31 +1,32 @@
 <!--
 SYNC IMPACT REPORT
 ==================
-Version change: 1.0.0 → 1.1.0 (MINOR — Principle I materially expanded, not redefined)
+Version change: 1.1.0 → 1.2.0 (MINOR — Principle III materially expanded, not redefined)
 
 Modified principles:
-  - I. Session-First, No Persistence — added a narrow user-configuration exemption
-    (enables Phase 3's custom export presets without weakening the no-job-persistence
-    guarantee)
+  - III. Test-First (NON-NEGOTIABLE) — added an explicit frontend-JS exemption from
+    the automated failing-test-first sequence (no JS test runner exists in this
+    stack by deliberate choice), scoped narrowly so it does NOT extend to any
+    backend Python logic. Closes a gap first identified during the
+    002-ui-tag-filter analyze pass and left unresolved at the time; re-identified
+    during 003-phase3-deferred-items's analyze pass and fixed immediately rather
+    than deferred again.
 
-Added sections: none (amendment is within existing Principle I)
+Added sections: none (amendment is within existing Principle III)
 
 Removed sections: none
 
 Templates requiring updates:
-  ✅ .specify/templates/plan-template.md — Constitution Check question 1 ("Does this
-     feature require persistent storage?") now has a pre-approved justification path
-     for user-config-shaped data; no structural change needed, future plans can cite
-     this amendment directly
+  ✅ .specify/templates/plan-template.md — Constitution Check question 3 ("Is there
+     a failing test written before implementation begins?") now has a documented
+     "N/A — frontend, see quickstart.md" answer path; no structural change needed
   ✅ .specify/templates/spec-template.md — no change required
   ✅ .specify/templates/tasks-template.md — no change required
   ✅ .specify/extensions.yml — no principle references; not affected
 
 Follow-up TODOs:
-  - None. Amendment text finalized below. (Validated by independent review: an
-    earlier draft enumerated 5 of `_DEFAULTS`'s 13 actual keys, a loophole that
-    would have under-specified the exemption's boundary — fixed by referencing
-    `_DEFAULTS` structurally instead of re-enumerating its keys.)
+  - None. Prior amendment (1.0.0 → 1.1.0, Principle I user-configuration exemption
+    for custom export presets) remains in effect unchanged below.
 -->
 
 # CCTV Video Processor PC — Constitution
@@ -91,9 +92,23 @@ confirm pass → commit.
   `@pytest.mark.skipif` — skipping is not a failure.
 - Thread-safety of `app/session.py` MUST be covered by a concurrent-write test.
 - The FFmpeg binary resolver MUST be covered by a path-existence test.
+- Frontend JavaScript (`static/js/`) is exempt from the automated failing-test-first
+  sequence above, since this project deliberately has no build step, no npm, and no
+  JS test runner (Principle V: simplicity over adding one). Frontend logic MUST
+  instead be verified by directly driving the running application — manually, or via
+  a temporary script that launches a real `QWebEngineView`/`MainWindow` instance and
+  is deleted after use — with the scenario documented in the feature's
+  `quickstart.md` before the corresponding task is marked complete. This exemption
+  does NOT extend to `app/api/*.py` or `app/core/*.py`: any backend Python logic,
+  including code that only serves frontend-adjacent endpoints, MUST still follow the
+  standard write-test-first sequence.
 
 **Rationale**: Prevents regression of the 7 PC-specific bugs and 17 Pi bugs that were
 already fixed in the reference implementation. TDD enforces that fixes stay fixed.
+The frontend exemption reflects a real, repeatedly-confirmed constraint (this stack
+has shipped two full phases plus several follow-up features with no JS test runner)
+rather than a loophole — Python backend logic remains fully bound by this principle
+with no exceptions.
 
 ### IV. Callback-Driven Processing
 
@@ -173,7 +188,10 @@ Before implementing any feature, verify it does not violate:
    no reference to any specific job), which is pre-approved per the Principle I
    exemption and does not need separate justification.
 2. **Principle II**: Are all paths via `pathlib.Path`? Is FFmpeg resolved via the utility?
-3. **Principle III**: Is there a failing test written before implementation begins?
+3. **Principle III**: Is there a failing test written before implementation begins? —
+   for `app/api/*.py`/`app/core/*.py` changes this is required with no exception;
+   for `static/js/` changes, cite the frontend exemption and point to the
+   corresponding `quickstart.md` scenario instead.
 4. **Principle IV**: Do engines receive callbacks rather than accessing session directly?
 5. **Principle V**: Is this the simplest implementation that satisfies the requirement?
 
@@ -201,4 +219,4 @@ check: "Constitution check: compliant" or list any approved exceptions.
 for architecture detail, and `docs/superpowers/plans/2026-06-19-cctv-pc-processor.md`
 for the active implementation plan.
 
-**Version**: 1.1.0 | **Ratified**: 2026-06-19 | **Last Amended**: 2026-06-21
+**Version**: 1.2.0 | **Ratified**: 2026-06-19 | **Last Amended**: 2026-06-21
