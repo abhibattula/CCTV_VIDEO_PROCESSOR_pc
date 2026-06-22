@@ -1,32 +1,31 @@
 <!--
 SYNC IMPACT REPORT
 ==================
-Version change: [TEMPLATE] → 1.0.0 (initial ratification — all placeholders resolved)
+Version change: 1.0.0 → 1.1.0 (MINOR — Principle I materially expanded, not redefined)
 
 Modified principles:
-  - [PRINCIPLE_1_NAME] → I. Session-First, No Persistence
-  - [PRINCIPLE_2_NAME] → II. Cross-Platform by Default
-  - [PRINCIPLE_3_NAME] → III. Test-First (NON-NEGOTIABLE)
-  - [PRINCIPLE_4_NAME] → IV. Callback-Driven Processing
-  - [PRINCIPLE_5_NAME] → V. Simplicity & YAGNI
+  - I. Session-First, No Persistence — added a narrow user-configuration exemption
+    (enables Phase 3's custom export presets without weakening the no-job-persistence
+    guarantee)
 
-Added sections:
-  - Cross-Platform Constraints (Section 2)
-  - Development Workflow & Quality Gates (Section 3)
+Added sections: none (amendment is within existing Principle I)
 
 Removed sections: none
 
 Templates requiring updates:
-  ✅ .specify/templates/plan-template.md — Constitution Check gates updated to reference
-     the 5 principles above; no structural changes required
-  ✅ .specify/templates/spec-template.md — cross-platform and session-state constraints
-     already aligned with FR/SC patterns; no changes required
-  ✅ .specify/templates/tasks-template.md — task categories cover foundational
-     (session state, FFmpeg path), detection, export, frontend, shell; no changes needed
+  ✅ .specify/templates/plan-template.md — Constitution Check question 1 ("Does this
+     feature require persistent storage?") now has a pre-approved justification path
+     for user-config-shaped data; no structural change needed, future plans can cite
+     this amendment directly
+  ✅ .specify/templates/spec-template.md — no change required
+  ✅ .specify/templates/tasks-template.md — no change required
   ✅ .specify/extensions.yml — no principle references; not affected
 
 Follow-up TODOs:
-  - None. All placeholders resolved. Ratification date set to project start (2026-06-19).
+  - None. Amendment text finalized below. (Validated by independent review: an
+    earlier draft enumerated 5 of `_DEFAULTS`'s 13 actual keys, a loophole that
+    would have under-specified the exemption's boundary — fixed by referencing
+    `_DEFAULTS` structurally instead of re-enumerating its keys.)
 -->
 
 # CCTV Video Processor PC — Constitution
@@ -43,9 +42,25 @@ by `threading.RLock()`. No SQLite, no database, no file-based state for job data
 - All reads MUST use `session.snapshot()` which returns a deep copy — never mutate
   the live dict from outside the session module.
 - On app exit, all session state is discarded. This is by design: no history, no clutter.
+- User configuration is exempt from this principle and MAY be persisted to a single
+  flat file under `Path.home() / ".cctv_processor"`, following the same pattern as
+  `MODEL_DIR` in `app/config.py`. User configuration is defined narrowly: named,
+  reusable settings the user explicitly chose to save (e.g. export presets), which
+  are NOT derived from and have NO reference to any specific job, video file, or
+  detection run. A config file MUST NOT store any key present in `app/session.py`'s
+  `_DEFAULTS` dict (the full set of job-state fields, kept there as the single source
+  of truth — not re-enumerated here, since a copy would drift out of sync as fields
+  are added) and MUST NOT be written to automatically — only on an explicit user
+  action (e.g. a "Save as Preset" click), never as a side effect of detection or
+  export. Job state remains exclusively in-memory and is wiped by `session.reset()`
+  exactly as before.
 
 **Rationale**: Eliminates the SQLite crash-on-PC bug (PC-02) at the root. A RAM dict
 cannot fail to open, cannot become corrupted, and requires zero setup on any OS.
+User configuration (e.g. saved export presets) is a different category from job
+state: it has no relationship to "the current job," is written rarely and only on
+explicit user action, and its loss is a minor inconvenience rather than a correctness
+bug — unlike job state, where stale persisted data was the actual root cause of PC-02.
 
 ### II. Cross-Platform by Default
 
@@ -153,7 +168,10 @@ These rules apply to ALL code in this repository:
 ### Constitution Check (for plan templates)
 
 Before implementing any feature, verify it does not violate:
-1. **Principle I**: Does this feature require persistent storage? If yes, justify or reject.
+1. **Principle I**: Does this feature require persistent storage? If yes, justify or
+   reject — unless it is user configuration (named, reusable, user-saved settings with
+   no reference to any specific job), which is pre-approved per the Principle I
+   exemption and does not need separate justification.
 2. **Principle II**: Are all paths via `pathlib.Path`? Is FFmpeg resolved via the utility?
 3. **Principle III**: Is there a failing test written before implementation begins?
 4. **Principle IV**: Do engines receive callbacks rather than accessing session directly?
@@ -183,4 +201,4 @@ check: "Constitution check: compliant" or list any approved exceptions.
 for architecture detail, and `docs/superpowers/plans/2026-06-19-cctv-pc-processor.md`
 for the active implementation plan.
 
-**Version**: 1.0.0 | **Ratified**: 2026-06-19 | **Last Amended**: 2026-06-19
+**Version**: 1.1.0 | **Ratified**: 2026-06-19 | **Last Amended**: 2026-06-21
