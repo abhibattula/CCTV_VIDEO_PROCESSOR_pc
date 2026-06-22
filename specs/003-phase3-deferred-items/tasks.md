@@ -38,10 +38,10 @@ both built-in and custom names are rejected.
 preset, close and reopen the app, confirm it's still there and applies correctly.
 Reject a built-in-name collision and a duplicate. Delete it.
 
-- [ ] T001 [US1] Add `PRESETS_FILE: Path = _APP_DIR / "presets.json"` to
+- [X] T001 [US1] Add `PRESETS_FILE: Path = _APP_DIR / "presets.json"` to
   `app/config.py`, alongside the existing `JOBS_DIR`/`PREVIEW_DIR`/`MODEL_DIR`
   constants
-- [ ] T002 [P] [US1] Write failing tests in `tests/test_api_presets.py` — using a
+- [X] T002 [P] [US1] Write failing tests in `tests/test_api_presets.py` — using a
   pytest fixture that monkeypatches `app.config.PRESETS_FILE` to a `tmp_path`
   location (so the real `~/.cctv_processor/presets.json` is never touched):
   `test_list_presets_empty_when_file_missing` (GET returns `[]`),
@@ -57,33 +57,33 @@ Reject a built-in-name collision and a duplicate. Delete it.
   `test_delete_preset_success` (DELETE then GET no longer shows it),
   `test_delete_preset_not_found` (DELETE unknown name → 404); run
   `pytest tests/test_api_presets.py -v` to confirm all fail (module doesn't exist yet)
-- [ ] T003 [US1] Implement `app/api/presets.py` per `plan.md`'s
+- [X] T003 [US1] Implement `app/api/presets.py` per `plan.md`'s
   `Implementation Notes for Task Generation` section verbatim (`_load()`/`_save()`
   helpers, `GET /api/presets`, `POST /api/presets`, `DELETE /api/presets/{name}`,
   case-insensitive + trimmed name comparison in `create_preset`); run
   `pytest tests/test_api_presets.py -v` to confirm T002's tests now pass
-- [ ] T004 [US1] Register the new router in `app/main.py` —
+- [X] T004 [US1] Register the new router in `app/main.py` —
   `from app.api.presets import router as presets_router` and
   `app.include_router(presets_router, prefix="/api")`, in the same style as the
   other five routers already there; run `pytest tests/ -v` to confirm the full
   suite passes with no regressions
-- [ ] T005 [P] [US1] Add `loadCustomPresets()` to `static/js/pages/export.js`,
+- [X] T005 [P] [US1] Add `loadCustomPresets()` to `static/js/pages/export.js`,
   called from the existing `loadSummary().then(...)` chain — `fetch('/api/presets')`,
   render one `<button class="btn preset-btn">` per entry after the 3 built-in
   preset buttons, each wired through the existing `setType()`/`setQuality()`
   helpers plus the existing `burnIn`/`labelFilter` closures (set them from the
   preset's `output_type`/`quality`/`burn_in`/`label_filter` fields)
-- [ ] T006 [US1] Add a "Save as Preset" control next to the preset row in
+- [X] T006 [US1] Add a "Save as Preset" control next to the preset row in
   `static/js/pages/export.js` — on click, capture the current
   `selectedType`/`selectedQuality`/`burnIn`/`labelFilter`, prompt for a name,
   `POST /api/presets`; on a 400 response, show the backend's error message; on
   success, call `loadCustomPresets()` again to re-render the row with the new button
   included
-- [ ] T007 [US1] Add a small delete control to each custom preset button rendered
+- [X] T007 [US1] Add a small delete control to each custom preset button rendered
   by `loadCustomPresets()` in `static/js/pages/export.js` — `DELETE
   /api/presets/{name}`, then re-render the custom preset row; built-in preset
   buttons must not have this control
-- [ ] T008 [US1] Manual verification per `quickstart.md` Scenario 1 — write a
+- [X] T008 [US1] Manual verification per `quickstart.md` Scenario 1 — write a
   temporary script (e.g. `_verify_presets.py`) launching the real
   `shell.main_window.MainWindow` against the real backend, driving it via
   `runJavaScript` to: save a preset, confirm the button appears; restart the app
@@ -106,29 +106,29 @@ history.
 operations, clear selection via Escape, confirm Undo still works, then Undo three
 times and confirm each step reverts exactly one operation in reverse order.
 
-- [ ] T009 [US2] In `static/js/session-state.js`, replace the single `lastBulkOp:
+- [X] T009 [US2] In `static/js/session-state.js`, replace the single `lastBulkOp:
   null` field with `undoStack: []` and export `UNDO_STACK_CAP = 20`; update
   `resetUiState()` to reset `_state.undoStack = []` instead of `_state.lastBulkOp =
   null`
-- [ ] T010 [US2] In `static/js/pages/timeline.js`'s `bulkToggle(include)`, replace
+- [X] T010 [US2] In `static/js/pages/timeline.js`'s `bulkToggle(include)`, replace
   the `uiState.lastBulkOp = {...}` overwrite with
   `uiState.undoStack.push({ indices, prevIncluded: indices.map(i =>
   events[i].included) }); if (uiState.undoStack.length > UNDO_STACK_CAP)
   uiState.undoStack.shift();` (import `UNDO_STACK_CAP` from `session-state.js`
   alongside the existing `uiState`/`resetUiState` import)
-- [ ] T011 [US2] In `static/js/pages/timeline.js`'s `undoBulk()`, replace the
+- [X] T011 [US2] In `static/js/pages/timeline.js`'s `undoBulk()`, replace the
   "read `uiState.lastBulkOp` then set it to `null`" logic with
   `if (!uiState.undoStack.length) return; const { indices, prevIncluded } =
   uiState.undoStack.pop();` — keep the existing `trueIdx`/`falseIdx` replay logic
   (the two `PUT /api/job/events/bulk` calls) unchanged below this
-- [ ] T012 [US2] In `static/js/pages/timeline.js`'s `clearSelection()`, remove the
+- [X] T012 [US2] In `static/js/pages/timeline.js`'s `clearSelection()`, remove the
   line that sets `uiState.lastBulkOp = null` — this function must only clear
   `uiState.selectedIndices` and the related DOM classes/toolbar visibility; undo
   history must be entirely unaffected by clearing a selection
-- [ ] T013 [US2] In `static/js/pages/timeline.js`'s `updateBulkToolbar()`, change
+- [X] T013 [US2] In `static/js/pages/timeline.js`'s `updateBulkToolbar()`, change
   `btn-undo.disabled = !uiState.lastBulkOp` to
   `btn-undo.disabled = uiState.undoStack.length === 0`
-- [ ] T014 [US2] Manual verification per `quickstart.md` Scenario 2 — temporary
+- [X] T014 [US2] Manual verification per `quickstart.md` Scenario 2 — temporary
   script driving the real app: perform 3 bulk-excludes on different event groups,
   press Escape, confirm Undo is still enabled, then press Undo 3 times and confirm
   after each press that exactly the most recent still-undoable operation's events
@@ -158,20 +158,20 @@ app restart.
 it applies on every other page, confirm a preview modal also re-themes, restart the
 app and confirm the choice persisted.
 
-- [ ] T015 [P] [US3] Create `static/js/theme.js` exporting `installTheme()` per
+- [X] T015 [P] [US3] Create `static/js/theme.js` exporting `installTheme()` per
   `plan.md`'s code — reads `localStorage["cctv-theme"]` (default `"dark"`), applies
   it via a `data-theme` attribute on `document.documentElement`, injects a
   `.theme-toggle` button into `#app-nav` that flips the attribute and
   `localStorage` value on click and updates its own icon
-- [ ] T016 [P] [US3] In `static/css/base.css`, add the
+- [X] T016 [P] [US3] In `static/css/base.css`, add the
   `:root[data-theme="light"], html[data-theme="light"] { ... }` override block
   with the 10 light-theme custom-property values from `plan.md`, plus a
   `.theme-toggle` style in the same visual register as the existing `.debug-toggle`
   — do NOT add any override for label/badge colors (FR-P3-010: semantic colors stay
   constant across themes)
-- [ ] T017 [US3] In `static/js/app.js`, import `installTheme` from
+- [X] T017 [US3] In `static/js/app.js`, import `installTheme` from
   `/static/js/theme.js` and call it next to the existing `installDebugLog()` call
-- [ ] T018 [US3] Manual verification per `quickstart.md` Scenario 3 — temporary
+- [X] T018 [US3] Manual verification per `quickstart.md` Scenario 3 — temporary
   script driving the real app: click the theme toggle, confirm
   `document.documentElement.dataset.theme === "light"` and the visible colors
   changed with no network request fired (check via the debug log's fetch capture
@@ -195,15 +195,15 @@ green (this story touches no Python files).
 
 **Purpose**: Final full-suite confirmation, combined manual pass, sign-off.
 
-- [ ] T019 Run `pytest tests/ -v` from project root — confirm all existing tests
+- [X] T019 Run `pytest tests/ -v` from project root — confirm all existing tests
   plus the new `tests/test_api_presets.py` tests pass; fix any regressions
-- [ ] T020 Manual smoke test: run through all 3 scenarios in
+- [X] T020 Manual smoke test: run through all 3 scenarios in
   `specs/003-phase3-deferred-items/quickstart.md` together in one continuous live
   app session with `python launcher.py` (not just in isolation per-story), to catch
   any cross-feature interaction the independent tests might miss (e.g. saving a
   preset, then performing undo operations, then toggling theme, all in the same
   session)
-- [ ] T021 Commit completed Phase 3 on branch `003-phase3-deferred-items` with
+- [X] T021 Commit completed Phase 3 on branch `003-phase3-deferred-items` with
   message `feat(phase3): custom export presets, multi-level undo, light theme`
 
 ---
