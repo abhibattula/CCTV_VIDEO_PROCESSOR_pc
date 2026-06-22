@@ -37,6 +37,7 @@ _APP_DIR: Path = Path.home() / ".cctv_processor"
 JOBS_DIR: Path = _APP_DIR / "jobs"
 PREVIEW_DIR: Path = _APP_DIR / "previews"
 MODEL_DIR: Path = _APP_DIR / "models"
+PRESETS_FILE: Path = _APP_DIR / "presets.json"
 
 # ── FFmpeg / OpenCV ───────────────────────────────────────────────────────────
 FFMPEG_THREADS: int = max(1, (os.cpu_count() or 2) - 1)
