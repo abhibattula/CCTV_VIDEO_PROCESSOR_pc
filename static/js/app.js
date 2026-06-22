@@ -4,7 +4,9 @@
  * navigate(path) loads the page module if needed, then calls mount().
  */
 import { installDebugLog } from "/static/js/debug-log.js";
+import { installTheme } from "/static/js/theme.js";
 installDebugLog();
+installTheme();
 
 const routes = {
   "/":           "/static/js/pages/home.js",
