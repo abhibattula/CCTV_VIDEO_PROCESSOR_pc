@@ -4,7 +4,7 @@
  * label pills, multi-select (Ctrl+click + checkboxes), bulk toolbar, undo,
  * keyboard navigation, CSS content-visibility virtual scroll.
  */
-import { uiState, resetUiState } from '/static/js/session-state.js';
+import { uiState, resetUiState, UNDO_STACK_CAP } from '/static/js/session-state.js';
 import { logVideoEvents } from '/static/js/debug-log.js';
 
 const LABEL_COLOURS = {
@@ -283,7 +283,7 @@ export function mount(container) {
     const toolbar = container.querySelector('#bulk-toolbar');
     toolbar.classList.toggle('hidden', n === 0);
     container.querySelector('#bulk-label').textContent = `${n} selected`;
-    container.querySelector('#btn-undo').disabled = !uiState.lastBulkOp;
+    container.querySelector('#btn-undo').disabled = uiState.undoStack.length === 0;
     const listEl = container.querySelector('#events-list');
     listEl.classList.toggle('selecting', n > 0);
   }
@@ -299,11 +299,12 @@ export function mount(container) {
   async function bulkToggle(include) {
     const indices = [...uiState.selectedIndices];
     if (!indices.length) return;
-    // Save undo state
-    uiState.lastBulkOp = {
+    // Push to undo stack
+    uiState.undoStack.push({
       indices,
       prevIncluded: indices.map(i => events[i].included),
-    };
+    });
+    if (uiState.undoStack.length > UNDO_STACK_CAP) uiState.undoStack.shift();
     const resp = await fetch('/api/job/events/bulk', {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
@@ -320,8 +321,8 @@ export function mount(container) {
   // ── Undo (T020) ────────────────────────────────────────────────────────────
 
   async function undoBulk() {
-    if (!uiState.lastBulkOp) return;
-    const { indices, prevIncluded } = uiState.lastBulkOp;
+    if (!uiState.undoStack.length) return;
+    const { indices, prevIncluded } = uiState.undoStack.pop();
     const trueIdx  = indices.filter((_, i) => prevIncluded[i] === true);
     const falseIdx = indices.filter((_, i) => prevIncluded[i] === false);
     if (trueIdx.length) {
@@ -338,7 +339,6 @@ export function mount(container) {
       });
       if (r.ok) { const d = await r.json(); d.events.forEach((ev, i) => { events[i] = ev; }); }
     }
-    uiState.lastBulkOp = null;
     updateBulkToolbar();
     renderFiltered();
   }
@@ -347,7 +347,6 @@ export function mount(container) {
 
   function clearSelection() {
     uiState.selectedIndices.clear();
-    uiState.lastBulkOp = null;
     updateBulkToolbar();
     renderFiltered();
   }

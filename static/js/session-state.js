@@ -8,14 +8,15 @@ const _state = {
   labelFilter:     new Set(),   // active label strings; empty = show all
   scoreThreshold:  0.0,         // events below this are hidden
   selectedIndices: new Set(),   // multi-select event indices
-  lastBulkOp:      null,        // { indices: number[], prevIncluded: boolean[] }
+  undoStack:       [],          // { indices, prevIncluded }[], newest at end, cap 20
 };
 
+export const UNDO_STACK_CAP = 20;
 export const uiState = _state;
 
 export function resetUiState() {
   _state.labelFilter     = new Set();
   _state.scoreThreshold  = 0.0;
   _state.selectedIndices = new Set();
-  _state.lastBulkOp      = null;
+  _state.undoStack       = [];
 }
