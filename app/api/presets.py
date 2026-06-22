@@ -68,8 +68,12 @@ async def create_preset(req: PresetCreateRequest):
 
 @router.delete("/presets/{name}")
 async def delete_preset(name: str):
+    # Same case-insensitive + trimmed identity rule as create_preset's
+    # collision check — one identity model for both ends of a preset's
+    # lifecycle, not two.
+    name_lower = name.strip().lower()
     presets = _load()
-    remaining = [p for p in presets if p["name"] != name]
+    remaining = [p for p in presets if p["name"].strip().lower() != name_lower]
     if len(remaining) == len(presets):
         raise HTTPException(status_code=404, detail=f"Preset '{name}' not found")
     _save(remaining)

@@ -193,7 +193,11 @@ export function mount(container, params) {
           burnIn = preset.burn_in || false;
           labelFilter = preset.label_filter || [];
 
-          // Update the DOM elements
+          // Update the DOM elements. #label-scope is a single-value <select>
+          // by design (this page's UI can only ever produce a 1-label
+          // filter), so only the first label is shown here even though
+          // `labelFilter` itself (used by the actual export request) keeps
+          // the full array from the preset.
           container.querySelector("#burn-in-check").checked = burnIn;
           container.querySelector("#label-scope").value = labelFilter.length > 0 ? labelFilter[0] : "";
         });

@@ -157,3 +157,26 @@ def test_delete_preset_not_found(client_with_temp_presets):
     resp = client_with_temp_presets.delete("/api/presets/NonExistent")
     assert resp.status_code == 404
     assert "not found" in resp.json()["detail"].lower()
+
+
+def test_delete_preset_case_insensitive_and_trimmed(client_with_temp_presets):
+    """
+    DELETE must use the same case-insensitive + trimmed identity rule as
+    POST's collision check (one identity model for create and delete, not
+    two) -- found by the final whole-branch review.
+    """
+    resp = client_with_temp_presets.post("/api/presets", json={
+        "name": "Weekly Report",
+        "output_type": "merged",
+        "quality": "original",
+    })
+    assert resp.status_code == 200
+
+    # Delete using a different case and extra whitespace.
+    resp = client_with_temp_presets.delete("/api/presets/weekly report ")
+    assert resp.status_code == 200
+    assert resp.json()["deleted"] == "weekly report "
+
+    resp = client_with_temp_presets.get("/api/presets")
+    assert resp.status_code == 200
+    assert resp.json() == []

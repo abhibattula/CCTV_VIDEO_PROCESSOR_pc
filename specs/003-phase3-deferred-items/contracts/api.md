@@ -77,8 +77,11 @@ Saves a new custom preset.
 
 ### `DELETE /api/presets/{name}`
 
-Deletes a custom preset by name. Cannot affect built-in presets (they aren't
-backend-managed at all, so there's no path by which this could touch them).
+Deletes a custom preset by name. Matching is case-insensitive and trims
+whitespace — the same identity rule `POST`'s collision check uses, so a name
+that would have collided on create is also guaranteed to match on delete.
+Cannot affect built-in presets (they aren't backend-managed at all, so
+there's no path by which this could touch them).
 
 **Response 200**:
 ```json
