@@ -57,7 +57,7 @@ Saves a new custom preset.
 | `burn_in` | boolean | no (default `false`) | Whether burn-in overlay is applied |
 | `label_filter` | string[] | no (default `[]`) | Labels to restrict export to |
 
-**Validation**:
+**Validation** (name is trimmed first; all comparisons below are case-insensitive):
 - `name` empty or whitespace-only → `400`: `"Preset name cannot be empty"`
 - `name` matches a built-in preset name → `400`: `"'<name>' is a built-in preset name"`
 - `name` matches an existing custom preset → `400`: `"Preset '<name>' already exists"`

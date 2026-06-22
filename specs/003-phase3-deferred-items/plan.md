@@ -192,10 +192,11 @@ async def create_preset(req: PresetCreateRequest):
     name = req.name.strip()
     if not name:
         raise HTTPException(status_code=400, detail="Preset name cannot be empty")
-    if name in BUILTIN_PRESET_NAMES:
+    name_lower = name.lower()
+    if name_lower in {b.lower() for b in BUILTIN_PRESET_NAMES}:
         raise HTTPException(status_code=400, detail=f"'{name}' is a built-in preset name")
     presets = _load()
-    if any(p["name"] == name for p in presets):
+    if any(p["name"].lower() == name_lower for p in presets):
         raise HTTPException(status_code=400, detail=f"Preset '{name}' already exists")
     new_preset = req.model_dump()
     new_preset["name"] = name

@@ -144,6 +144,20 @@ persisted.
 - The user switches theme while a modal (e.g. event preview) is open → the modal
   re-themes along with the rest of the page, since it uses the same CSS custom
   properties
+- The user undoes a bulk operation while a label/score filter is currently hiding
+  some of the affected events → the included/excluded state of ALL affected events
+  reverts regardless of current filter visibility (undo acts on data, the filter is
+  just a view); the toolbar's "N shown / M total" count updates accordingly, even if
+  some reverted events remain hidden by the active filter
+- The user performs an Undo while a multi-selection is active → Undo does not
+  change the current selection in any way; only the previously-applied
+  include/exclude operation is reverted
+- A new job is loaded while undo history exists from the previous job → undo
+  history is cleared along with all other session-scoped UI state, consistent with
+  Phase 2's existing reset-on-new-job behavior
+- The client-side storage used for theme preference is unavailable (e.g. blocked by
+  browser/profile settings) → the toggle still switches the current session's theme
+  normally; only cross-restart persistence is lost, not the feature itself
 
 ---
 
@@ -154,13 +168,16 @@ persisted.
 **Custom Export Presets (US1)**
 
 - **FR-P3-001**: The export page MUST allow the user to save the currently
-  configured output type, quality, burn-in setting, and label filter as a named
-  preset
+  configured output type, quality, burn-in setting, and label filter — and exactly
+  these four settings, nothing else — as a named preset
 - **FR-P3-002**: Saved custom presets MUST appear as additional one-click buttons
   alongside the 3 built-in presets, and MUST persist across app restarts
-- **FR-P3-003**: The system MUST reject saving a custom preset whose name is empty,
-  whitespace-only, already used by another custom preset, or matches a built-in
-  preset name ("Security Report", "Evidence Pack", "Quick Highlights")
+- **FR-P3-003**: The system MUST reject saving a custom preset whose name, after
+  trimming leading/trailing whitespace, is empty, OR matches — case-insensitively —
+  another custom preset's name or a built-in preset name ("Security Report",
+  "Evidence Pack", "Quick Highlights"). Whitespace-trimming and case-insensitivity
+  both apply to this comparison (e.g. "weekly report " collides with "Weekly
+  Report")
 - **FR-P3-004**: The user MUST be able to delete a custom preset they created;
   deleting a custom preset MUST NOT affect the 3 built-in presets or any other
   custom preset
@@ -209,8 +226,9 @@ persisted.
   after fully closing and reopening the application
 - **SC-P3-003**: A user who performed 3 bulk operations can revert all 3, one at a
   time, ending back at the exact state before any of them were performed
-- **SC-P3-004**: Switching theme takes effect in under 100ms with no visible reload
-  or flash of unstyled content
+- **SC-P3-004**: Switching theme takes effect in under 100ms, measured from click to
+  the new colours being visible, with no full page reload (the page's content
+  remains scrolled to the same position and no network request is made)
 - **SC-P3-005**: A returning user's theme choice is correctly restored on 100% of
   app launches following a restart
 

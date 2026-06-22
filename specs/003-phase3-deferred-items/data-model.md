@@ -25,9 +25,15 @@ A user-saved, reusable export configuration. Persisted as a flat JSON list at
 `~/.cctv_processor/presets.json` (`app/config.py:PRESETS_FILE`), under the
 constitution v1.1.0 user-configuration exemption.
 
+**This table is the closed, complete field list for this entity.** Per the
+constitution's Principle I exemption boundary, no field present in
+`app/session.py`'s `_DEFAULTS` dict (job state) may ever be added here — any future
+change to this table MUST be checked against that boundary rule, not just against
+"is it small."
+
 | Field | Type | Description | Validation |
 |---|---|---|---|
-| `name` | `string` | Display name and unique identifier | Non-empty after trim; must not equal "Security Report", "Evidence Pack", or "Quick Highlights"; must not match an existing custom preset's name |
+| `name` | `string` | Display name and unique identifier | Non-empty after trim; case-insensitively must not equal "Security Report", "Evidence Pack", or "Quick Highlights"; case-insensitively must not match an existing custom preset's name (trimmed first) |
 | `output_type` | `string` | `"merged"` or `"individual"` | Matches `ExportRequest.output_type` in `app/api/job.py` |
 | `quality` | `string` | `"original"`, `"720p"`, or `"480p"` | Matches `ExportRequest.quality` |
 | `burn_in` | `boolean` | Whether the timestamp/label overlay is applied | Matches `ExportRequest.burn_in` |
