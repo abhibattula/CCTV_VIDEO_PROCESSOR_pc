@@ -164,9 +164,11 @@ export function mount(container, params) {
       const customPresets = await fetch("/api/presets").then(r => r.json());
       const presetRow = container.querySelector(".preset-row");
 
-      // Remove any existing custom preset buttons (but keep the 3 built-in ones)
+      // Remove any existing custom preset buttons AND their wrapper divs (but
+      // keep the 3 built-in ones) — removing only the inner button would leave
+      // an empty, ownerless wrapper <div> behind on every re-render.
       const customBtns = presetRow.querySelectorAll(".preset-btn[data-custom]");
-      customBtns.forEach(btn => btn.remove());
+      customBtns.forEach(btn => btn.closest("div")?.remove());
 
       // Add a custom preset button for each returned preset
       customPresets.forEach(preset => {
