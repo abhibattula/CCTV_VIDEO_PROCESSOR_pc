@@ -66,7 +66,7 @@ no regions are drawn; confirm regions reset when a different file loads.
   editable label + delete (×) per region; returns `{ setImageSrc, reset,
   destroy }`; `onChange` fires `[{ label, points: [[x,y],...] }, ...]` on every
   region mutation
-- [ ] T004 [P] [US1] Create `static/css/roi.css` with `.roi-editor__stage`
+- [X] T004 [P] [US1] Create `static/css/roi.css` with `.roi-editor__stage`
   (`position: relative`), `.roi-editor__canvas` (`position: absolute; inset:
   0; cursor: crosshair`), `.roi-chip` and related selectors per `plan.md`,
   extending only existing custom properties (`var(--border)`, `var(--accent)`,
