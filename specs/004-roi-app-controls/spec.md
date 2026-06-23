@@ -85,6 +85,12 @@ tells them once it's actually safe to close the window.
 process is a real, recurring complaint) but narrower in day-to-day value than the
 detection-accuracy improvement in US1.
 
+**Terminology note**: throughout this story, "stopping the application" means
+stopping the backend process that performs detection/export and serves the
+interface — it does NOT mean closing the visible application window. The window
+itself stays open and responsive (showing the confirmation message) until the
+user closes it manually; only the backend underneath it stops.
+
 **Independent Test**: With the app running (optionally mid-detection), click Stop,
 confirm, and verify the application backend is no longer reachable/responding while
 the window itself remains open and displays a "safe to close" message; then close
@@ -96,8 +102,8 @@ the window manually.
    control, **Then** a confirmation dialog explains that any in-progress work will
    be cancelled and asks them to confirm
 2. **Given** the user confirms, **When** the stop proceeds, **Then** any
-   in-progress detection or export is cancelled first, and the application becomes
-   unresponsive to further requests within a few seconds
+   in-progress detection or export is cancelled first, and the backend stops
+   responding to further requests within the time bound set by SC-P4-003
 3. **Given** the stop has completed, **When** the user looks at the window,
    **Then** it displays a clear message confirming the application has stopped and
    that it is now safe to close the window, and the window itself remains open
@@ -167,6 +173,17 @@ job.
   shutting down and no further job actions are meaningful
 - A region's points are drawn at the very edge of the frame → treated like any
   other valid region, no special edge-of-frame handling needed
+- The user clicks Stop when no video has ever been loaded in the current
+  session → the confirmation dialog still appears (there is simply nothing to
+  cancel), and the stop proceeds normally
+- The user clicks Stop again after the application has already been confirmed
+  stopped → the system shows the same "safe to close" outcome again rather
+  than erroring, since the backend being already-stopped is not a failure
+  state
+- The "cancel any in-progress work" step of New Project itself fails to reach
+  the backend (e.g. the request times out) → the system proceeds to the
+  upload screen regardless; the cancellation is best-effort and must not block
+  the user from starting over
 
 ---
 
@@ -179,13 +196,15 @@ job.
 - **FR-P4-001**: After a video is loaded, the system MUST display a preview image
   representing the video's first frame
 - **FR-P4-002**: The system MUST allow the user to draw one or more closed,
-  free-form regions over the preview image by placing a sequence of points
+  free-form regions over the preview image by placing a sequence of at least
+  three points and closing the shape back to its starting point
 - **FR-P4-003**: The system MUST allow the user to remove an individual drawn
   region, or clear all drawn regions, before starting detection
 - **FR-P4-004**: When detection runs with one or more regions drawn, the system
-  MUST report activity only from within those region(s); when no regions are
-  drawn, the system MUST analyze the entire frame, matching today's behavior
-  exactly
+  MUST report activity found inside ANY of those region(s) — a single combined
+  area of interest, not an intersection requiring overlap across all of them;
+  when no regions are drawn, the system MUST analyze the entire frame, matching
+  today's behavior exactly
 - **FR-P4-005**: Drawn regions MUST apply only to the video they were drawn on;
   loading a different video MUST clear any previously drawn regions and show that
   video's own first frame
@@ -213,8 +232,11 @@ job.
 - **FR-P4-013**: If the current job has completed with events that have not been
   exported, the system MUST warn the user that proceeding will discard them, and
   only proceed on confirmation
-- **FR-P4-014**: If neither condition in FR-P4-012/013 applies, the system MUST
-  return to the upload screen immediately without a warning
+- **FR-P4-014**: If neither condition in FR-P4-012/013 applies — covering every
+  remaining job state (idle, freshly loaded, already exported, cancelled, or
+  errored) — the system MUST return to the upload screen immediately without a
+  warning; FR-P4-012, FR-P4-013, and FR-P4-014 together cover every possible
+  job state with no state left unaddressed
 - **FR-P4-015**: After returning to the upload screen via New Project, no events,
   selections, filters, or undo history from the previous job MUST remain once a
   new video is loaded
@@ -237,14 +259,18 @@ job.
 
 - **SC-P4-001**: A user can draw a region and confirm it is being respected within
   a single detection run (no need to re-run twice to "make it take effect")
-- **SC-P4-002**: With a region drawn around the only area of real activity in a
-  test video, detection produces zero events from outside that region
+- **SC-P4-002**: Given a test video staged with motion in two distinct, known
+  areas of the frame, drawing a region around only one of those areas and
+  running detection produces zero events attributable to the other, undrawn
+  area
 - **SC-P4-003**: After confirming Stop, the application is no longer responding to
   any new actions within 15 seconds, and the user is shown a clear confirmation
   message
-- **SC-P4-004**: A user can move from "reviewing one finished video" to "ready to
-  load a different one" via New Project in under 5 seconds, without the
-  application restarting
+- **SC-P4-004**: Measured from confirming the New Project action (or from the
+  click itself, when no confirmation was required) to the upload screen
+  becoming visible, a user can move from "reviewing one finished video" to
+  "ready to load a different one" in under 5 seconds, without the application
+  restarting
 - **SC-P4-005**: 100% of the time, starting a new project after a completed job
   results in zero leftover events, selections, or filters from the prior job once
   the new video is analyzed
@@ -267,4 +293,14 @@ job.
   already-exported job requires no warning
 - This feature does not change anything about how a single job behaves once
   detection starts (mode, sensitivity, padding, etc.) — it only adds where
-  detection looks, and how the overall application/session lifecycle is controlled
+  detection looks, and how the overall application/session lifecycle is
+  controlled; no existing detection parameter's meaning or default changes
+- The number of regions a user may draw, and the number of points per region, is
+  not capped — if this becomes a real usability problem in practice it is a
+  follow-up, not a blocker for this release (consistent with how Phase 3 left
+  the number of custom export presets uncapped)
+- New Project resets only job-scoped state — events, selections, label/score
+  filters, and undo history (Phase 3). It does NOT affect user configuration
+  that lives outside any job's lifetime: saved custom export presets and the
+  selected light/dark theme (both Phase 3) are unaffected by starting a new
+  project, exactly as they are already unaffected by loading a new file today
