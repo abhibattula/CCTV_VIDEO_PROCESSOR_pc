@@ -223,7 +223,7 @@ warning text) and with an idle job (no warning at all).
   add `import { installNewProjectButton } from "/static/js/new-project.js";
   installNewProjectButton();` next to the `installStopButton()` call added in
   T011 (sequenced after T011 since both edit `app.js`)
-- [ ] T017 [US3] Manual verification per `quickstart.md` Scenario 3 — temporary
+- [X] T017 [US3] Manual verification per `quickstart.md` Scenario 3 — temporary
   script driving the real app: complete a job without exporting, go to
   Timeline, click New Project, confirm the uncollected-events warning,
   decline and confirm the job is untouched, confirm again and confirm landing
