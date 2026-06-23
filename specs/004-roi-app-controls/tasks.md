@@ -121,7 +121,7 @@ confirm the warning dialog, confirm declining leaves the app running normally,
 confirm confirming cancels the detection and makes the backend unreachable
 within 15 seconds while the window remains open showing the result message.
 
-- [ ] T007 [US2] In `launcher.py`, replace `_start_backend`'s `uvicorn.run(app,
+- [X] T007 [US2] In `launcher.py`, replace `_start_backend`'s `uvicorn.run(app,
   host=BACKEND_HOST, port=port, log_level="warning")` call with the
   lower-level pattern from `plan.md`/`research.md` §4 — build a
   `uvicorn.Config(app, host=BACKEND_HOST, port=port, log_level="warning")`,
@@ -129,16 +129,16 @@ within 15 seconds while the window remains open showing the result message.
   module-level `_uvicorn_server: uvicorn.Server | None = None`, then call
   `server.run()`; add a new `stop_backend()` function that sets
   `_uvicorn_server.should_exit = True` if the server reference is set
-- [ ] T008 [US2] In `shell/main_window.py`: add `on_stop_backend=None` to
+- [X] T008 [US2] In `shell/main_window.py`: add `on_stop_backend=None` to
   `MainWindow.__init__`'s parameters, stored as `self._on_stop_backend`; add
   `window._cctvShutdown = false;` to the JS injected by `_inject_js_bridge`;
   extend `_handle_browse_flags` with a third `page.runJavaScript("window._cctvShutdown",
   check_shutdown)` check whose callback clears the flag
   (`window._cctvShutdown = false;`) and calls `self._on_stop_backend()` if set
-- [ ] T009 [US2] In `launcher.py`'s `main()`, pass
+- [X] T009 [US2] In `launcher.py`'s `main()`, pass
   `on_stop_backend=stop_backend` into the existing `MainWindow(backend_port=backend_port)`
   constructor call
-- [ ] T010 [P] [US2] Create `static/js/stop-app.js` exporting
+- [X] T010 [P] [US2] Create `static/js/stop-app.js` exporting
   `installStopButton()` per `plan.md` — appends a `.btn-danger` "Stop" button
   to `#app-nav`; click opens a confirmation modal (reusing the
   `.modal-overlay`/`.modal` CSS classes already used by `home.js`'s
@@ -155,11 +155,11 @@ within 15 seconds while the window remains open showing the result message.
   case): without the `.catch()`, the rejected fetch would prevent
   `window._cctvShutdown` from ever being (re-)set and leave the UI stuck
   instead of immediately re-showing the "stopped" message.
-- [ ] T011 [US2] Wire `installStopButton()` into `static/js/app.js` — add
+- [X] T011 [US2] Wire `installStopButton()` into `static/js/app.js` — add
   `import { installStopButton } from "/static/js/stop-app.js";
   installStopButton();` next to the existing `installDebugLog();
   installTheme();` calls
-- [ ] T012 [US2] Manual verification per `quickstart.md` Scenario 2 — temporary
+- [X] T012 [US2] Manual verification per `quickstart.md` Scenario 2 — temporary
   script driving the real app: start detection, click Stop, confirm the
   warning dialog appears; click Cancel and confirm `/api/health` still
   succeeds and detection keeps progressing; click Stop again and confirm this
