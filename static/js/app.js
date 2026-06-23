@@ -6,9 +6,11 @@
 import { installDebugLog } from "/static/js/debug-log.js";
 import { installTheme } from "/static/js/theme.js";
 import { installStopButton } from "/static/js/stop-app.js";
+import { installNewProjectButton } from "/static/js/new-project.js";
 installDebugLog();
 installTheme();
 installStopButton();
+installNewProjectButton();
 
 const routes = {
   "/":           "/static/js/pages/home.js",
