@@ -27,13 +27,18 @@ export function mountRoiEditor(container, { onChange }) {
   const img = container.querySelector(".roi-editor__img");
   const canvas = container.querySelector(".roi-editor__canvas");
   const ctx = canvas.getContext("2d");
+  let cssWidth = 0, cssHeight = 0;
 
   function resizeCanvas() {
     const rect = img.getBoundingClientRect();
+    const dpr = window.devicePixelRatio || 1;
+    cssWidth = rect.width;
+    cssHeight = rect.height;
     canvas.style.width = rect.width + "px";
     canvas.style.height = rect.height + "px";
-    canvas.width = rect.width;
-    canvas.height = rect.height;
+    canvas.width = rect.width * dpr;
+    canvas.height = rect.height * dpr;
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     redraw();
   }
   img.addEventListener("load", resizeCanvas);
@@ -44,12 +49,12 @@ export function mountRoiEditor(container, { onChange }) {
   }
 
   function redraw() {
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    ctx.clearRect(0, 0, cssWidth, cssHeight);
     const drawPath = (pts, closed, color) => {
       if (!pts.length) return;
       ctx.beginPath();
       pts.forEach((p, i) => {
-        const px = p.x * canvas.width, py = p.y * canvas.height;
+        const px = p.x * cssWidth, py = p.y * cssHeight;
         i === 0 ? ctx.moveTo(px, py) : ctx.lineTo(px, py);
       });
       if (closed) ctx.closePath();
@@ -62,7 +67,7 @@ export function mountRoiEditor(container, { onChange }) {
       }
       pts.forEach(p => {
         ctx.beginPath();
-        ctx.arc(p.x * canvas.width, p.y * canvas.height, 4, 0, 2 * Math.PI);
+        ctx.arc(p.x * cssWidth, p.y * cssHeight, 4, 0, 2 * Math.PI);
         ctx.fillStyle = color;
         ctx.fill();
       });
