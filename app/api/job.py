@@ -81,6 +81,7 @@ async def create_job(req: CreateJobRequest):
         raise HTTPException(status_code=400, detail=f"Cannot probe video: {exc}")
 
     job_id = str(uuid.uuid4())
+    _cancel_event.set()
     session.reset()
     session.update(
         job_id=job_id,

@@ -187,3 +187,19 @@ def test_preview_frame_extracts_and_caches(client, monkeypatch):
     resp2 = client.get("/api/job/preview-frame")
     assert resp2.status_code == 200
     assert call_count["n"] == 1
+
+
+# ── T013: cancel-guard regression test (TDD — written before T014 implementation) ──
+
+@pytest.mark.skipif(not HAS_TEST_VIDEO, reason="Test video not available")
+def test_create_job_cancels_inflight_detection_before_reset(client):
+    """job/create must cancel any in-flight detection from a previous job
+    before resetting the session, so an orphaned detection thread can't
+    write stale events into the freshly-reset session."""
+    import app.api.job as job_module
+    job_module._cancel_event.clear()
+    assert not job_module._cancel_event.is_set()
+
+    resp = client.post("/api/job/create", json={"source_path": TEST_VIDEO})
+    assert resp.status_code == 200
+    assert job_module._cancel_event.is_set()
