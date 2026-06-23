@@ -5,8 +5,10 @@
  */
 import { installDebugLog } from "/static/js/debug-log.js";
 import { installTheme } from "/static/js/theme.js";
+import { installStopButton } from "/static/js/stop-app.js";
 installDebugLog();
 installTheme();
+installStopButton();
 
 const routes = {
   "/":           "/static/js/pages/home.js",
