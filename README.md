@@ -248,6 +248,7 @@ use. See the plans under `docs/superpowers/plans/` for examples of this pattern.
 
 ## Further Reading
 
+- [`ROADMAP.md`](ROADMAP.md) — future feature ideas and improvements, grouped by theme with effort/impact notes
 - [`USER_MANUAL.md`](USER_MANUAL.md) — step-by-step usage guide with screenshots-in-words for every page
 - [`RASPBERRY_PI_SETUP.md`](RASPBERRY_PI_SETUP.md) — notes on the Raspberry Pi port
 - [`specs/`](specs/) — feature specs, plans, and task breakdowns for each phase of development

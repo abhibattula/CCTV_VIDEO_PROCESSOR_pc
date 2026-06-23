@@ -1,0 +1,186 @@
+# Roadmap — Future Phases
+
+This is a living list of features and improvements identified as good next
+steps for this project, beyond what's shipped (Phases 1-4: detection, timeline
+review, undo, export presets, theme, ROI zone drawing, Stop Application, New
+Project). Nothing here is scheduled or committed — when one of these gets
+picked up, it should run through the project's normal speckit pipeline
+(`/speckit.specify` → `/speckit.clarify` → `/speckit.plan` → `/speckit.tasks` →
+`/speckit.analyze` → `/speckit.implement`) and get its own numbered spec under
+`specs/`, exactly like Phases 1-4 did.
+
+Items are grouped by theme, not priority. See "Suggested Order" at the bottom
+for a recommended sequence.
+
+---
+
+## A. Batch & Unattended Processing
+
+Queue multiple videos and process them sequentially (e.g. overnight,
+unattended), with one summary view across all of them when done.
+
+**Why**: Real CCTV review work is rarely "one clip at a time" — a security
+manager typically has a folder per day per camera. This is the single
+biggest gap between "functional tool" and "fits how the job actually works."
+
+**Why it's not trivial**: This is the first roadmap item that pushes against
+`.specify/memory/constitution.md` Principle I's deliberate "one job at a time,
+all state in a single in-memory dict" design. Adding a queue means either (a)
+a queue of jobs processed one at a time through the existing single-job
+session model (simplest, preserves the architecture, no new persistence), or
+(b) genuinely concurrent multi-job processing (bigger change, would need
+per-job session state instead of one global session — a real architectural
+shift, not a bolt-on). Option (a) should be the default assumption unless a
+future spec pass finds a strong reason otherwise.
+
+**Builds on**: `app/api/job.py`'s existing create/start/cancel lifecycle,
+`app/session.py`'s reset-between-jobs pattern (already proven safe by Phase
+4's New Project work).
+
+**Effort**: Medium-high. **Impact**: High for recurring/professional use.
+
+---
+
+## B. AI / Smart Differentiators
+
+### B1. Privacy face/plate blur on export
+Redact faces or license plates in exported clips, so an "Evidence Pack" can
+be shared externally without exposing bystanders' identities.
+
+**Builds on**: The existing YOLO person detector (`app/core/yolo_detector.py`)
+already locates people in-frame; this adds a Gaussian-blur pass over those
+bounding boxes inside `app/core/export_engine.py`'s FFmpeg pipeline (likely
+via `drawbox`/`boxblur` filters, similar in spirit to the existing burn-in
+overlay feature). License-plate detection would need a small dedicated
+model/heuristic (not currently in the codebase) — faces-only is the smaller,
+faster-to-ship first cut.
+
+**Effort**: Low-medium. **Impact**: High (directly enables a use case —
+sharing footage with a third party — that today requires manual redaction in
+another tool).
+
+### B2. Natural-language event search
+Search events by description ("show me the red car") instead of only by
+detected label or score threshold.
+
+**Builds on**: `app/core/thumbnail_gen.py` already generates a thumbnail per
+event — this adds a CLIP (or similar) embedding pass over those thumbnails
+and a lightweight similarity search, surfaced as a search box on the Timeline
+page alongside the existing label-filter chips.
+
+**Effort**: Medium (new model dependency, new embedding-index logic, no
+existing precedent in this codebase to build on). **Impact**: High — this is
+the most genuinely differentiated idea on this list versus typical
+motion-alert tools.
+
+### B3. Object tracking across frames
+The same person walking through frame becomes one tracked entity instead of
+several separate motion events.
+
+**Builds on**: `app/core/detection_engine.py`/`yolo_detector.py`'s per-frame
+detection loop — this adds a tracker (e.g. a simple centroid/IoU tracker, or
+a lightweight re-identification model) layered on top, not a replacement of
+the existing detection logic.
+
+**Effort**: Medium-high (real tracking-by-detection logic, new edge cases
+around occlusion/re-entry). **Impact**: Medium-high — makes review feel
+"smart" rather than "many similar alerts," but is more substantial than it
+first sounds.
+
+### B4. Smarter highlight ranking
+Improve the existing "Quick Highlights" preset's top-N-by-score selection
+with deduplication (don't pick 3 near-identical consecutive events) and
+diversity (spread picks across the video's timeline, not all from one burst).
+
+**Builds on**: `app/core/export_engine.py`'s existing auto-top-N logic for
+the Quick Highlights preset — this is a refinement of existing code, not a
+new subsystem.
+
+**Effort**: Low. **Impact**: Medium — quality-of-life improvement to an
+existing feature, not a new capability.
+
+---
+
+## C. Professional Reporting
+
+One-click PDF/HTML incident report: a thumbnail grid with timestamps, labels,
+and confidence scores per event — the document a security manager actually
+hands to a client or insurance adjuster, instead of just a video file.
+Optionally include a SHA-256 hash of the source file and the exported clip
+for basic chain-of-custody integrity.
+
+**Why this is the best effort-to-impact ratio on this list**: every piece of
+underlying data (events, timestamps, labels, confidence, thumbnails) already
+exists in this app today. This is a templating/rendering task (e.g. Jinja2 →
+HTML, or HTML → PDF via a headless render), not new detection or export
+logic — meaning it's almost entirely additive with very low risk to anything
+already shipped.
+
+**Builds on**: `app/core/thumbnail_gen.py` (per-event thumbnails already
+generated), `app/api/job.py`'s events list, the existing export-preset UI
+pattern in `static/js/pages/export.js` (a "Generate Report" button would sit
+naturally alongside the existing export controls).
+
+**Effort**: Low-medium. **Impact**: High.
+
+---
+
+## D. Settings, Onboarding & Quality-of-Life Polish
+
+- **A real Settings page** — persisted defaults for detection
+  sensitivity/padding, default export output folder, and theme, using the
+  same user-configuration persistence pattern already established by
+  `app/api/presets.py`/`presets.json` (same Principle I exemption already
+  covers this — no new constitution work needed).
+- **First-run experience** — a brief tour, or a "Load Sample Video" button,
+  instead of a cold empty drop zone for a first-time user or evaluator.
+- **Desktop notifications** (Windows toast) when a long detection or export
+  finishes, so the user isn't stuck babysitting the Processing page.
+- **Recent files** list on the Home page.
+
+**Why**: this is the layer that separates "functional" from "feels finished
+and professional" — none of these add new capability, but together they're
+what makes an app feel like a polished, considered product rather than a
+working prototype.
+
+**Effort**: Low, per item. **Impact**: Medium, but cumulative and highly
+visible — this is exactly the kind of polish a major tech company's app would
+have by default.
+
+---
+
+## E. Trust & Robustness
+
+- **GPU (CUDA) toggle for YOLO** — `ultralytics` already supports device
+  selection; this is mostly exposing a setting plus detecting CUDA
+  availability (extending `app/api/system.py`'s existing capability-check
+  pattern), not new ML work.
+- **Inline tooltips** explaining what Sensitivity/Padding/Min Event Duration
+  actually do and trade off, reducing "why did it miss this event" confusion.
+
+**Effort**: Low. **Impact**: Medium, mostly for power users / reducing
+support burden.
+
+---
+
+## Suggested Order
+
+This is one reasonable sequence, not the only one — re-evaluate when any item
+is actually picked up:
+
+1. **C (Professional Reporting)** — cheapest path to "this feels like a real
+   commercial product," zero architectural risk, 100% reuse of existing data.
+2. **D (Settings + first-run polish)** — same low-risk, high-perceived-value
+   profile; natural to bundle 2-3 of these into one phase the way Phase 3
+   bundled undo+presets+theme.
+3. **B1 (face/plate blur)** — contained, high-impact, standalone; doesn't
+   touch the job/session architecture.
+4. **A (batch processing)** — deliberately last among the "foundational"
+   items, because it deserves its own explicit conversation about the
+   single-job-at-a-time tradeoff rather than being smuggled in as a side
+   effect of something else.
+5. **B2/B3 (semantic search, object tracking)** — the most exciting and the
+   most speculative; best explored once the more foundational items above are
+   in place and there's a clearer sense of what users actually ask for next.
+6. **B4, E** — low-effort items that can slot into whichever phase has spare
+   capacity; no need to schedule them on their own.
