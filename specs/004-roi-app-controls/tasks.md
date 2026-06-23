@@ -43,7 +43,7 @@ two distinct areas, draw a region around only one, run detection, confirm only
 that area's motion is reported; confirm full-frame behavior is unchanged when
 no regions are drawn; confirm regions reset when a different file loads.
 
-- [ ] T001 [US1] Write failing tests in `tests/test_api_job.py` for the new
+- [X] T001 [US1] Write failing tests in `tests/test_api_job.py` for the new
   preview-frame endpoint — `test_preview_frame_no_active_job_returns_400` (no
   `source_path`/`job_id` in session → 400), `test_preview_frame_extracts_and_caches`
   (using the existing small sample video fixture this test file already uses
