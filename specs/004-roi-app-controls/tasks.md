@@ -58,7 +58,7 @@ no regions are drawn; confirm regions reset when a different file loads.
   `plan.md`/`contracts/api.md` — add `import subprocess` and `FileResponse`
   (not currently imported in this file) to the existing import block; run
   `pytest tests/test_api_job.py -v` to confirm T001's tests now pass
-- [ ] T003 [P] [US1] Create `static/js/roi.js` exporting
+- [X] T003 [P] [US1] Create `static/js/roi.js` exporting
   `mountRoiEditor(container, { onChange })` per `plan.md`'s design — `<img>` +
   absolutely-positioned `<canvas>` overlay kept pixel-synced on load/resize;
   click-to-place-vertex, close-near-first-vertex (≥3 points, per the spec's
