@@ -94,16 +94,36 @@ The app is two processes glued together by `launcher.py`:
    colour-coded confidence badge. From here you can:
    - Filter by label chip and/or a minimum-score slider (non-matching events grey out
      on the canvas strip rather than disappearing, so you keep context)
-   - Multi-select with Ctrl+click or checkboxes, bulk include/exclude with a single
-     undo step
+   - Multi-select with Ctrl+click or checkboxes, bulk include/exclude with a capped
+     20-entry undo stack (not just the last operation — Ctrl+Z repeatedly walks back
+     through your recent bulk actions in reverse order)
    - Navigate and act entirely by keyboard (arrows, Space, Enter, Ctrl+A/D/E, Esc)
    - Preview any event in a popup player before deciding whether to export it
 4. **Export** (`app/core/export_engine.py`) — FFmpeg cuts and (optionally) merges
    the included events. Stream-copies when the source codec allows it (fast, lossless);
    re-encodes only when downscaling to 720p/480p or burning in an overlay. Three
-   one-click presets (Security Report / Evidence Pack / Quick Highlights) configure
-   output type, quality, and label scope together; an optional burn-in overlay stamps
-   each clip with its timestamp and label via FFmpeg's `drawtext` filter.
+   built-in one-click presets (Security Report / Evidence Pack / Quick Highlights)
+   configure output type, quality, and label scope together — or save your own
+   current settings as a named custom preset (`app/api/presets.py`), which persists
+   across restarts and appears alongside the built-ins; an optional burn-in overlay
+   stamps each clip with its timestamp and label via FFmpeg's `drawtext` filter.
+
+### Region of interest, theme, and app-level controls
+
+- **Detection zones** — before starting detection, the Home page shows a preview of
+  the video's first frame; draw one or more free-form regions on it
+  (`static/js/roi.js`) and detection restricts its activity report to the union of
+  those regions instead of the full frame. Zones are per-job only — drawing nothing
+  analyzes the whole frame exactly as before, and loading a different file always
+  starts with a blank slate.
+- **Light/dark theme** — a toggle in the nav bar (`static/js/theme.js`) switches the
+  whole UI instantly, with the choice remembered across restarts via `localStorage`.
+- **Stop** — a nav-bar control that gracefully shuts down the backend after a
+  confirmation (cancelling any in-progress work first), while the window itself
+  stays open and shows a clear message once it's actually safe to close.
+- **New Project** — reachable from every page, abandons the current job (warning
+  first only if doing so would lose an active operation or unexported results) and
+  returns to a clean upload screen without restarting the application.
 
 ### A platform quirk worth knowing about
 
@@ -130,13 +150,20 @@ it exists.
 
 ## Features
 
-**Core loop:** load → detect (MOG2 or YOLO) → review/filter on a timeline → export.
+**Core loop:** load → (optionally draw detection zones) → detect (MOG2 or YOLO) →
+review/filter on a timeline → export.
 
+- Region-of-interest zones — restrict detection to one or more drawn areas of the frame
 - Tag/label filtering with a score-threshold slider and live "N shown / M total" count
-- Multi-select + bulk include/exclude with single-level undo
+- Multi-select + bulk include/exclude with a 20-entry undo stack
 - Keyboard-driven review (no mouse required end-to-end)
 - Confidence badges, coloured label pills, compact post-detection label summary
-- Three one-click export presets, optional timestamp+label burn-in overlay
+- Three built-in export presets plus your own named, persisted custom presets,
+  optional timestamp+label burn-in overlay
+- Light/dark theme toggle, remembered across restarts
+- In-app Stop control (graceful backend shutdown) and New Project control (abandon
+  the current job and start over without restarting the app), both reachable from
+  every page
 - Live per-label detection chart + events/min counter while processing
 - In-app preview player and in-app debug log (see above) — no external tools needed
 - Proactive capability checks: the Object Detection button disables itself with an
@@ -158,9 +185,11 @@ CCTV VIDEO PROCESSOR PC/
 │   ├── session.py           ← in-memory job state (thread-safe, single job)
 │   ├── config.py            ← ports, paths, RAM-scaled detection resolution
 │   ├── api/
-│   │   ├── job.py           ← /api/job/* — create, start, cancel, events, export
+│   │   ├── job.py           ← /api/job/* — create, start, cancel, events, export,
+│   │   │                       preview-frame (first-frame extraction for ROI)
 │   │   ├── stream.py        ← /api/stream — SSE live progress/log
 │   │   ├── preview.py       ← /api/job/preview/* — clip preview (VP8/Opus)
+│   │   ├── presets.py       ← /api/presets — custom export preset CRUD (persisted)
 │   │   ├── shell_bridge.py  ← /api/shell/* — Qt ↔ web file-dialog bridge
 │   │   └── system.py        ← /api/system/* — CPU/RAM stats, capability checks
 │   ├── core/
@@ -172,17 +201,22 @@ CCTV VIDEO PROCESSOR PC/
 │   └── utils/                   ← ffprobe, bundled-ffmpeg resolver, time/system helpers
 │
 ├── shell/                   ← PyQt6 desktop wrapper
-│   ├── main_window.py       ← QMainWindow + QWebEngineView, JS bridge, drag & drop
+│   ├── main_window.py       ← QMainWindow + QWebEngineView, JS bridge, drag & drop,
+│   │                           Stop Application bridge flag
 │   ├── tray.py              ← system tray icon
 │   └── platform_utils.py    ← open_folder() per OS
 │
 ├── static/                  ← web UI (served by FastAPI, no build step)
 │   ├── index.html
-│   ├── css/                 ← dark theme, per-page stylesheets
+│   ├── css/                 ← dark/light theme, per-page + ROI editor stylesheets
 │   └── js/
-│       ├── app.js           ← SPA router
+│       ├── app.js           ← SPA router + global controls bootstrap
 │       ├── debug-log.js     ← in-app console/network/error capture + drawer UI
-│       ├── session-state.js ← shared UI state (filters, selection) across pages
+│       ├── theme.js         ← light/dark theme toggle (localStorage-persisted)
+│       ├── stop-app.js       ← Stop Application control + confirm/poll flow
+│       ├── new-project.js   ← New Project control + status-aware warnings
+│       ├── roi.js           ← ROI polygon-drawing canvas editor
+│       ├── session-state.js ← shared UI state (filters, selection, undo) across pages
 │       └── pages/           ← home.js, processing.js, timeline.js, export.js
 │
 ├── specs/                   ← spec-driven design docs per feature (spec/plan/tasks)
@@ -198,7 +232,7 @@ CCTV VIDEO PROCESSOR PC/
 python -m pytest tests/ -v
 ```
 
-Expected: **60 passed, 2 skipped** (the skips are `ffprobe`-specific cases that don't
+Expected: **74 passed, 2 skipped** (the skips are `ffprobe`-specific cases that don't
 apply on Windows; FFmpeg itself is bundled and fully functional).
 
 The backend follows test-first development — every engine (`detection_engine`,

@@ -36,6 +36,13 @@ When you launch `launcher.py`, the backend starts in a background thread, the Qt
 
 **Debug Log panel:** the app's embedded browser view has no DevTools console, so the app ships its own — click **🐛 Debug** in the nav bar (any page) to open a drawer showing console output, network activity, and errors. Useful if something looks wrong and you want to see what the app is actually doing.
 
+**Nav bar controls (every page):**
+- **☀️ / 🌙** — toggles light/dark theme instantly; remembered across restarts.
+- **Stop** — gracefully shuts down the backend after a confirmation, while the window stays open until you close it.
+- **New Project** — abandons the current job (with a warning only if it would lose real work) and returns to a clean upload screen.
+
+See "Stopping the Application" and "Starting a New Project" further down for details on the last two.
+
 ---
 
 ## Requirements
@@ -93,6 +100,29 @@ After loading you'll see:
 - The file name appears in the drop zone
 - A source info card shows codec, FPS, resolution, duration, and audio info
 - A "Re-encode: yes/no" field — if yes, the export will re-encode (slower but always compatible)
+- A **Detection Zones** card showing a preview of the video's first frame
+
+### Step 1b — Draw Detection Zones (optional)
+
+If you only care about activity in part of the frame — a doorway, a parking spot,
+one camera's overlapping field of view — draw a region on the preview instead of
+analysing the whole frame:
+
+1. Click on the preview to place a point; keep clicking to add more points.
+2. Once you've placed at least 3 points, click back near your first point to close
+   the shape into a region.
+3. Repeat to draw additional regions — detection reports activity inside *any* of
+   them, not just one.
+4. Each region gets a label chip below the preview (e.g. "Region 1") — click into
+   the chip to rename it, or click its **×** to delete just that region.
+5. **Clear All** removes every region and starts over.
+
+If you draw nothing, detection analyses the full frame exactly as before — drawing
+zones is entirely optional. Zones are **per-video only**: loading a different file
+always starts with a blank preview and no regions, they're never saved or reused
+across videos. If the preview can't be generated (a corrupted or zero-duration
+file), you'll see "Preview unavailable — detection will run on the full frame"
+instead, and detection still works normally.
 
 ### Step 2 — Configure Detection Settings
 
@@ -151,7 +181,7 @@ After detection completes, you're taken to the Timeline page.
   | **Include** / **Exclude** | Set all selected events included/excluded in one action |
   | **Invert Selection** | Swap which visible events are selected (doesn't change include/exclude state) |
   | **Select Visible** | Select every event matching the current filter |
-  | **Undo** | Revert the last bulk include/exclude (also `Ctrl+Z`) |
+  | **Undo** | Revert the most recent bulk include/exclude (also `Ctrl+Z`) — press repeatedly to step back through up to 20 recent bulk operations, most recent first |
   | **Clear Selection** | Exit multi-select (also `Escape`) |
 
 - If a bulk-exclude (or a string of individual toggles) leaves **zero events included**, a warning appears: *"No events selected for export — adjust filters or include more events."* It clears itself as soon as anything is included again.
@@ -187,6 +217,18 @@ Click **Quick Export** from the timeline toolbar, or navigate to Export directly
 | **Evidence Pack** | Individual clips | Original | Off | All |
 | **Quick Highlights** | Merged | 720p | Off | Auto-selects the top 10 events by score (or all, if fewer than 10 exist) |
 
+**Custom presets** — if you reconfigure the same combination of settings every time
+(e.g. always merged + 720p + burn-in + "Person" only), save it once:
+
+1. Configure output type, quality, burn-in, and label scope manually (below).
+2. Click **Save as Preset**, give it a name (anything except a built-in preset's
+   name, case-insensitive — e.g. "security report" collides with "Security Report").
+3. It appears as a fourth (fifth, sixth, ...) one-click button alongside the
+   built-ins, and **persists across app restarts** — load a different video next
+   week and it's still there.
+4. Click the small **×** on a custom preset's button to delete it; this never
+   affects the 3 built-in presets.
+
 Or configure manually:
 
 | Option | Description |
@@ -202,7 +244,7 @@ Or configure manually:
 Click **Export Now**. A progress bar fills as FFmpeg processes the clips. When complete:
 - The output file path is displayed
 - **Open Folder** opens File Explorer at the export location
-- **New Job** returns to the home screen (this also resets all timeline filters/selection for the next job)
+- **New Job** returns to the home screen (this also resets all timeline filters/selection/undo history for the next job) — see also the nav bar's **New Project** control below, which does the same thing from any page, not just after a finished export
 
 ---
 
@@ -225,6 +267,43 @@ Example: `parking_lot_activity_20260619_143022.mp4`
 {source_name}_event_001_083012.mp4    ← wall-clock 08:30:12
 {source_name}_event_002_084537.mp4    ← wall-clock 08:45:37
 ```
+
+---
+
+## Stopping the Application
+
+Closing the window doesn't fully stop the app on its own — the backend keeps
+running in the background so the window can reopen quickly. To shut everything
+down deliberately:
+
+1. Click **Stop** in the nav bar (any page).
+2. Confirm — you're warned that any in-progress detection or export will be
+   cancelled first.
+3. The page shows "Stopping…", then within about 15 seconds either:
+   - **"✅ Application stopped. You can close this window now."** — the backend is
+     confirmed gone; close the window whenever you like.
+   - **"Could not confirm the application stopped"** — rare, happens only if this
+     window's backend is shared with another already-open window of the app;
+     closing the window directly is still safe in that case.
+
+The window itself never disappears on its own — you always close it yourself once
+you see one of those two messages.
+
+## Starting a New Project
+
+To abandon the current video and load a different one, click **New Project** in
+the nav bar from anywhere — Home, Processing, Timeline, or Export:
+
+- If detection or export is **actively running**, you're warned it will be
+  cancelled.
+- If the current job **finished but hasn't been exported yet**, you're warned
+  those events will be discarded.
+- Otherwise (nothing started yet, or already exported), it jumps straight to a
+  clean upload screen with no warning — there's nothing to lose.
+
+Either way, once you're back at the upload screen, the next video you load starts
+with zero leftover filters, selections, undo history, or drawn detection zones
+from the previous job.
 
 ---
 
@@ -269,7 +348,7 @@ If the app crashes during export, the next launch will automatically:
 python -m pytest tests/ -v
 ```
 
-Expected result: **60 passed, 2 skipped** (the 2 skips are for `ffprobe`-specific cases that don't apply on Windows — FFmpeg itself is bundled and everything works fine). There is no frontend test runner; frontend behaviour is verified by driving the real app directly.
+Expected result: **74 passed, 2 skipped** (the 2 skips are for `ffprobe`-specific cases that don't apply on Windows — FFmpeg itself is bundled and everything works fine). There is no frontend test runner; frontend behaviour is verified by driving the real app directly.
 
 ---
 
@@ -285,9 +364,11 @@ CCTV VIDEO PROCESSOR PC/
 │   ├── session.py           ← In-memory job state (thread-safe)
 │   ├── config.py            ← Constants (ports, paths, RAM-scaled detection resolution)
 │   ├── api/
-│   │   ├── job.py           ← /api/job/* — create, start, cancel, events, bulk toggle, export
+│   │   ├── job.py           ← /api/job/* — create, start, cancel, events, bulk toggle,
+│   │   │                       export, preview-frame (first-frame extraction for ROI)
 │   │   ├── stream.py        ← /api/stream — SSE live log/progress
 │   │   ├── preview.py       ← /api/job/preview/* — clip preview (VP8/Opus)
+│   │   ├── presets.py       ← /api/presets — custom export preset CRUD (persisted)
 │   │   ├── shell_bridge.py  ← /api/shell/* — Qt↔web file dialog bridge
 │   │   └── system.py        ← /api/system/* — CPU/RAM stats, YOLO capability check
 │   ├── core/
@@ -309,11 +390,15 @@ CCTV VIDEO PROCESSOR PC/
 │
 ├── static/                  ← Web UI (served by FastAPI)
 │   ├── index.html           ← SPA shell
-│   ├── css/                 ← Dark theme stylesheets
+│   ├── css/                 ← Dark/light theme + per-page + ROI editor stylesheets
 │   └── js/
-│       ├── app.js           ← SPA router (pushState)
+│       ├── app.js           ← SPA router (pushState) + global controls bootstrap
 │       ├── debug-log.js     ← In-app console/network/error capture + drawer UI
-│       ├── session-state.js ← Shared filter/selection state across pages
+│       ├── theme.js         ← Light/dark theme toggle (localStorage-persisted)
+│       ├── stop-app.js       ← Stop Application control + confirm/poll flow
+│       ├── new-project.js   ← New Project control + status-aware warnings
+│       ├── roi.js           ← ROI polygon-drawing canvas editor
+│       ├── session-state.js ← Shared filter/selection/undo state across pages
 │       └── pages/
 │           ├── home.js      ← Drop zone, settings, capability checks, start
 │           ├── processing.js ← SSE progress, live label chart, log panel
