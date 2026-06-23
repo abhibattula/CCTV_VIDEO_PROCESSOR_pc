@@ -22,9 +22,10 @@ from app.config import BACKEND_HOST, BACKEND_PORT
 
 
 class MainWindow(QMainWindow):
-    def __init__(self, backend_port: int = BACKEND_PORT):
+    def __init__(self, backend_port: int = BACKEND_PORT, on_stop_backend=None):
         super().__init__()
         self._base_url = f"http://{BACKEND_HOST}:{backend_port}"
+        self._on_stop_backend = on_stop_backend
 
         self.setWindowTitle("CCTV Video Processor")
         self.resize(1280, 800)
@@ -80,6 +81,7 @@ class MainWindow(QMainWindow):
         js = """
         window._cctvBrowse = false;
         window._cctvBrowseFolder = false;
+        window._cctvShutdown = false;
         window.addEventListener('cctv:browse', function() {
             window._cctvBrowse = true;
         });
@@ -116,8 +118,15 @@ class MainWindow(QMainWindow):
                 if folder:
                     self._post_path(folder)
 
+        def check_shutdown(val):
+            if val:
+                page.runJavaScript("window._cctvShutdown = false;")
+                if self._on_stop_backend:
+                    self._on_stop_backend()
+
         page.runJavaScript("window._cctvBrowse", check_browse)
         page.runJavaScript("window._cctvBrowseFolder", check_browse_folder)
+        page.runJavaScript("window._cctvShutdown", check_shutdown)
 
     def _post_path(self, path: str):
         try:

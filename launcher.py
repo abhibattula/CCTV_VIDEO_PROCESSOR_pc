@@ -55,14 +55,24 @@ def _find_free_port(preferred: int) -> int:
         return s.getsockname()[1]
 
 
+_uvicorn_server: uvicorn.Server | None = None
+
+
 def _start_backend(port: int):
+    global _uvicorn_server
     app = create_app()
-    uvicorn.run(
-        app,
-        host=BACKEND_HOST,
-        port=port,
-        log_level="warning",
-    )
+    config = uvicorn.Config(app, host=BACKEND_HOST, port=port, log_level="warning")
+    server = uvicorn.Server(config)
+    _uvicorn_server = server
+    server.run()
+
+
+def stop_backend():
+    """Gracefully stop the backend started by this process (no-op if it
+    isn't ours to stop, e.g. when this instance reused a prior instance's
+    already-running backend)."""
+    if _uvicorn_server is not None:
+        _uvicorn_server.should_exit = True
 
 
 def main():
@@ -99,7 +109,7 @@ def main():
 
     # Pass the resolved port so the window loads the right URL
     from shell.main_window import MainWindow
-    window = MainWindow(backend_port=backend_port)
+    window = MainWindow(backend_port=backend_port, on_stop_backend=stop_backend)
     window.show()
 
     # ── Tray icon ─────────────────────────────────────────────────────────────
