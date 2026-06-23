@@ -3,6 +3,7 @@
  * Phase 2: preset buttons, burn-in toggle, label scope selector.
  * FR-014: if ?quick=1 in URL, auto-start export with defaults on mount.
  */
+import { resetUiState } from "/static/js/session-state.js";
 
 export function mount(container, params) {
   const quick = params && params.get("quick") === "1";
@@ -90,7 +91,7 @@ export function mount(container, params) {
         <p id="done-path" class="done-path"></p>
         <div class="done-actions">
           <button class="btn btn-success" id="open-folder-btn">Open Folder</button>
-          <button class="btn" onclick="window.go('/')">New Job</button>
+          <button class="btn" id="new-job-btn">New Job</button>
         </div>
       </div>
 
@@ -400,6 +401,10 @@ export function mount(container, params) {
     container.querySelector("#done-path").textContent = path || "";
     container.querySelector("#open-folder-btn").onclick = () => {
       fetch("/api/shell/open-folder", { method: "POST" });
+    };
+    container.querySelector("#new-job-btn").onclick = () => {
+      resetUiState();
+      window.go("/");
     };
   }
 
