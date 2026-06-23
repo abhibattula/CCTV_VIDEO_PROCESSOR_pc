@@ -249,10 +249,10 @@ remains green.
 **Purpose**: Final full-suite confirmation, combined manual pass, documentation
 updates, sign-off.
 
-- [ ] T018 Run `pytest tests/ -v` from project root — confirm all existing
+- [X] T018 Run `pytest tests/ -v` from project root — confirm all existing
   tests plus the new preview-frame tests (T001) and the cancel-guard
   regression test (T013) pass with no regressions
-- [ ] T019 Manual combined smoke test per `quickstart.md`'s "Combined pass"
+- [X] T019 Manual combined smoke test per `quickstart.md`'s "Combined pass"
   section — run all three stories together in one continuous live
   `python launcher.py` session (load a video, draw a region, detect, export,
   New Project into a second video with a different region, detect again, then
@@ -263,11 +263,11 @@ updates, sign-off.
   research.md's Implementation Risks flags this; resize the window narrower
   if it looks tight and note whether `flex-wrap` or an icon-only treatment is
   needed as a follow-up
-- [ ] T020 Update `README.md` and `USER_MANUAL.md` to document the three new
+- [X] T020 Update `README.md` and `USER_MANUAL.md` to document the three new
   Phase 4 features — ROI region drawing on the Home page, the Stop
   Application control and its confirm/safe-to-close flow, and the New Project
   control and when it warns vs. proceeds immediately
-- [ ] T021 Commit completed Phase 4 on branch `004-roi-app-controls` with
+- [X] T021 Commit completed Phase 4 on branch `004-roi-app-controls` with
   message `feat(phase4): ROI selection, Stop Application, New Project`
 
 ---
