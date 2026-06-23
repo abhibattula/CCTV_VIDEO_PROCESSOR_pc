@@ -134,3 +134,56 @@ def test_export_with_label_filter(client, monkeypatch, tmp_path):
         time.sleep(0.1)
 
     assert captured.get("label_filter") == ["Person"]
+
+
+# ── T001: preview-frame endpoint tests (TDD — written before T002 implementation) ──
+
+def test_preview_frame_no_active_job_returns_400(client):
+    resp = client.get("/api/job/preview-frame")
+    assert resp.status_code == 400
+    assert "error" in resp.json()
+
+
+def test_preview_frame_extraction_failure_returns_500(client, monkeypatch):
+    import app.session as session
+    session.reset()
+    session.update(
+        job_id="test-job",
+        source_path="/fake/video.mp4",
+        source_info={"duration_s": 10},
+    )
+
+    class FakeResult:
+        returncode = 1
+
+    monkeypatch.setattr("subprocess.run", lambda *a, **k: FakeResult())
+
+    resp = client.get("/api/job/preview-frame")
+    assert resp.status_code == 500
+    assert "error" in resp.json()
+
+
+@pytest.mark.skipif(not HAS_TEST_VIDEO, reason="Test video not available")
+def test_preview_frame_extracts_and_caches(client, monkeypatch):
+    resp = client.post("/api/job/create", json={"source_path": TEST_VIDEO})
+    assert resp.status_code == 200
+
+    import subprocess as _subprocess
+    real_run = _subprocess.run
+    call_count = {"n": 0}
+
+    def counting_run(*args, **kwargs):
+        call_count["n"] += 1
+        return real_run(*args, **kwargs)
+
+    monkeypatch.setattr("subprocess.run", counting_run)
+
+    resp1 = client.get("/api/job/preview-frame")
+    assert resp1.status_code == 200
+    assert resp1.headers["content-type"] == "image/jpeg"
+    assert call_count["n"] == 1
+
+    # Second call must serve the cached file, not re-invoke ffmpeg
+    resp2 = client.get("/api/job/preview-frame")
+    assert resp2.status_code == 200
+    assert call_count["n"] == 1
