@@ -199,18 +199,18 @@ declining leaves the job untouched, confirm confirming returns to a clean Home
 with no leftover state; repeat with an actively-running job (different
 warning text) and with an idle job (no warning at all).
 
-- [ ] T013 [US3] Write a failing regression test in `tests/test_api_job.py` —
+- [X] T013 [US3] Write a failing regression test in `tests/test_api_job.py` —
   `test_create_job_cancels_inflight_detection_before_reset`: start a job,
   simulate an in-flight detection by directly checking the module-level
   `_cancel_event` is initially clear, call `POST /api/job/create` again with a
   second source file, then assert `_cancel_event.is_set()` is `True`
   afterward; run `pytest tests/test_api_job.py -v` to confirm it fails (the
   guard doesn't exist yet)
-- [ ] T014 [US3] In `app/api/job.py`'s `create_job()`, add `_cancel_event.set()`
+- [X] T014 [US3] In `app/api/job.py`'s `create_job()`, add `_cancel_event.set()`
   as the first line of the function body, immediately before the existing
   `session.reset()` call; run `pytest tests/test_api_job.py -v` to confirm
   T013 now passes, then `pytest tests/ -v` for the full suite
-- [ ] T015 [P] [US3] Create `static/js/new-project.js` exporting
+- [X] T015 [P] [US3] Create `static/js/new-project.js` exporting
   `installNewProjectButton()` per `plan.md` — appends a `.btn` "New Project"
   button to `#app-nav`; click handler calls `GET /api/job`, then: if status is
   `"detecting"`/`"exporting"` → warning modal about cancelling the running
@@ -219,7 +219,7 @@ warning text) and with an idle job (no warning at all).
   no modal. On confirm (or the no-modal path): `POST /api/job/cancel`
   (`.catch(() => {})` — best-effort, per the spec's edge case that a failed
   cancel call must not block starting over), `resetUiState()`, `window.go("/")`
-- [ ] T016 [US3] Wire `installNewProjectButton()` into `static/js/app.js` —
+- [X] T016 [US3] Wire `installNewProjectButton()` into `static/js/app.js` —
   add `import { installNewProjectButton } from "/static/js/new-project.js";
   installNewProjectButton();` next to the `installStopButton()` call added in
   T011 (sequenced after T011 since both edit `app.js`)
