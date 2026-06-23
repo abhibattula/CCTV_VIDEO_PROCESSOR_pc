@@ -9,7 +9,8 @@ import threading
 _lock = threading.RLock()
 
 _DEFAULTS: dict = {
-    "status": "idle",           # idle | ready | running | completed | error | cancelled
+    "status": "idle",           # idle | ready | detecting | completed | cancelled | error
+                                 # | exporting | export_done | export_error
     "source_path": None,
     "source_info": None,        # SourceInfo dict from ffprobe
     "settings": None,           # detection settings dict

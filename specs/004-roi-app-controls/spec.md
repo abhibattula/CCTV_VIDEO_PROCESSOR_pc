@@ -229,9 +229,14 @@ job.
   that returns the user to the upload screen to start a new project
 - **FR-P4-012**: If detection or export is actively running, the system MUST warn
   the user that proceeding will cancel it, and only proceed on confirmation
-- **FR-P4-013**: If the current job has completed with events that have not been
-  exported, the system MUST warn the user that proceeding will discard them, and
-  only proceed on confirmation
+- **FR-P4-013**: If the current job's detection has finished successfully and
+  produced events that have not been exported — including when a subsequent
+  export attempt itself failed, leaving those same events still unexported —
+  the system MUST warn the user that proceeding will discard them, and only
+  proceed on confirmation. This does NOT extend to a cancelled or
+  detection-side-errored job: those are covered by FR-P4-014 instead, since an
+  explicit cancellation or a failed detection run is not the same as a
+  completed, reviewable result set sitting unexported
 - **FR-P4-014**: If neither condition in FR-P4-012/013 applies — covering every
   remaining job state (idle, freshly loaded, already exported, cancelled, or
   errored) — the system MUST return to the upload screen immediately without a

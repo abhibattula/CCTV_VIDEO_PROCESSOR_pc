@@ -27,7 +27,8 @@ async function onClick() {
       `A ${job.status === "detecting" ? "detection" : "export"} is currently running. Starting a new project will cancel it.`,
       proceed
     );
-  } else if (job.events && job.events.length > 0 && !job.output_path) {
+  } else if ((job.status === "completed" || job.status === "export_error")
+      && job.events && job.events.length > 0 && !job.output_path) {
     showModal(
       "Discard uncollected events?",
       `You have ${job.events.length} event(s) that have not been exported. Starting a new project will discard them.`,
