@@ -54,7 +54,7 @@ no regions are drawn; confirm regions reset when a different file loads.
   corrupt/empty file, confirm 500 with an `"error"` key, not an uncaught
   exception); run `pytest tests/test_api_job.py -v` to confirm all three fail
   (endpoint doesn't exist yet)
-- [ ] T002 [US1] Implement `GET /api/job/preview-frame` in `app/api/job.py` per
+- [X] T002 [US1] Implement `GET /api/job/preview-frame` in `app/api/job.py` per
   `plan.md`/`contracts/api.md` — add `import subprocess` and `FileResponse`
   (not currently imported in this file) to the existing import block; run
   `pytest tests/test_api_job.py -v` to confirm T001's tests now pass
