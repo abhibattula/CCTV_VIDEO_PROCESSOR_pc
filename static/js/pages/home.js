@@ -4,6 +4,7 @@
  */
 
 import { resetUiState } from "/static/js/session-state.js";
+import { mountRoiEditor } from "/static/js/roi.js";
 
 export function mount(container, params) {
   container.innerHTML = `
@@ -19,6 +20,12 @@ export function mount(container, params) {
 
       <!-- Source info bar (shown after file loads) -->
       <div class="source-bar card hidden" id="source-info"></div>
+
+      <!-- ROI region editor (shown after file loads) -->
+      <div class="card hidden" id="roi-card">
+        <div class="settings-group__label">Detection Zones (optional)</div>
+        <div id="roi-container"></div>
+      </div>
 
       <!-- Detection settings -->
       <div class="settings-card card">
@@ -75,6 +82,8 @@ export function mount(container, params) {
   let selectedPath = null;
   let selectedMode = "mog2";
   let selectedSens = "medium";
+  let roiHandle = null;
+  let liveZones = [];
 
   // Check if YOLO is available and disable button if not
   fetch("/api/system/capabilities").then(r => r.json()).then(caps => {
@@ -180,6 +189,24 @@ export function mount(container, params) {
     overlay.querySelector("#modal-cancel").onclick   = () => document.body.removeChild(overlay);
   }
 
+  function loadRoiPreview() {
+    const roiCard = container.querySelector("#roi-card");
+    roiCard.classList.remove("hidden");
+    if (!roiHandle) {
+      roiHandle = mountRoiEditor(container.querySelector("#roi-container"), {
+        onChange: (zones) => { liveZones = zones; },
+      });
+    }
+    roiHandle.reset();
+    liveZones = [];
+    const img = roiCard.querySelector(".roi-editor__img");
+    img.onerror = () => {
+      roiCard.querySelector("#roi-container").innerHTML =
+        "<p class='muted'>Preview unavailable — detection will run on the full frame.</p>";
+    };
+    roiHandle.setImageSrc("/api/job/preview-frame?t=" + Date.now());
+  }
+
   async function doLoadFile(path) {
     selectedPath = path;
     const display = container.querySelector("#file-display");
@@ -202,6 +229,7 @@ export function mount(container, params) {
       return;
     }
     resetUiState();
+    loadRoiPreview();
 
     const si = data.source_info || {};
     const stats = [
@@ -237,7 +265,7 @@ export function mount(container, params) {
       padding_s:       parseFloat(paddingSlider.value),
       min_gap_s:       parseFloat(paddingSlider.value),
       min_event_s:     parseFloat(mindurSlider.value),
-      zones:           [],
+      zones:           liveZones,
       recording_start: recStart,
     };
     const resp = await fetch("/api/job/start", {
