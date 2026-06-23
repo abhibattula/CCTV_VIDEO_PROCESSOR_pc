@@ -136,3 +136,39 @@ considered for symmetry with "New Project" as a named action, but rejected —
 it would duplicate logic that `job/cancel` (already exists) plus the existing
 `job/create` reset path already provide together; adding a third overlapping
 endpoint violates Principle V for no behavioral gain.
+
+## Implementation Risks (verify during T006/T007/T012/T019, not deferred)
+
+These were identified during design and must be actively checked while
+implementing the corresponding task, not silently assumed away:
+
+1. **ffmpeg vs. OpenCV rotation metadata mismatch** (relevant to T006) —
+   ffmpeg auto-applies rotation/`displaymatrix` side-data when extracting the
+   preview JPEG; `cv2.VideoCapture` may not apply it the same way. If a
+   source file carries rotation metadata (common on phone-recorded footage),
+   the ROI drawn on the preview could be rotated relative to what detection
+   actually masks. T006 must test this with a rotated-metadata clip if one is
+   available, and explicitly note it as untested otherwise — not silently
+   skip it.
+2. **`uvicorn.Server.run()` inside a plain daemon thread** (relevant to T007)
+   — confirm, on the actually-pinned uvicorn version, that constructing
+   `Config`/`Server` directly and calling `.run()` from a thread with no
+   existing event loop behaves identically to the `uvicorn.run()` convenience
+   wrapper it replaces (documented to, but verify against the installed
+   version rather than assuming).
+3. **Shutdown latency vs. poll timeout** (relevant to T012) — confirm the
+   500ms × ~30 poll window in `stop-app.js` comfortably covers worst-case
+   `should_exit` graceful-shutdown time on a slow machine, and that a
+   mid-shutdown `GET /api/health` fails fast (connection refused) rather than
+   hanging.
+4. **Nav bar width** (relevant to T019) — with debug/theme/Stop/New-Project
+   buttons all appended to `#app-nav` alongside the 4 route links, verify it
+   doesn't overflow the app's default 1280px window width
+   (`launcher.py:30`); add `flex-wrap` or shrink to icon-only treatment if it
+   does.
+
+**Verified safe, not an open risk**: `preview_frame.jpg`'s presence inside
+`_job_dir(job_id)` was checked against `app/main.py`'s `_recover_from_crash()`
+— that function's sentinel scan is `JOBS_DIR.rglob("export.writing")`, a
+literal filename match that `preview_frame.jpg` cannot collide with. No
+action needed.

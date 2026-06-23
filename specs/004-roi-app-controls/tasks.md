@@ -83,16 +83,27 @@ no regions are drawn; confirm regions reset when a different file loads.
   preview image fails to load, show "Preview unavailable — detection will run
   on the full frame" in `#roi-card` instead of the editor (per the spec's edge
   case) and leave `liveZones` as `[]`
-- [ ] T006 [US1] Manual verification per `quickstart.md` Scenario 1 — write a
-  temporary script (e.g. `_verify_roi.py`) launching the real
-  `shell.main_window.MainWindow` against the real backend with a synthetic
-  test video that has motion staged in two distinct, known frame regions;
+- [ ] T006 [US1] Manual verification per `quickstart.md` Scenario 1 (all 8
+  steps, not a subset) — write a temporary script (e.g. `_verify_roi.py`)
+  launching the real `shell.main_window.MainWindow` against the real backend
+  with a synthetic test video that has motion staged in **three** distinct,
+  known frame areas (so one can be left as a deliberately-excluded control);
   drive it via `runJavaScript` to: confirm the preview frame appears, draw a
-  region around only one motion area, start detection, confirm via
+  region around only the first motion area, start detection, confirm via
   `/api/job/events` that only that area's events appear; load a different
   file and confirm the region is gone and a fresh preview shows; run detection
-  with zero regions drawn and confirm both areas now produce events. Delete
-  the script when done.
+  with zero regions drawn and confirm all motion areas now produce events;
+  **draw two separate regions, one around each of the first two motion
+  areas, and confirm both produce events while the third, deliberately
+  undrawn area does not** (this is the only live test of FR-P4-004's
+  union-not-intersection rule — do not skip it); **delete one region via its
+  chip's × control and confirm only that region's outline disappears from the
+  canvas, then click "Clear All" and confirm the canvas is empty** (FR-P4-003).
+  If a rotated-metadata test clip is available, also confirm the drawn region
+  still lines up with the correct area after rotation (see research.md's
+  Implementation Risks — ffmpeg/OpenCV may handle rotation tags differently);
+  if no such clip is available, note this as untested in the verification
+  write-up rather than silently skipping it. Delete the script when done.
 
 **Checkpoint**: Scenario 1 from quickstart.md passes. `pytest tests/ -v` is green.
 
@@ -136,7 +147,14 @@ within 15 seconds while the window remains open showing the result message.
   true`, then poll `GET /api/health` every 500ms (cap ~30 attempts / 15s) —
   a network-level fetch failure (not merely a non-2xx response) means the
   backend is confirmed dead, at which point show `"✅ Application stopped. You
-  can close this window now."`
+  can close this window now."` **The `job/cancel` call MUST be wrapped so a
+  failure never blocks the rest of the flow** —
+  `fetch(...).catch(() => {}).finally(() => { window._cctvShutdown = true;
+  pollStopped(...); })` — this matters specifically for the case where the
+  user clicks Stop a second time after the backend is already dead (spec edge
+  case): without the `.catch()`, the rejected fetch would prevent
+  `window._cctvShutdown` from ever being (re-)set and leave the UI stuck
+  instead of immediately re-showing the "stopped" message.
 - [ ] T011 [US2] Wire `installStopButton()` into `static/js/app.js` — add
   `import { installStopButton } from "/static/js/stop-app.js";
   installStopButton();` next to the existing `installDebugLog();
@@ -149,8 +167,11 @@ within 15 seconds while the window remains open showing the result message.
   within 15 seconds, confirm `/api/health` polled directly is genuinely
   unreachable (not just that the UI claims so), and confirm the Qt window
   itself is still open, responsive, and only closes on an explicit native
-  close. Repeat once from an idle (no job running) state. Delete the script
-  when done.
+  close. Repeat once from an idle (no job running) state. **Then, with the
+  backend already confirmed stopped, click "Stop" once more (spec edge
+  case) and confirm the UI immediately re-shows the "safe to close" message
+  rather than hanging or erroring** — this specifically exercises T010's
+  `.catch()` guard. Delete the script when done.
 
 **Checkpoint**: Scenario 2 from quickstart.md passes. `pytest tests/ -v`
 remains green (this story touches no file under `app/`).
@@ -202,7 +223,12 @@ warning text) and with an idle job (no warning at all).
   second video, click New Project from Export mid-detection, confirm the
   running-operation warning variant (different text) appears; from a freshly
   loaded but not-yet-started job, click New Project and confirm it proceeds
-  with no modal at all. Delete the script when done.
+  with no modal at all. **Time the no-modal path from click to the upload
+  screen being visible and confirm it is comfortably under the 5-second bound
+  in SC-P4-004** (a simple `performance.now()` delta logged to the debug
+  panel is sufficient — this is the only task that actually verifies that
+  success criterion, not just New Project's functional behavior). Delete the
+  script when done.
 
 **Checkpoint**: Scenario 3 from quickstart.md passes. `pytest tests/ -v`
 remains green.
@@ -222,7 +248,12 @@ updates, sign-off.
   `python launcher.py` session (load a video, draw a region, detect, export,
   New Project into a second video with a different region, detect again, then
   Stop), to catch any cross-feature interaction the per-story scenarios above
-  might miss
+  might miss. **Also visually confirm `#app-nav` does not overflow or wrap
+  awkwardly at the app's default 1280px window width** now that it holds 4
+  route links plus 4 action buttons (debug, theme, Stop, New Project) —
+  research.md's Implementation Risks flags this; resize the window narrower
+  if it looks tight and note whether `flex-wrap` or an icon-only treatment is
+  needed as a follow-up
 - [ ] T020 Update `README.md` and `USER_MANUAL.md` to document the three new
   Phase 4 features — ROI region drawing on the Home page, the Stop
   Application control and its confirm/safe-to-close flow, and the New Project
