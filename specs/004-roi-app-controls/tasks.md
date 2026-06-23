@@ -171,7 +171,16 @@ within 15 seconds while the window remains open showing the result message.
   backend already confirmed stopped, click "Stop" once more (spec edge
   case) and confirm the UI immediately re-shows the "safe to close" message
   rather than hanging or erroring** — this specifically exercises T010's
-  `.catch()` guard. Delete the script when done.
+  `.catch()` guard. **Also confirm the 15s-timeout path is honest, not
+  optimistic**: the T007-T009 review found that when this launcher instance
+  reused an already-running backend from a prior process
+  (`_our_backend_is_running` path in `launcher.py`), `stop_backend()`
+  silently no-ops — `/api/health` keeps succeeding the whole time, so the
+  poll loop in `stop-app.js` will exhaust its 15s budget without ever seeing
+  a network failure. T010 MUST show a distinct "could not confirm the
+  application stopped" message in that case, NOT the same "✅ Application
+  stopped" success message — never claim success on a timeout, only on an
+  actual confirmed connection failure. Delete the script when done.
 
 **Checkpoint**: Scenario 2 from quickstart.md passes. `pytest tests/ -v`
 remains green (this story touches no file under `app/`).
