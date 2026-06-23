@@ -72,7 +72,7 @@ no regions are drawn; confirm regions reset when a different file loads.
   extending only existing custom properties (`var(--border)`, `var(--accent)`,
   `var(--surface2)`, `var(--radius)`); link it from `static/index.html` after
   the existing `home.css` link
-- [ ] T005 [US1] In `static/js/pages/home.js`: add a `<div class="card hidden"
+- [X] T005 [US1] In `static/js/pages/home.js`: add a `<div class="card hidden"
   id="roi-card">` containing `<div id="roi-container"></div>` to the template
   between `#source-info` and `.settings-card`; add `loadRoiPreview()`, called
   right after the existing `resetUiState();` line inside `doLoadFile()` — lazily
@@ -83,7 +83,7 @@ no regions are drawn; confirm regions reset when a different file loads.
   preview image fails to load, show "Preview unavailable — detection will run
   on the full frame" in `#roi-card` instead of the editor (per the spec's edge
   case) and leave `liveZones` as `[]`
-- [ ] T006 [US1] Manual verification per `quickstart.md` Scenario 1 (all 8
+- [X] T006 [US1] Manual verification per `quickstart.md` Scenario 1 (all 8
   steps, not a subset) — write a temporary script (e.g. `_verify_roi.py`)
   launching the real `shell.main_window.MainWindow` against the real backend
   with a synthetic test video that has motion staged in **three** distinct,
