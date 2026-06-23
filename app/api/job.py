@@ -2,13 +2,14 @@
 Job lifecycle router: create, start, cancel, events, toggle, export.
 All state lives in app.session — single in-memory dict, one job at a time.
 """
+import subprocess
 import threading
 import uuid
 from pathlib import Path
 from typing import Optional
 
 from fastapi import APIRouter, HTTPException
-from fastapi.responses import JSONResponse
+from fastapi.responses import FileResponse, JSONResponse
 from pydantic import BaseModel
 
 import app.session as session
@@ -105,6 +106,36 @@ async def create_job(req: CreateJobRequest):
 @router.get("/job")
 async def get_job():
     return JSONResponse(session.snapshot())
+
+
+@router.get("/job/preview-frame")
+async def preview_frame():
+    snap = session.snapshot()
+    source_path = snap.get("source_path")
+    job_id = snap.get("job_id")
+    if not source_path or not job_id:
+        return JSONResponse({"error": "No active job"}, status_code=400)
+
+    out_path = _job_dir(job_id) / "preview_frame.jpg"
+    if out_path.exists():
+        return FileResponse(str(out_path), media_type="image/jpeg")
+
+    duration_s = (snap.get("source_info") or {}).get("duration_s", 0) or 0
+    ts = min(1.0, duration_s * 0.1) if duration_s else 0.0
+
+    from app.utils.ffmpeg_path import get_ffmpeg
+    cmd = [
+        get_ffmpeg(), "-hide_banner", "-loglevel", "error",
+        "-ss", str(ts), "-i", source_path, "-frames:v", "1",
+        "-q:v", "5", "-y", str(out_path),
+    ]
+    try:
+        result = subprocess.run(cmd, capture_output=True, timeout=15)
+        if result.returncode != 0 or not out_path.exists():
+            return JSONResponse({"error": "Could not extract preview frame"}, status_code=500)
+    except Exception as exc:
+        return JSONResponse({"error": f"Preview extraction failed: {exc}"}, status_code=500)
+    return FileResponse(str(out_path), media_type="image/jpeg")
 
 
 @router.post("/job/start")
