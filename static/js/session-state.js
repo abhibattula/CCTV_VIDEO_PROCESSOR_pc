@@ -30,6 +30,9 @@ export function resetUiState() {
   _state.undoStack       = [];
 }
 
+// Invariant: callers must set this immediately before navigating to Home
+// only — it is read-once by Home's mount, so setting it before navigating
+// anywhere else would leak it unconsumed into a later, unrelated Home visit.
 export function markJustReset() {
   _justReset = true;
 }

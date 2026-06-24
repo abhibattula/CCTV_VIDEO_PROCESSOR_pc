@@ -84,6 +84,11 @@ export function mount(container, params) {
   let selectedSens = "medium";
   let roiHandle = null;
   let liveZones = [];
+  // Guard against a late-resolving mount-time restore fetch clobbering a
+  // freshly-loaded different file's UI state. Set only once doLoadFile()'s
+  // POST /api/job/create has actually succeeded (not earlier) — see the
+  // restore IIFE below for why.
+  let restoreSuperseded = false;
 
   // Check if YOLO is available and disable button if not
   fetch("/api/system/capabilities").then(r => r.json()).then(caps => {
@@ -262,6 +267,13 @@ export function mount(container, params) {
     } catch {
       return;
     }
+    // Race guard: if the user loaded a different file (doLoadFile()'s
+    // create already succeeded) while this fetch was still in flight, the
+    // new job's correct state is already shown — a stale restore here
+    // would clobber it. Only suppress once create has actually succeeded;
+    // if create failed instead, the old job is still genuinely active and
+    // this restore should proceed normally.
+    if (restoreSuperseded) return;
     if (job && job.job_id && job.status !== "idle" && job.source_path) {
       showLoadedState(job.source_path, job.source_info, null);
     }
@@ -288,6 +300,10 @@ export function mount(container, params) {
       return;
     }
     resetUiState();
+    // Create has definitely succeeded — this is now the active job. Any
+    // mount-time restore fetch that resolves after this point would carry
+    // stale data and must be suppressed (see restoreExistingJobOnMount above).
+    restoreSuperseded = true;
     showLoadedState(path, data.source_info, data.warnings);
   }
 
