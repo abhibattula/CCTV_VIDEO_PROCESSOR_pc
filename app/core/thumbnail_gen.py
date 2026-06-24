@@ -16,8 +16,10 @@ def _generate_one(source_path: str, mid_s: float, out_path: Path) -> None:
         return
     cmd = [
         get_ffmpeg(), "-hide_banner", "-loglevel", "error",
+        "-threads", "1",
         "-ss", str(mid_s),
         "-i", source_path,
+        "-an",
         "-frames:v", "1",
         "-vf", "scale=320:180",
         "-q:v", "5",
@@ -43,7 +45,7 @@ def run(
 
     logger(f"[THUMBNAILS] Generating {len(events)} thumbnails…")
 
-    with concurrent.futures.ThreadPoolExecutor(max_workers=8) as executor:
+    with concurrent.futures.ThreadPoolExecutor(max_workers=16) as executor:
         futures = []
         for ev in events:
             idx = ev.get("event_index", 0)
