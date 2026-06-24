@@ -70,6 +70,7 @@ def _seed_events(client, n=3):
     session.update(status="completed", job_id="test-job", source_path="/fake/video.mp4")
     for i in range(n):
         session.append_event({
+            "event_index": i,
             "start_s": float(i),
             "end_s": float(i + 1),
             "peak_motion_score": 0.5 + i * 0.1,
@@ -233,3 +234,88 @@ def test_sha256_file_chunked_equals_whole_file_hash(tmp_path):
 
     expected = hashlib.sha256(file_path.read_bytes()).hexdigest()
     assert _sha256_file(file_path) == expected
+
+
+# ── T008: /api/job/report.html tests (TDD — written before T009/T010 implementation) ──
+
+def test_report_html_no_active_job(client):
+    resp = client.get("/api/job/report.html")
+    assert resp.status_code == 400
+    assert "error" in resp.json()
+
+
+def test_report_html_no_included_events(client):
+    _seed_events(client, 3)
+    import app.session as session
+    snap = session.snapshot()
+    for ev in snap["events"]:
+        ev["included"] = False
+    session.update(events=snap["events"])
+
+    resp = client.get("/api/job/report.html")
+    assert resp.status_code == 400
+    data = resp.json()
+    assert "error" in data
+    assert "nothing to report" in data["error"].lower() or "no events" in data["error"].lower()
+
+
+def test_report_html_renders_expected_content(client, monkeypatch):
+    monkeypatch.setattr("app.core.thumbnail_gen.run", lambda *a, **k: None)
+    _seed_events(client, 3)
+    import app.session as session
+    session.update(source_path="/fake/video.mp4")
+
+    resp = client.get("/api/job/report.html")
+    assert resp.status_code == 200
+    assert resp.headers["content-type"].startswith("text/html")
+    body = resp.text
+    assert "video.mp4" in body
+    assert "3 of 3" in body
+    assert ("Person" in body) or ("Car" in body)
+
+
+def test_report_html_includes_source_hash(client, monkeypatch, tmp_path):
+    monkeypatch.setattr("app.core.thumbnail_gen.run", lambda *a, **k: None)
+    known_bytes = b"incident report source hash fixture content"
+    source_file = tmp_path / "evidence.mp4"
+    source_file.write_bytes(known_bytes)
+
+    _seed_events(client, 2)
+    import app.session as session
+    session.update(source_path=str(source_file))
+
+    expected_hash = hashlib.sha256(known_bytes).hexdigest()
+
+    resp = client.get("/api/job/report.html")
+    assert resp.status_code == 200
+    assert expected_hash in resp.text
+
+
+def test_report_html_no_output_yet(client, monkeypatch):
+    monkeypatch.setattr("app.core.thumbnail_gen.run", lambda *a, **k: None)
+    _seed_events(client, 2)
+    import app.session as session
+    session.update(source_path="/fake/video.mp4")  # output_path left at default (None)
+
+    resp = client.get("/api/job/report.html")
+    assert resp.status_code == 200
+    body_lower = resp.text.lower()
+    assert ("no export" in body_lower) or ("not yet" in body_lower)
+
+
+def test_report_html_shows_filenames_not_paths(client, monkeypatch, tmp_path):
+    monkeypatch.setattr("app.core.thumbnail_gen.run", lambda *a, **k: None)
+    distinctive_dir = tmp_path / "some_distinctive_dir_12345"
+    distinctive_dir.mkdir()
+    source_file = distinctive_dir / "video.mp4"
+    source_file.write_bytes(b"placeholder video bytes")
+
+    _seed_events(client, 2)
+    import app.session as session
+    session.update(source_path=str(source_file))
+
+    resp = client.get("/api/job/report.html")
+    assert resp.status_code == 200
+    body = resp.text
+    assert "video.mp4" in body
+    assert "some_distinctive_dir_12345" not in body
