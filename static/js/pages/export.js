@@ -72,6 +72,15 @@ export function mount(container, params) {
         </div>
       </div>
 
+      <!-- Reports & Data Export -->
+      <div class="card export-section">
+        <div class="section-label">Reports &amp; Data Export</div>
+        <div class="export-opts-row" style="display:flex;gap:10px">
+          <button class="btn" id="report-pdf-btn">Generate PDF Report</button>
+        </div>
+        <p class="muted" id="report-status-text" style="font-size:12px;margin-top:8px"></p>
+      </div>
+
       <!-- Export action -->
       <div id="export-action-row">
         <button class="btn btn-primary btn-lg" id="export-btn">Export Now</button>
@@ -439,6 +448,20 @@ export function mount(container, params) {
     } catch (err) {
       alert("Error saving preset: " + err.message);
     }
+  });
+
+  // ── Reports & Data Export (T012) ────────────────────────────────────────────
+
+  container.querySelector("#report-pdf-btn").addEventListener("click", () => {
+    const btn = container.querySelector("#report-pdf-btn");
+    const status = container.querySelector("#report-status-text");
+    btn.disabled = true;
+    status.textContent = "Generating PDF report…";
+    window.dispatchEvent(new CustomEvent("cctv:save-report-pdf"));
+    setTimeout(() => {
+      status.textContent = "Report saved to your output folder.";
+      btn.disabled = false;
+    }, 3000);
   });
 
   loadSummary().then(() => {
