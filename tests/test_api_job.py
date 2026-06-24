@@ -3,6 +3,7 @@ Tests for the /api/job/* router.
 T019 test_health added first (TDD bootstrap).
 T034 tests added before T035 implementation.
 """
+import hashlib
 import os
 import pytest
 from pathlib import Path
@@ -203,3 +204,32 @@ def test_create_job_cancels_inflight_detection_before_reset(client):
     resp = client.post("/api/job/create", json={"source_path": TEST_VIDEO})
     assert resp.status_code == 200
     assert job_module._cancel_event.is_set()
+
+
+# ── T006: _sha256_file helper tests (TDD — written before T007 implementation) ──
+
+def test_sha256_file_matches_known_hash(tmp_path):
+    """_sha256_file() must match an independently-computed hash of known
+    content, proving it reads the file correctly."""
+    from app.api.job import _sha256_file
+
+    known_bytes = b"the quick brown fox jumps over the lazy dog"
+    file_path = tmp_path / "known.txt"
+    file_path.write_bytes(known_bytes)
+
+    expected = hashlib.sha256(known_bytes).hexdigest()
+    assert _sha256_file(file_path) == expected
+
+
+def test_sha256_file_chunked_equals_whole_file_hash(tmp_path):
+    """_sha256_file() must read in chunks without changing the result.
+    Uses a file larger than the default 1 MiB chunk size to actually
+    exercise multi-chunk reading."""
+    from app.api.job import _sha256_file
+
+    random_bytes = os.urandom(3 * 1024 * 1024)  # 3 MiB, > default 1 MiB chunk
+    file_path = tmp_path / "large.bin"
+    file_path.write_bytes(random_bytes)
+
+    expected = hashlib.sha256(file_path.read_bytes()).hexdigest()
+    assert _sha256_file(file_path) == expected
