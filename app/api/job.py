@@ -2,20 +2,23 @@
 Job lifecycle router: create, start, cancel, events, toggle, export.
 All state lives in app.session — single in-memory dict, one job at a time.
 """
+import base64
 import hashlib
 import subprocess
 import threading
 import uuid
+from datetime import datetime
 from pathlib import Path
 from typing import Optional
 
 from fastapi import APIRouter, HTTPException
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
 from pydantic import BaseModel
 
 import app.session as session
 from app.config import JOBS_DIR
 from app.utils.ffprobe import probe
+from app.utils.time_utils import seconds_to_clock
 from app.core.log_buffer import log_buffer
 
 router = APIRouter()
@@ -74,6 +77,12 @@ def _sha256_file(path: Path, chunk_size: int = 1024 * 1024) -> str:
         while chunk := f.read(chunk_size):
             h.update(chunk)
     return h.hexdigest()
+
+
+def _b64_file(path: Path) -> Optional[str]:
+    if not path.exists():
+        return None
+    return base64.b64encode(path.read_bytes()).decode("ascii")
 
 
 # ── Endpoints ─────────────────────────────────────────────────────────────────
@@ -146,6 +155,60 @@ async def preview_frame():
     except Exception as exc:
         return JSONResponse({"error": f"Preview extraction failed: {exc}"}, status_code=500)
     return FileResponse(str(out_path), media_type="image/jpeg")
+
+
+@router.get("/job/report.html")
+async def report_html():
+    snap = session.snapshot()
+    job_id = snap.get("job_id")
+    source_path = snap.get("source_path")
+    if not job_id or not source_path:
+        return JSONResponse({"error": "No active job"}, status_code=400)
+
+    if snap.get("status") == "detecting":
+        return JSONResponse({"error": "Detection is still in progress for this job"}, status_code=400)
+
+    included = [ev for ev in snap["events"] if ev.get("included", True)]
+    if not included:
+        return JSONResponse({"error": "There is nothing to report — no events are currently included"}, status_code=400)
+
+    job_dir = _job_dir(job_id)
+
+    try:
+        from app.core import thumbnail_gen
+        thumbnail_gen.run(job_id=job_id, source_path=source_path, events=included, logger=_make_log_fn(job_id))
+
+        for ev in included:
+            ev["thumb_b64"] = _b64_file(job_dir / "thumbnails" / f"{ev['event_index']}.jpg")
+
+        heatmap_b64 = _b64_file(job_dir / "heatmap.png")
+
+        output_path = snap.get("output_path")
+        source_hash = _sha256_file(Path(source_path)) if Path(source_path).exists() else None
+        output_hash = _sha256_file(Path(output_path)) if output_path and Path(output_path).exists() else None
+    except OSError as exc:
+        return JSONResponse({"error": f"Could not access a required file: {exc}"}, status_code=400)
+
+    source_info = snap.get("source_info") or {}
+    total_dur = sum(ev["end_s"] - ev["start_s"] for ev in included)
+
+    from app.core.report_renderer import render as render_report
+    html = render_report({
+        "source_name": Path(source_path).name,
+        "generated_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        "included_count": len(included),
+        "total_count": len(snap["events"]),
+        "total_duration_fmt": seconds_to_clock(total_dur),
+        "resolution": f"{source_info.get('width', '?')}×{source_info.get('height', '?')}",
+        "codec": source_info.get("codec", "?"),
+        "events": included,
+        "heatmap_b64": heatmap_b64,
+        "source_filename": Path(source_path).name,
+        "source_hash": source_hash,
+        "output_filename": Path(output_path).name if output_path else None,
+        "output_hash": output_hash,
+    })
+    return HTMLResponse(html)
 
 
 @router.post("/job/start")
