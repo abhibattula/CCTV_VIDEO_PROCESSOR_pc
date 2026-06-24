@@ -3,7 +3,7 @@
  * FR-017: confirmation modal when a previous completed job has uncollected events.
  */
 
-import { resetUiState } from "/static/js/session-state.js";
+import { resetUiState, consumeJustReset } from "/static/js/session-state.js";
 import { mountRoiEditor } from "/static/js/roi.js";
 
 export function mount(container, params) {
@@ -208,8 +208,66 @@ export function mount(container, params) {
     roiHandle.setHeatmapSrc("/api/job/heatmap?t=" + Date.now());
   }
 
-  async function doLoadFile(path) {
+  // Shared "show loaded-file UI state" logic — file display, source-info
+  // stats, ROI editor + heatmap preview, enabling Start. Called both after
+  // a fresh POST /api/job/create (doLoadFile) and, on mount, when restoring
+  // an already-active job without minting a new one (see mount-time check
+  // below). warnings is optional (not present on the GET /api/job restore
+  // path).
+  function showLoadedState(path, sourceInfo, warnings) {
     selectedPath = path;
+    const display = container.querySelector("#file-display");
+    display.textContent = path.split(/[\\/]/).pop();
+    display.classList.remove("hidden");
+
+    const infoEl = container.querySelector("#source-info");
+    infoEl.classList.remove("hidden");
+
+    loadRoiPreview();
+
+    const si = sourceInfo || {};
+    const stats = [
+      { label: "Codec",      value: si.codec || "?" },
+      { label: "Resolution", value: si.width ? `${si.width}×${si.height}` : "?" },
+      { label: "FPS",        value: si.fps ? si.fps.toFixed(2) : "?" },
+      { label: "Duration",   value: formatDur(si.duration_s) },
+      { label: "Audio",      value: si.has_audio ? (si.audio_codec || "yes") : "none" },
+      { label: "Export",     value: si.needs_reencode ? "Re-encode" : "Stream copy" },
+    ];
+    infoEl.innerHTML = `
+      <div class="source-bar-inner">
+        ${stats.map(s => `
+          <div class="source-stat">
+            <div class="source-stat__label">${s.label}</div>
+            <div class="source-stat__value">${s.value}</div>
+          </div>`).join('')}
+      </div>
+      ${warnings && warnings.length
+        ? `<div class="source-warning">&#9888; ${warnings[0]}</div>`
+        : ""}
+    `;
+    container.querySelector("#start-btn").disabled = false;
+  }
+
+  // On mount, restore the Home page to reflect an already-active job
+  // (including its heatmap) rather than always showing the empty drop
+  // zone — without minting a new job_id. Skipped right after New Project,
+  // which leaves a stale status:"cancelled" job in the session (the
+  // backend has no full-clear-to-idle endpoint); see session-state.js.
+  (async function restoreExistingJobOnMount() {
+    if (consumeJustReset()) return;
+    let job;
+    try {
+      job = await fetch("/api/job").then(r => r.json());
+    } catch {
+      return;
+    }
+    if (job && job.job_id && job.status !== "idle" && job.source_path) {
+      showLoadedState(job.source_path, job.source_info, null);
+    }
+  })();
+
+  async function doLoadFile(path) {
     const display = container.querySelector("#file-display");
     display.textContent = path.split(/[\\/]/).pop();
     display.classList.remove("hidden");
@@ -230,30 +288,7 @@ export function mount(container, params) {
       return;
     }
     resetUiState();
-    loadRoiPreview();
-
-    const si = data.source_info || {};
-    const stats = [
-      { label: "Codec",      value: si.codec || "?" },
-      { label: "Resolution", value: si.width ? `${si.width}×${si.height}` : "?" },
-      { label: "FPS",        value: si.fps ? si.fps.toFixed(2) : "?" },
-      { label: "Duration",   value: formatDur(si.duration_s) },
-      { label: "Audio",      value: si.has_audio ? (si.audio_codec || "yes") : "none" },
-      { label: "Export",     value: si.needs_reencode ? "Re-encode" : "Stream copy" },
-    ];
-    infoEl.innerHTML = `
-      <div class="source-bar-inner">
-        ${stats.map(s => `
-          <div class="source-stat">
-            <div class="source-stat__label">${s.label}</div>
-            <div class="source-stat__value">${s.value}</div>
-          </div>`).join('')}
-      </div>
-      ${data.warnings && data.warnings.length
-        ? `<div class="source-warning">&#9888; ${data.warnings[0]}</div>`
-        : ""}
-    `;
-    container.querySelector("#start-btn").disabled = false;
+    showLoadedState(path, data.source_info, data.warnings);
   }
 
   // Start detection

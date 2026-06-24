@@ -3,7 +3,7 @@
  * discarding an actively-running job or unexported completed results;
  * otherwise returns to the upload screen immediately with no warning.
  */
-import { resetUiState } from "/static/js/session-state.js";
+import { resetUiState, markJustReset } from "/static/js/session-state.js";
 
 let installed = false;
 
@@ -42,6 +42,11 @@ async function onClick() {
 async function proceed() {
   await fetch("/api/job/cancel", { method: "POST" }).catch(() => {});
   resetUiState();
+  // The backend has no "fully clear to idle" endpoint without a new
+  // source_path — /api/job/cancel just flips status to "cancelled" and
+  // leaves the stale job_id/source_path in place. Tell Home's mount-time
+  // restore check to ignore that stale job rather than resurrecting it.
+  markJustReset();
   window.go("/");
 }
 
