@@ -111,6 +111,7 @@ def run(
     active_label: str = ""
     active_peak: float = 0.0
     last_event_end: float = 0.0
+    event_index: int = 0
 
     frame_idx = 0
 
@@ -169,7 +170,9 @@ def run(
                             active_start, end_s,
                             active_peak, active_label,
                             recording_start,
+                            event_index,
                         )
+                        event_index += 1
                         last_event_end = end_s
                     active_start = None
                     active_peak  = 0.0
@@ -185,7 +188,9 @@ def run(
                     active_start, end_s,
                     active_peak, active_label,
                     recording_start,
+                    event_index,
                 )
+                event_index += 1
     finally:
         cap.release()
 
@@ -200,6 +205,7 @@ def _emit_event(
     peak_score: float,
     zone_label: str,
     recording_start: Optional[str],
+    event_index: int,
 ) -> None:
     from app.utils.time_utils import seconds_to_clock
 
@@ -207,6 +213,7 @@ def _emit_event(
     end_clock   = seconds_to_clock(end_s,   recording_start) if recording_start else None
 
     ev = {
+        "event_index":      event_index,
         "start_s":          round(start_s, 3),
         "end_s":            round(end_s, 3),
         "peak_motion_score": round(peak_score, 4),
