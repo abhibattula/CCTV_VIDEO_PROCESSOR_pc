@@ -339,11 +339,18 @@ def test_heatmap_not_yet_generated(client):
     assert "error" in resp.json()
 
 
-def test_heatmap_served_when_present(client):
+def test_heatmap_served_when_present(client, monkeypatch, tmp_path):
     import cv2
     import numpy as np
     import app.session as session
     from app.api.job import _job_dir
+
+    # Redirect _job_dir's base directory to tmp_path so this test never
+    # writes into the real ~/.cctv_processor/jobs (matches the pattern
+    # already established in tests/test_thumbnail_gen.py) — avoids leaking
+    # a real heatmap.png across pytest invocations and corrupting
+    # test_heatmap_not_yet_generated's hardcoded "test-job" job_id.
+    monkeypatch.setattr("app.api.job.JOBS_DIR", tmp_path)
 
     job_id = "test-job"
     session.reset()

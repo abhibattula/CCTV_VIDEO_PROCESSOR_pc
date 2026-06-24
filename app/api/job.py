@@ -157,6 +157,19 @@ async def preview_frame():
     return FileResponse(str(out_path), media_type="image/jpeg")
 
 
+@router.get("/job/heatmap")
+async def heatmap():
+    snap = session.snapshot()
+    job_id = snap.get("job_id")
+    if not job_id:
+        return JSONResponse({"error": "No active job"}, status_code=400)
+
+    out_path = _job_dir(job_id) / "heatmap.png"
+    if not out_path.exists():
+        return JSONResponse({"error": "Heatmap not available yet"}, status_code=404)
+    return FileResponse(str(out_path), media_type="image/png")
+
+
 @router.get("/job/report.html")
 async def report_html():
     snap = session.snapshot()
