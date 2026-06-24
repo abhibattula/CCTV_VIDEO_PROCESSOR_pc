@@ -17,6 +17,7 @@ from PyQt6.QtCore import QTimer, QUrl
 from PyQt6.QtGui import QDragEnterEvent, QDropEvent, QCloseEvent
 from PyQt6.QtWidgets import QFileDialog, QMainWindow, QSystemTrayIcon, QApplication
 from PyQt6.QtWebEngineWidgets import QWebEngineView
+from PyQt6.QtWebEngineCore import QWebEnginePage
 
 from app.config import BACKEND_HOST, BACKEND_PORT
 
@@ -82,11 +83,15 @@ class MainWindow(QMainWindow):
         window._cctvBrowse = false;
         window._cctvBrowseFolder = false;
         window._cctvShutdown = false;
+        window._cctvSaveReportPdf = false;
         window.addEventListener('cctv:browse', function() {
             window._cctvBrowse = true;
         });
         window.addEventListener('cctv:browse-folder', function() {
             window._cctvBrowseFolder = true;
+        });
+        window.addEventListener('cctv:save-report-pdf', function() {
+            window._cctvSaveReportPdf = true;
         });
         """
         self._view.page().runJavaScript(js)
@@ -124,9 +129,43 @@ class MainWindow(QMainWindow):
                 if self._on_stop_backend:
                     self._on_stop_backend()
 
+        def check_save_report_pdf(val):
+            if val:
+                page.runJavaScript("window._cctvSaveReportPdf = false;")
+                self._generate_pdf_report()
+
         page.runJavaScript("window._cctvBrowse", check_browse)
         page.runJavaScript("window._cctvBrowseFolder", check_browse_folder)
         page.runJavaScript("window._cctvShutdown", check_shutdown)
+        page.runJavaScript("window._cctvSaveReportPdf", check_save_report_pdf)
+
+    def _get_output_dir(self):
+        try:
+            job = requests.get(f"{self._base_url}/api/job", timeout=2).json()
+            return job.get("output_dir") or str(Path.home() / "Desktop")
+        except Exception:
+            return str(Path.home() / "Desktop")
+
+    def _generate_pdf_report(self):
+        output_dir = self._get_output_dir()
+        pdf_path = str(Path(output_dir) / f"incident_report_{time.strftime('%Y%m%d_%H%M%S')}.pdf")
+
+        report_page = QWebEnginePage(self._view.page().profile(), self)
+        report_page.load(QUrl(f"{self._base_url}/api/job/report.html"))
+
+        def on_load_finished(ok):
+            if ok:
+                report_page.printToPdf(pdf_path)
+            else:
+                report_page.deleteLater()
+
+        def on_pdf_finished(file_path, success):
+            report_page.deleteLater()
+
+        report_page.loadFinished.connect(on_load_finished)
+        report_page.pdfPrintingFinished.connect(on_pdf_finished)
+        self._pending_report_pages = getattr(self, "_pending_report_pages", [])
+        self._pending_report_pages.append(report_page)
 
     def _post_path(self, path: str):
         try:
