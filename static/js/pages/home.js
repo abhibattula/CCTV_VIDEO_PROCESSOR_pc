@@ -205,6 +205,7 @@ export function mount(container, params) {
         "<p class='muted'>Preview unavailable — detection will run on the full frame.</p>";
     };
     roiHandle.setImageSrc("/api/job/preview-frame?t=" + Date.now());
+    roiHandle.setHeatmapSrc("/api/job/heatmap?t=" + Date.now());
   }
 
   async function doLoadFile(path) {
