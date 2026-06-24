@@ -2,9 +2,28 @@
 Tests for yolo_detector.py (T066).
 TDD: written before implementation, must fail first.
 """
+import os
 import sys
+import threading
 import types
+import tempfile
+from pathlib import Path
+
 import pytest
+
+TEST_VIDEO = str(
+    Path(__file__).parent.parent
+    / "OLD RASPBERRI PI VERSION"
+    / "Test Video"
+    / "20260507_012210 (1).mp4"
+)
+HAS_TEST_VIDEO = os.path.isfile(TEST_VIDEO)
+
+try:
+    import ultralytics  # noqa: F401
+    HAS_ULTRALYTICS = True
+except Exception:
+    HAS_ULTRALYTICS = False
 
 
 # ---------------------------------------------------------------------------
@@ -68,3 +87,63 @@ def test_yolo_unavailable_raises_helpful_error(monkeypatch):
             sys.modules.pop("ultralytics", None)
         else:
             sys.modules["ultralytics"] = saved
+
+
+# ---------------------------------------------------------------------------
+# T003 (005-reporting-and-heatmap): emitted events must carry event_index
+# ---------------------------------------------------------------------------
+
+@pytest.mark.skipif(not HAS_TEST_VIDEO, reason="Test video not available")
+@pytest.mark.skipif(not HAS_ULTRALYTICS, reason="ultralytics not installed")
+def test_emitted_events_have_event_index():
+    """
+    Every event dict yielded via on_event during a real run must contain an
+    'event_index' key, incrementing 0, 1, 2, ... across emitted events.
+
+    Regression test for a bug in app/core/yolo_detector.py's _emit_event:
+    it currently builds event dicts with no 'event_index' field at all
+    (unlike app/core/detection_engine.py, which always sets it).
+    """
+    from app.core.yolo_detector import run
+    from app.utils.ffprobe import probe
+
+    source_info = probe(TEST_VIDEO)
+
+    events_found: list[dict] = []
+
+    def on_event(ev: dict):
+        events_found.append(ev)
+
+    cancel = threading.Event()
+    settings = {
+        "mode": "yolo",
+        "sensitivity": "medium",
+        "padding_s": 2.0,
+        "min_event_s": 1.0,
+        "min_gap_s": 2.0,
+        "zones": [],
+        "recording_start": None,
+    }
+
+    with tempfile.TemporaryDirectory() as tmp:
+        job_dir = Path(tmp)
+        run(
+            source_path=TEST_VIDEO,
+            source_info=source_info,
+            settings=settings,
+            cancel_event=cancel,
+            on_progress=lambda p: None,
+            on_event=on_event,
+            job_dir=job_dir,
+        )
+
+    assert len(events_found) >= 1, "Expected at least one detection event from the test video"
+
+    for ev in events_found:
+        assert "event_index" in ev, f"Event missing 'event_index' key: {ev}"
+
+    actual_indices = [ev["event_index"] for ev in events_found]
+    expected_indices = list(range(len(events_found)))
+    assert actual_indices == expected_indices, (
+        f"Expected event_index sequence {expected_indices}, got {actual_indices}"
+    )
