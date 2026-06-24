@@ -2,6 +2,7 @@
 Job lifecycle router: create, start, cancel, events, toggle, export.
 All state lives in app.session — single in-memory dict, one job at a time.
 """
+import hashlib
 import subprocess
 import threading
 import uuid
@@ -65,6 +66,14 @@ def _make_log_fn(job_id: str):
     def _log(msg: str) -> None:
         log_buffer.append(job_id, msg)
     return _log
+
+
+def _sha256_file(path: Path, chunk_size: int = 1024 * 1024) -> str:
+    h = hashlib.sha256()
+    with open(path, "rb") as f:
+        while chunk := f.read(chunk_size):
+            h.update(chunk)
+    return h.hexdigest()
 
 
 # ── Endpoints ─────────────────────────────────────────────────────────────────
