@@ -172,3 +172,82 @@ def test_emitted_events_have_event_index():
     assert actual_indices == expected_indices, (
         f"Expected event_index sequence {expected_indices}, got {actual_indices}"
     )
+
+
+# ---------------------------------------------------------------------------
+# T015 (005-reporting-and-heatmap): yolo_detector.run() must write heatmap.png
+# ---------------------------------------------------------------------------
+
+@pytest.mark.skipif(not HAS_TEST_VIDEO, reason="Test video not available")
+@pytest.mark.skipif(not HAS_ULTRALYTICS, reason="ultralytics not installed")
+def test_run_writes_heatmap_png():
+    """
+    After a real run, job_dir / "heatmap.png" must exist and be a valid,
+    non-empty image — yolo_detector.run() must accumulate detected bounding
+    boxes into a heatmap (filled rectangles weighted by confidence, sized to
+    the source video resolution) and write it via
+    detection_engine._write_heatmap, same as detection_engine.run() already
+    does.
+
+    The real test video is ~115s at ~60fps (6864 frames) at 1080p, and
+    yolo_detector.run() has no frame-skip option and runs YOLO inference on
+    every single frame at full resolution. Measured directly: this exact
+    test video produces its first closeable YOLO event around the 51-55s
+    mark at "medium" sensitivity, so on_event requests cancellation the
+    instant the first event closes, keeping this test fast (~6m35s
+    wall-clock, measured directly). A watchdog timer forces cancellation at
+    960s (~16 min, the same safety margin used in
+    test_emitted_events_have_event_index) purely to turn a genuine hang into
+    a clear test failure instead of an infinite wait. By the time the first
+    event closes, the per-frame bounding-box accumulation will already have
+    non-zero values from the whole activity period leading up to that
+    close, so the heatmap PNG assertion should pass without needing to
+    process more of the video.
+    """
+    import cv2
+
+    from app.core.yolo_detector import run
+    from app.utils.ffprobe import probe
+
+    source_info = probe(TEST_VIDEO)
+
+    events_found: list[dict] = []
+    cancel = threading.Event()
+
+    def on_event(ev: dict):
+        events_found.append(ev)
+        cancel.set()
+
+    watchdog = threading.Timer(960.0, cancel.set)
+    watchdog.start()
+
+    settings = {
+        "mode": "yolo",
+        "sensitivity": "medium",
+        "padding_s": 2.0,
+        "min_event_s": 1.0,
+        "min_gap_s": 2.0,
+        "zones": [],
+        "recording_start": None,
+    }
+
+    try:
+        with tempfile.TemporaryDirectory() as tmp:
+            job_dir = Path(tmp)
+            run(
+                source_path=TEST_VIDEO,
+                source_info=source_info,
+                settings=settings,
+                cancel_event=cancel,
+                on_progress=lambda p: None,
+                on_event=on_event,
+                job_dir=job_dir,
+            )
+
+            heatmap_path = job_dir / "heatmap.png"
+            assert heatmap_path.exists(), "Expected heatmap.png to be written after run()"
+            img = cv2.imread(str(heatmap_path))
+            assert img is not None, "heatmap.png must be a valid, readable image"
+            assert img.size > 0, "heatmap.png must not be empty"
+    finally:
+        watchdog.cancel()
