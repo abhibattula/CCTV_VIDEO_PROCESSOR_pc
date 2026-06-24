@@ -319,3 +319,40 @@ def test_report_html_shows_filenames_not_paths(client, monkeypatch, tmp_path):
     body = resp.text
     assert "video.mp4" in body
     assert "some_distinctive_dir_12345" not in body
+
+
+# ── T016: /api/job/heatmap tests (TDD — written before T019 implementation) ──
+
+def test_heatmap_no_active_job(client):
+    resp = client.get("/api/job/heatmap")
+    assert resp.status_code == 400
+    assert "error" in resp.json()
+
+
+def test_heatmap_not_yet_generated(client):
+    import app.session as session
+    session.reset()
+    session.update(job_id="test-job", source_path="/fake/video.mp4")
+
+    resp = client.get("/api/job/heatmap")
+    assert resp.status_code == 404
+    assert "error" in resp.json()
+
+
+def test_heatmap_served_when_present(client):
+    import cv2
+    import numpy as np
+    import app.session as session
+    from app.api.job import _job_dir
+
+    job_id = "test-job"
+    session.reset()
+    session.update(job_id=job_id, source_path="/fake/video.mp4")
+
+    heatmap_path = _job_dir(job_id) / "heatmap.png"
+    blank = np.zeros((10, 10, 3), dtype=np.uint8)
+    assert cv2.imwrite(str(heatmap_path), blank)
+
+    resp = client.get("/api/job/heatmap")
+    assert resp.status_code == 200
+    assert resp.headers["content-type"].startswith("image/png")
