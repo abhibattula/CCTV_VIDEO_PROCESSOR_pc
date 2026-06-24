@@ -337,7 +337,7 @@
         <tr>
           <td>{{ source_filename }}</td>
           <td>Source</td>
-          <td class="hash">{{ source_hash }}</td>
+          <td class="hash">{% if source_hash %}{{ source_hash }}{% else %}<span style="color: var(--warning);">Source file unavailable for verification</span>{% endif %}</td>
         </tr>
         {% if output_filename %}
         <tr>
