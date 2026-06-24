@@ -103,6 +103,22 @@ def test_emitted_events_have_event_index():
     Regression test for a bug in app/core/yolo_detector.py's _emit_event:
     it currently builds event dicts with no 'event_index' field at all
     (unlike app/core/detection_engine.py, which always sets it).
+
+    The real test video is ~115s at ~60fps (6864 frames) at 1080p, and
+    yolo_detector.run() has no frame-skip option and runs YOLO inference on
+    every single frame at full resolution. Measured directly: nothing in
+    this clip scores above the "medium"/"high" sensitivity thresholds until
+    well past the first 20% of frames, so an early-exit-on-first-event
+    strategy doesn't actually shorten the common case here — the test
+    genuinely needs to process most of the video before anything closes,
+    same as an unbounded run (confirmed empirically to take ~14 minutes).
+    on_event still requests cancellation the instant the first event closes
+    (free speedup if a future test video makes detection happen earlier),
+    and a watchdog timer forces cancellation at 960s (~16 min, a safety
+    margin above the measured ~14 min organic runtime) purely to turn a
+    genuine hang into a clear test failure instead of an infinite wait —
+    not to artificially shorten a run that's expected to use most of that
+    time.
     """
     from app.core.yolo_detector import run
     from app.utils.ffprobe import probe
@@ -110,11 +126,15 @@ def test_emitted_events_have_event_index():
     source_info = probe(TEST_VIDEO)
 
     events_found: list[dict] = []
+    cancel = threading.Event()
 
     def on_event(ev: dict):
         events_found.append(ev)
+        cancel.set()
 
-    cancel = threading.Event()
+    watchdog = threading.Timer(960.0, cancel.set)
+    watchdog.start()
+
     settings = {
         "mode": "yolo",
         "sensitivity": "medium",
@@ -125,19 +145,24 @@ def test_emitted_events_have_event_index():
         "recording_start": None,
     }
 
-    with tempfile.TemporaryDirectory() as tmp:
-        job_dir = Path(tmp)
-        run(
-            source_path=TEST_VIDEO,
-            source_info=source_info,
-            settings=settings,
-            cancel_event=cancel,
-            on_progress=lambda p: None,
-            on_event=on_event,
-            job_dir=job_dir,
-        )
+    try:
+        with tempfile.TemporaryDirectory() as tmp:
+            job_dir = Path(tmp)
+            run(
+                source_path=TEST_VIDEO,
+                source_info=source_info,
+                settings=settings,
+                cancel_event=cancel,
+                on_progress=lambda p: None,
+                on_event=on_event,
+                job_dir=job_dir,
+            )
+    finally:
+        watchdog.cancel()
 
-    assert len(events_found) >= 1, "Expected at least one detection event from the test video"
+    assert len(events_found) >= 1, (
+        "Expected at least one detection event from the test video within the 960s watchdog window"
+    )
 
     for ev in events_found:
         assert "event_index" in ev, f"Event missing 'event_index' key: {ev}"
