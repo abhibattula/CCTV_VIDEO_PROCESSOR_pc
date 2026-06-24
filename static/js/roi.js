@@ -14,17 +14,25 @@ export function mountRoiEditor(container, { onChange }) {
     <div class="roi-editor">
       <div class="roi-editor__stage">
         <img class="roi-editor__img" />
+        <img class="roi-editor__heatmap hidden" />
         <canvas class="roi-editor__canvas"></canvas>
       </div>
       <div class="roi-editor__toolbar">
         <button class="btn" id="roi-cancel" disabled>Cancel Shape</button>
         <button class="btn btn-danger" id="roi-clear">Clear All</button>
+        <span class="roi-editor__heatmap-toggle">
+          <input type="checkbox" id="roi-heatmap-toggle" />
+          <label for="roi-heatmap-toggle">Show Activity Heatmap</label>
+        </span>
       </div>
       <div class="roi-editor__list" id="roi-list"></div>
     </div>
   `;
 
   const img = container.querySelector(".roi-editor__img");
+  const heatmapImg = container.querySelector(".roi-editor__heatmap");
+  const heatmapToggle = container.querySelector("#roi-heatmap-toggle");
+  let heatmapLoaded = false;
   const canvas = container.querySelector(".roi-editor__canvas");
   const ctx = canvas.getContext("2d");
   let cssWidth = 0, cssHeight = 0;
@@ -121,6 +129,13 @@ export function mountRoiEditor(container, { onChange }) {
     emitChange();
   });
 
+  function updateHeatmapVisibility() {
+    const show = heatmapLoaded && heatmapToggle.checked;
+    heatmapImg.classList.toggle("hidden", !show);
+  }
+
+  heatmapToggle.addEventListener("change", updateHeatmapVisibility);
+
   function renderList() {
     const list = container.querySelector("#roi-list");
     list.innerHTML = regions.map((r, i) => `
@@ -154,10 +169,29 @@ export function mountRoiEditor(container, { onChange }) {
     img.src = url;
   }
 
+  function setHeatmapSrc(url) {
+    heatmapLoaded = false;
+    heatmapImg.onload = () => {
+      heatmapLoaded = true;
+      updateHeatmapVisibility();
+    };
+    heatmapImg.onerror = () => {
+      // Expected, non-error case: no detection run has completed yet for
+      // this job, so no heatmap exists. Handle silently.
+      heatmapLoaded = false;
+      updateHeatmapVisibility();
+    };
+    heatmapImg.src = url;
+  }
+
   function reset() {
     regions = [];
     inProgress = [];
     cancelBtn.disabled = true;
+    heatmapLoaded = false;
+    heatmapImg.src = "";
+    heatmapToggle.checked = false;
+    updateHeatmapVisibility();
     redraw();
     renderList();
     emitChange();
@@ -169,5 +203,5 @@ export function mountRoiEditor(container, { onChange }) {
 
   renderList();
 
-  return { setImageSrc, reset, destroy };
+  return { setImageSrc, setHeatmapSrc, reset, destroy };
 }
