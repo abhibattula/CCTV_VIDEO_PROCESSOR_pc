@@ -93,6 +93,12 @@ class MainWindow(QMainWindow):
         window.addEventListener('cctv:save-report-pdf', function() {
             window._cctvSaveReportPdf = true;
         });
+        window._cctvGenerateIntelReport = false;
+        window._cctvIntelReportPdfPath = "";
+        window.addEventListener('cctv:generate-intel-report', function(e) {
+            window._cctvIntelReportPdfPath = e.detail && e.detail.pdf_path ? e.detail.pdf_path : "";
+            window._cctvGenerateIntelReport = true;
+        });
         """
         self._view.page().runJavaScript(js)
         # Re-inject on every new page load (navigation resets the JS state)
@@ -139,6 +145,25 @@ class MainWindow(QMainWindow):
         page.runJavaScript("window._cctvShutdown", check_shutdown)
         page.runJavaScript("window._cctvSaveReportPdf", check_save_report_pdf)
 
+        def check_intel_report(val):
+            if val:
+                import json as _json
+                try:
+                    data = _json.loads(val)
+                except Exception:
+                    return
+                pdf_path = data.get("path", "")
+                page.runJavaScript(
+                    "window._cctvGenerateIntelReport = false; window._cctvIntelReportPdfPath = '';"
+                )
+                if pdf_path:
+                    self._generate_intel_report_pdf(pdf_path)
+
+        page.runJavaScript(
+            'JSON.stringify({flag: window._cctvGenerateIntelReport, path: window._cctvIntelReportPdfPath})',
+            check_intel_report,
+        )
+
     def _get_output_dir(self):
         try:
             job = requests.get(f"{self._base_url}/api/job", timeout=2).json()
@@ -152,6 +177,32 @@ class MainWindow(QMainWindow):
 
         report_page = QWebEnginePage(self._view.page().profile(), self)
         report_page.load(QUrl(f"{self._base_url}/api/job/report.html"))
+
+        def on_load_finished(ok):
+            if ok:
+                report_page.printToPdf(pdf_path)
+            else:
+                report_page.deleteLater()
+                try:
+                    self._pending_report_pages.remove(report_page)
+                except ValueError:
+                    pass
+
+        def on_pdf_finished(file_path, success):
+            report_page.deleteLater()
+            try:
+                self._pending_report_pages.remove(report_page)
+            except ValueError:
+                pass
+
+        report_page.loadFinished.connect(on_load_finished)
+        report_page.pdfPrintingFinished.connect(on_pdf_finished)
+        self._pending_report_pages = getattr(self, "_pending_report_pages", [])
+        self._pending_report_pages.append(report_page)
+
+    def _generate_intel_report_pdf(self, pdf_path: str):
+        report_page = QWebEnginePage(self._view.page().profile(), self)
+        report_page.load(QUrl(f"{self._base_url}/api/job/intel-report.html"))
 
         def on_load_finished(ok):
             if ok:
