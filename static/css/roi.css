@@ -1,0 +1,70 @@
+.roi-editor__stage {
+  position: relative;
+  max-width: 100%;
+}
+.roi-editor__img {
+  display: block;
+  width: 100%;
+  border-radius: var(--radius);
+}
+.roi-editor__heatmap {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  pointer-events: none;
+  opacity: 0.55;
+}
+.roi-editor__canvas {
+  position: absolute;
+  top: 0;
+  left: 0;
+  cursor: crosshair;
+}
+.roi-editor__toolbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 10px;
+}
+.roi-editor__heatmap-toggle {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-left: 8px;
+  color: var(--text);
+  font-size: 13px;
+}
+.roi-editor__heatmap-toggle label {
+  cursor: pointer;
+}
+.roi-editor__list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 10px;
+}
+.roi-chip {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 4px 8px;
+}
+.roi-chip__label {
+  border: none;
+  background: transparent;
+  color: var(--text);
+  font-size: 12px;
+  width: 90px;
+}
+.roi-chip__delete {
+  border: none;
+  background: transparent;
+  color: var(--text-dim);
+  cursor: pointer;
+  font-size: 14px;
+}

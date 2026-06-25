@@ -14,16 +14,81 @@
   --gap:      12px;
 }
 
+:root[data-theme="light"], html[data-theme="light"] {
+  --bg: #f5f6fa; --surface: #ffffff; --surface2: #ebedf3; --border: #d8dae3;
+  --text: #1a1d27; --text-dim: #5b5f73;
+  --accent: #4f8ef7; --success: #2eb872; --warning: #c97f0e; --danger: #d33c3c;
+}
+
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
-html, body {
+html { height: 100%; }
+
+body {
   height: 100%;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
   background: var(--bg);
   color: var(--text);
   font-size: 14px;
   line-height: 1.5;
 }
+
+/* Page container — fills space below nav */
+#app {
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+/* ── App nav bar ─────────────────────────────────────────────────────────── */
+.app-nav {
+  display: flex;
+  align-items: center;
+  gap: 24px;
+  padding: 0 20px;
+  height: 46px;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+  z-index: 100;
+}
+
+.app-nav__brand {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 700;
+  font-size: 13px;
+  color: var(--text);
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+}
+
+.app-nav__links {
+  display: flex;
+  gap: 2px;
+  margin-left: auto;
+}
+
+.nav-link {
+  display: inline-block;
+  padding: 5px 14px;
+  border-radius: var(--radius);
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-dim);
+  cursor: pointer;
+  text-decoration: none;
+  transition: background 0.15s, color 0.15s;
+  white-space: nowrap;
+}
+.nav-link:hover  { background: var(--surface2); color: var(--text); }
+.nav-link.active { background: var(--accent); color: #fff; }
 
 /* ── Typography ──────────────────────────────────────────────────────────── */
 h1 { font-size: 1.5rem; font-weight: 600; }
@@ -118,12 +183,21 @@ input:focus, select:focus { border-color: var(--accent); }
 
 label {
   display: block;
-  font-size: 12px;
+  font-size: 11px;
   color: var(--text-dim);
   margin-bottom: 4px;
-  font-weight: 500;
+  font-weight: 600;
   text-transform: uppercase;
-  letter-spacing: 0.04em;
+  letter-spacing: 0.06em;
+}
+
+/* Large primary action button */
+.btn-lg {
+  padding: 11px 24px;
+  font-size: 14px;
+  font-weight: 600;
+  width: 100%;
+  justify-content: center;
 }
 
 /* ── Progress bar ────────────────────────────────────────────────────────── */
@@ -140,6 +214,22 @@ label {
   transition: width 0.3s ease;
   width: 0%;
 }
+
+/* ── Label colour tokens (Phase 2) ───────────────────────────────────────── */
+:root {
+  --label-person:  #4f8ef7;
+  --label-car:     #f7a24f;
+  --label-dog:     #4fd97a;
+  --label-cat:     #a24ff7;
+  --label-bus:     #f74f4f;
+  --label-bicycle: #4fcff7;
+  --label-default: #888888;
+}
+
+/* Confidence badge colour classes */
+.badge--green { color: #4fd97a; }
+.badge--amber { color: #f7c84f; }
+.badge--red   { color: #f74f4f; }
 
 /* ── Utility ─────────────────────────────────────────────────────────────── */
 .hidden  { display: none !important; }
@@ -169,3 +259,66 @@ label {
 .modal h2 { margin-bottom: 10px; }
 .modal p  { margin-bottom: 20px; }
 .modal .actions { display: flex; gap: 10px; justify-content: flex-end; }
+
+/* ── Theme toggle ───────────────────────────────────────────────────────────── */
+.theme-toggle {
+  margin-left: 12px;
+  padding: 5px 10px;
+  border-radius: var(--radius);
+  font-size: 12px;
+  color: var(--text-dim);
+  background: transparent;
+  border: 1px solid var(--border);
+  cursor: pointer;
+}
+.theme-toggle:hover { background: var(--surface2); color: var(--text); }
+
+/* ── Debug log panel ─────────────────────────────────────────────────────── */
+.debug-toggle {
+  margin-left: 12px;
+  padding: 5px 10px;
+  border-radius: var(--radius);
+  font-size: 12px;
+  color: var(--text-dim);
+  background: transparent;
+  border: 1px solid var(--border);
+  cursor: pointer;
+}
+.debug-toggle:hover { background: var(--surface2); color: var(--text); }
+
+.debug-drawer {
+  position: fixed;
+  left: 0; right: 0; bottom: 0;
+  height: 240px;
+  background: var(--surface);
+  border-top: 1px solid var(--border);
+  z-index: 2000;
+  display: none;
+  flex-direction: column;
+}
+.debug-drawer.open { display: flex; }
+
+.debug-drawer__header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+.debug-drawer__header h4 { font-size: 12px; flex: 1; }
+.debug-drawer__count { font-size: 11px; color: var(--text-dim); white-space: nowrap; }
+
+.debug-drawer__body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 8px 12px;
+  font-family: Consolas, "Courier New", monospace;
+  font-size: 11.5px;
+}
+.debug-drawer__row { padding: 2px 0; white-space: pre-wrap; word-break: break-all; }
+.debug-drawer__row--log   { color: var(--text-dim); }
+.debug-drawer__row--warn  { color: var(--warning); }
+.debug-drawer__row--error { color: var(--danger); }
+.debug-drawer__row--fetch { color: var(--accent); }
+.debug-drawer__row--video { color: var(--success); }

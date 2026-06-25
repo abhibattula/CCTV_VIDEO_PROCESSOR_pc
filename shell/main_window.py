@@ -17,19 +17,32 @@ from PyQt6.QtCore import QTimer, QUrl
 from PyQt6.QtGui import QDragEnterEvent, QDropEvent, QCloseEvent
 from PyQt6.QtWidgets import QFileDialog, QMainWindow, QSystemTrayIcon, QApplication
 from PyQt6.QtWebEngineWidgets import QWebEngineView
+from PyQt6.QtWebEngineCore import QWebEnginePage
 
 from app.config import BACKEND_HOST, BACKEND_PORT
 
 
 class MainWindow(QMainWindow):
-    def __init__(self, backend_port: int = BACKEND_PORT):
+    def __init__(self, backend_port: int = BACKEND_PORT, on_stop_backend=None):
         super().__init__()
         self._base_url = f"http://{BACKEND_HOST}:{backend_port}"
+        self._on_stop_backend = on_stop_backend
 
         self.setWindowTitle("CCTV Video Processor")
         self.resize(1280, 800)
 
         self._view = QWebEngineView()
+        # Allow video autoplay without requiring a user gesture — needed so that
+        # preview clips can play automatically after the async POST completes.
+        from PyQt6.QtWebEngineCore import QWebEngineSettings
+        self._view.settings().setAttribute(
+            QWebEngineSettings.WebAttribute.PlaybackRequiresUserGesture, False
+        )
+        # Best-effort clipboard access for the debug log's Copy button — the
+        # JS side falls back to execCommand('copy') if this still gets denied.
+        self._view.settings().setAttribute(
+            QWebEngineSettings.WebAttribute.JavascriptCanAccessClipboard, True
+        )
         self.setCentralWidget(self._view)
 
         self.setAcceptDrops(True)
@@ -69,11 +82,16 @@ class MainWindow(QMainWindow):
         js = """
         window._cctvBrowse = false;
         window._cctvBrowseFolder = false;
+        window._cctvShutdown = false;
+        window._cctvSaveReportPdf = false;
         window.addEventListener('cctv:browse', function() {
             window._cctvBrowse = true;
         });
         window.addEventListener('cctv:browse-folder', function() {
             window._cctvBrowseFolder = true;
+        });
+        window.addEventListener('cctv:save-report-pdf', function() {
+            window._cctvSaveReportPdf = true;
         });
         """
         self._view.page().runJavaScript(js)
@@ -105,8 +123,57 @@ class MainWindow(QMainWindow):
                 if folder:
                     self._post_path(folder)
 
+        def check_shutdown(val):
+            if val:
+                page.runJavaScript("window._cctvShutdown = false;")
+                if self._on_stop_backend:
+                    self._on_stop_backend()
+
+        def check_save_report_pdf(val):
+            if val:
+                page.runJavaScript("window._cctvSaveReportPdf = false;")
+                self._generate_pdf_report()
+
         page.runJavaScript("window._cctvBrowse", check_browse)
         page.runJavaScript("window._cctvBrowseFolder", check_browse_folder)
+        page.runJavaScript("window._cctvShutdown", check_shutdown)
+        page.runJavaScript("window._cctvSaveReportPdf", check_save_report_pdf)
+
+    def _get_output_dir(self):
+        try:
+            job = requests.get(f"{self._base_url}/api/job", timeout=2).json()
+            return job.get("output_dir") or str(Path.home() / "Desktop")
+        except Exception:
+            return str(Path.home() / "Desktop")
+
+    def _generate_pdf_report(self):
+        output_dir = self._get_output_dir()
+        pdf_path = str(Path(output_dir) / f"incident_report_{time.strftime('%Y%m%d_%H%M%S')}.pdf")
+
+        report_page = QWebEnginePage(self._view.page().profile(), self)
+        report_page.load(QUrl(f"{self._base_url}/api/job/report.html"))
+
+        def on_load_finished(ok):
+            if ok:
+                report_page.printToPdf(pdf_path)
+            else:
+                report_page.deleteLater()
+                try:
+                    self._pending_report_pages.remove(report_page)
+                except ValueError:
+                    pass
+
+        def on_pdf_finished(file_path, success):
+            report_page.deleteLater()
+            try:
+                self._pending_report_pages.remove(report_page)
+            except ValueError:
+                pass
+
+        report_page.loadFinished.connect(on_load_finished)
+        report_page.pdfPrintingFinished.connect(on_pdf_finished)
+        self._pending_report_pages = getattr(self, "_pending_report_pages", [])
+        self._pending_report_pages.append(report_page)
 
     def _post_path(self, path: str):
         try:

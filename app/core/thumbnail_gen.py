@@ -2,12 +2,31 @@
 Post-detection thumbnail generation — PC version.
 Runs after detection completes. Events come from session state, not database.
 """
+import concurrent.futures
 import subprocess
 from pathlib import Path
 from typing import Callable
 
 from app.config import JOBS_DIR
 from app.utils.ffmpeg_path import get_ffmpeg
+
+
+def _generate_one(source_path: str, mid_s: float, out_path: Path) -> None:
+    if out_path.exists():
+        return
+    cmd = [
+        get_ffmpeg(), "-hide_banner", "-loglevel", "error",
+        "-threads", "1",
+        "-ss", str(mid_s),
+        "-i", source_path,
+        "-an",
+        "-frames:v", "1",
+        "-vf", "scale=320:180",
+        "-q:v", "5",
+        "-y",
+        str(out_path),
+    ]
+    subprocess.run(cmd, capture_output=True, timeout=15)
 
 
 def run(
@@ -26,24 +45,13 @@ def run(
 
     logger(f"[THUMBNAILS] Generating {len(events)} thumbnails…")
 
-    for ev in events:
-        idx     = ev.get("event_index", 0)
-        mid_s   = (float(ev["start_s"]) + float(ev["end_s"])) / 2
-        out_path = thumb_dir / f"{idx}.jpg"
-
-        if out_path.exists():
-            continue
-
-        cmd = [
-            get_ffmpeg(), "-hide_banner", "-loglevel", "error",
-            "-ss", str(mid_s),
-            "-i", source_path,
-            "-frames:v", "1",
-            "-vf", "scale=320:180",
-            "-q:v", "5",
-            "-y",
-            str(out_path),
-        ]
-        subprocess.run(cmd, capture_output=True, timeout=15)
+    with concurrent.futures.ThreadPoolExecutor(max_workers=16) as executor:
+        futures = []
+        for ev in events:
+            idx = ev.get("event_index", 0)
+            mid_s = (float(ev["start_s"]) + float(ev["end_s"])) / 2
+            out_path = thumb_dir / f"{idx}.jpg"
+            futures.append(executor.submit(_generate_one, source_path, mid_s, out_path))
+        concurrent.futures.wait(futures)
 
     logger("[THUMBNAILS] Done")

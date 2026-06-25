@@ -1,6 +1,9 @@
 """
 Preview clip endpoint — extract a short clip per event for in-browser playback.
+generate_preview() is CPU/IO-bound so it runs in an executor thread, keeping
+the asyncio event loop free for other requests during FFmpeg encoding.
 """
+import asyncio
 import re
 import secrets
 from pathlib import Path
@@ -26,32 +29,40 @@ async def create_preview(idx: int):
 
     ev          = events[idx]
     source_path = snap.get("source_path", "")
-    token       = secrets.token_hex(8)  # 16 hex chars
+    if not source_path:
+        raise HTTPException(status_code=400, detail="No source video loaded")
 
+    token = secrets.token_hex(8)  # 16 hex chars
+
+    # Run FFmpeg in a thread so the event loop stays responsive
+    loop = asyncio.get_running_loop()
     try:
-        generate_preview(
-            source_path=source_path,
-            start_s=float(ev["start_s"]),
-            end_s=float(ev["end_s"]),
-            token=token,
+        await loop.run_in_executor(
+            None,
+            lambda: generate_preview(
+                source_path=source_path,
+                start_s=float(ev["start_s"]),
+                end_s=float(ev["end_s"]),
+                token=token,
+            ),
         )
     except Exception as exc:
         raise HTTPException(status_code=500, detail=f"Preview extraction failed: {exc}")
 
-    return JSONResponse({"url": f"/api/preview/{token}.mp4", "token": token})
+    return JSONResponse({"url": f"/api/preview/{token}.webm", "token": token})
 
 
-@router.get("/preview/{token}.mp4")
+@router.get("/preview/{token}.webm")
 async def serve_preview(token: str):
     if not _TOKEN_RE.match(token):
         raise HTTPException(status_code=400, detail="Invalid token format")
 
-    clip = PREVIEW_DIR / f"{token}.mp4"
+    clip = PREVIEW_DIR / f"{token}.webm"
     if not clip.exists():
         raise HTTPException(status_code=404, detail="Preview clip not found or expired")
 
     return FileResponse(
         str(clip),
-        media_type="video/mp4",
-        headers={"Accept-Ranges": "bytes"},
+        media_type="video/webm",
+        headers={"Cache-Control": "private, max-age=300"},
     )

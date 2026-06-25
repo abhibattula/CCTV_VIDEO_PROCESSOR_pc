@@ -285,3 +285,119 @@ class TestQualityScaling:
         )
         for cmd in calls:
             assert "scale=-2:720" in " ".join(cmd), calls
+
+
+# ---------------------------------------------------------------------------
+# T028 — burn-in drawtext tests (TDD — written before T029/T030 implementation)
+# ---------------------------------------------------------------------------
+
+def _two_events_with_labels():
+    return [
+        {"start_s": 0.0, "end_s": 5.0, "included": True, "zone_label": "Person", "peak_motion_score": 0.8},
+        {"start_s": 10.0, "end_s": 15.0, "included": True, "zone_label": "Car", "peak_motion_score": 0.5},
+    ]
+
+
+def _one_mog2_event():
+    return [
+        {"start_s": 0.0, "end_s": 5.0, "included": True, "zone_label": None, "peak_motion_score": 0.7},
+    ]
+
+
+class TestBurnIn:
+    def test_burn_in_drawtext_in_individual_cmd(self, tmp_path, monkeypatch):
+        """When burn_in=True, each clip ffmpeg command must contain 'drawtext'."""
+        import app.core.export_engine as eng
+        calls = []
+        monkeypatch.setattr(eng, "_run_ffmpeg", _make_fake_ffmpeg(calls))
+        monkeypatch.setattr(eng, "get_ffmpeg", lambda: "ffmpeg")
+
+        job_dir = tmp_path / "job"; job_dir.mkdir()
+        out_dir = tmp_path / "out"; out_dir.mkdir()
+
+        settings = {
+            "source_path": str(tmp_path / "myvideo.mp4"),
+            "output_type": "individual",
+            "output_quality": "original",
+        }
+        eng.run(
+            _two_events_with_labels(), _base_source_info(),
+            settings, out_dir, lambda p: None, job_dir,
+            burn_in=True,
+        )
+        # Each clip command (2 total) should contain drawtext
+        for cmd in calls:
+            cmd_str = " ".join(cmd)
+            assert "drawtext" in cmd_str, f"Expected drawtext in cmd: {cmd_str}"
+
+    def test_burn_in_label_in_text(self, tmp_path, monkeypatch):
+        """When burn_in=True, the drawtext text param must include the zone_label."""
+        import app.core.export_engine as eng
+        calls = []
+        monkeypatch.setattr(eng, "_run_ffmpeg", _make_fake_ffmpeg(calls))
+        monkeypatch.setattr(eng, "get_ffmpeg", lambda: "ffmpeg")
+
+        job_dir = tmp_path / "job"; job_dir.mkdir()
+        out_dir = tmp_path / "out"; out_dir.mkdir()
+
+        settings = {
+            "source_path": str(tmp_path / "myvideo.mp4"),
+            "output_type": "individual",
+            "output_quality": "original",
+        }
+        eng.run(
+            _two_events_with_labels(), _base_source_info(),
+            settings, out_dir, lambda p: None, job_dir,
+            burn_in=True,
+        )
+        # First call → Person event; second → Car event
+        assert "Person" in " ".join(calls[0])
+        assert "Car" in " ".join(calls[1])
+
+    def test_no_burn_in_when_disabled(self, tmp_path, monkeypatch):
+        """When burn_in=False (default), no drawtext filter in commands."""
+        import app.core.export_engine as eng
+        calls = []
+        monkeypatch.setattr(eng, "_run_ffmpeg", _make_fake_ffmpeg(calls))
+        monkeypatch.setattr(eng, "get_ffmpeg", lambda: "ffmpeg")
+
+        job_dir = tmp_path / "job"; job_dir.mkdir()
+        out_dir = tmp_path / "out"; out_dir.mkdir()
+
+        settings = {
+            "source_path": str(tmp_path / "myvideo.mp4"),
+            "output_type": "individual",
+            "output_quality": "original",
+        }
+        eng.run(
+            _two_events_with_labels(), _base_source_info(),
+            settings, out_dir, lambda p: None, job_dir,
+            burn_in=False,
+        )
+        for cmd in calls:
+            assert "drawtext" not in " ".join(cmd)
+
+    def test_label_filter_excludes_non_matching_events(self, tmp_path, monkeypatch):
+        """When label_filter=['Person'], Car events must not be exported."""
+        import app.core.export_engine as eng
+        calls = []
+        monkeypatch.setattr(eng, "_run_ffmpeg", _make_fake_ffmpeg(calls))
+        monkeypatch.setattr(eng, "get_ffmpeg", lambda: "ffmpeg")
+
+        job_dir = tmp_path / "job"; job_dir.mkdir()
+        out_dir = tmp_path / "out"; out_dir.mkdir()
+
+        settings = {
+            "source_path": str(tmp_path / "myvideo.mp4"),
+            "output_type": "individual",
+            "output_quality": "original",
+        }
+        eng.run(
+            _two_events_with_labels(), _base_source_info(),
+            settings, out_dir, lambda p: None, job_dir,
+            label_filter=["Person"],
+        )
+        # Only 1 clip should be produced (Person only)
+        mp4s = list(out_dir.glob("*.mp4"))
+        assert len(mp4s) == 1
+        assert len(calls) == 1

@@ -14,6 +14,8 @@ import time
 from pathlib import Path
 from typing import Callable, Optional
 
+import numpy as np
+
 from app.config import MODEL_DIR, BATCH_SIZE
 
 # YOLO class IDs we care about (COCO dataset subset)
@@ -106,11 +108,16 @@ def run(
     fps         = source_info.get("fps") or cap.get(cv2.CAP_PROP_FPS) or 25.0
     total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT)) or 1
 
+    src_w = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH)) or 1
+    src_h = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT)) or 1
+    heatmap_accum = np.zeros((src_h, src_w), dtype=np.float32)
+
     events: list[dict] = []
     active_start: Optional[float] = None
     active_label: str = ""
     active_peak: float = 0.0
     last_event_end: float = 0.0
+    event_index: int = 0
 
     frame_idx = 0
 
@@ -145,6 +152,8 @@ def run(
                     if conf > score:
                         score      = conf
                         best_label = label
+                    x1, y1, x2, y2 = map(int, box.xyxy[0])
+                    cv2.rectangle(heatmap_accum, (x1, y1), (x2, y2), color=conf, thickness=-1)
 
             motion_detected = score >= score_thresh
 
@@ -169,7 +178,9 @@ def run(
                             active_start, end_s,
                             active_peak, active_label,
                             recording_start,
+                            event_index,
                         )
+                        event_index += 1
                         last_event_end = end_s
                     active_start = None
                     active_peak  = 0.0
@@ -185,9 +196,14 @@ def run(
                     active_start, end_s,
                     active_peak, active_label,
                     recording_start,
+                    event_index,
                 )
+                event_index += 1
     finally:
         cap.release()
+
+    from app.core.detection_engine import _write_heatmap
+    _write_heatmap(heatmap_accum, source_info, job_dir)
 
     on_progress(1.0)
 
@@ -200,6 +216,7 @@ def _emit_event(
     peak_score: float,
     zone_label: str,
     recording_start: Optional[str],
+    event_index: int,
 ) -> None:
     from app.utils.time_utils import seconds_to_clock
 
@@ -207,6 +224,7 @@ def _emit_event(
     end_clock   = seconds_to_clock(end_s,   recording_start) if recording_start else None
 
     ev = {
+        "event_index":      event_index,
         "start_s":          round(start_s, 3),
         "end_s":            round(end_s, 3),
         "peak_motion_score": round(peak_score, 4),

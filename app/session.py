@@ -9,7 +9,8 @@ import threading
 _lock = threading.RLock()
 
 _DEFAULTS: dict = {
-    "status": "idle",           # idle | ready | running | completed | error | cancelled
+    "status": "idle",           # idle | ready | detecting | completed | cancelled | error
+                                 # | exporting | export_done | export_error
     "source_path": None,
     "source_info": None,        # SourceInfo dict from ffprobe
     "settings": None,           # detection settings dict
@@ -59,6 +60,13 @@ def toggle_event(idx: int) -> None:
         # Deliberately raise IndexError for callers to detect invalid idx
         ev = _state["events"][idx]
         ev["included"] = not ev["included"]
+
+
+def bulk_toggle_events(indices: list, include: bool) -> None:
+    """Set included=include for all events at the given indices atomically. Raises IndexError on invalid idx."""
+    with _lock:
+        for idx in indices:
+            _state["events"][idx]["included"] = include
 
 
 # Initialise state on module import

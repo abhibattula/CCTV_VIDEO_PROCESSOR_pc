@@ -49,6 +49,20 @@ def _build_zone_mask(zones: list) -> Optional[np.ndarray]:
     return mask
 
 
+def _write_heatmap(accum: np.ndarray, source_info: dict, job_dir: Path) -> None:
+    """Normalise the accumulated motion-frequency map, colour-map it, upscale
+    to source resolution, and write job_dir/heatmap.png. No-op if nothing
+    accumulated (e.g. zero-frame or instantly-cancelled run)."""
+    if accum.max() <= 0:
+        return
+    norm = cv2.normalize(accum, None, 0, 255, cv2.NORM_MINMAX).astype(np.uint8)
+    colored = cv2.applyColorMap(norm, cv2.COLORMAP_JET)
+    src_w = int(source_info.get("width") or accum.shape[1])
+    src_h = int(source_info.get("height") or accum.shape[0])
+    colored = cv2.resize(colored, (src_w, src_h), interpolation=cv2.INTER_LINEAR)
+    cv2.imwrite(str(job_dir / "heatmap.png"), colored)
+
+
 # ── Normalization fallback ────────────────────────────────────────────────────
 
 def _normalize_via_vc(
@@ -266,6 +280,7 @@ def run(
     clahe  = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
     kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (3, 3))
     zone_mask = _build_zone_mask(zones)
+    heatmap_accum = np.zeros((H, W), dtype=np.float32)
 
     frame_idx   = 0
     frames_done = 0
@@ -323,6 +338,8 @@ def run(
 
             if zone_mask is not None:
                 fg_mask = cv2.bitwise_and(fg_mask, zone_mask)
+
+            heatmap_accum += (fg_mask > 0).astype(np.float32)
 
             motion_ratio = cv2.countNonZero(fg_mask) / (W * H)
             is_motion    = motion_ratio >= motion_ratio_threshold
@@ -400,6 +417,8 @@ def run(
 
         if not cancel_event.is_set():
             on_progress(1.0)
+
+        _write_heatmap(heatmap_accum, source_info, job_dir)
 
     finally:
         cap.release()

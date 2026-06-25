@@ -1,0 +1,363 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Incident Report — {{ source_name }}</title>
+<style>
+  :root {
+    --bg:       #f5f6fa;
+    --surface:  #ffffff;
+    --surface2: #ebedf3;
+    --border:   #d8dae3;
+    --text:     #1a1d27;
+    --text-dim: #5b5f73;
+    --accent:   #4f8ef7;
+    --success:  #2eb872;
+    --warning:  #c97f0e;
+    --danger:   #d33c3c;
+    --radius:   8px;
+    --gap:      12px;
+  }
+
+  * , *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  html, body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    font-size: 14px;
+    line-height: 1.5;
+  }
+
+  body {
+    padding: 32px 40px 56px;
+    max-width: 1100px;
+    margin: 0 auto;
+  }
+
+  h1, h2 {
+    font-weight: 600;
+    letter-spacing: -0.01em;
+  }
+
+  section {
+    margin-top: 32px;
+  }
+
+  section:first-of-type {
+    margin-top: 0;
+  }
+
+  section > h2 {
+    font-size: 15px;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--text-dim);
+    border-bottom: 1px solid var(--border);
+    padding-bottom: 8px;
+    margin-bottom: var(--gap);
+  }
+
+  /* ── Header ───────────────────────────────────────────────────────── */
+  header {
+    border-bottom: 2px solid var(--accent);
+    padding-bottom: 20px;
+  }
+
+  header h1 {
+    font-size: 26px;
+    color: var(--text);
+  }
+
+  header .source-name {
+    font-size: 16px;
+    color: var(--text-dim);
+    margin-top: 4px;
+    word-break: break-all;
+  }
+
+  header .generated-at {
+    font-size: 12px;
+    color: var(--text-dim);
+    margin-top: 8px;
+  }
+
+  /* ── Summary ──────────────────────────────────────────────────────── */
+  .summary-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: var(--gap);
+  }
+
+  .summary-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 14px 16px;
+  }
+
+  .summary-card .label {
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--text-dim);
+  }
+
+  .summary-card .value {
+    font-size: 18px;
+    font-weight: 600;
+    margin-top: 4px;
+  }
+
+  /* ── Heatmap ──────────────────────────────────────────────────────── */
+  .heatmap-wrap {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: var(--gap);
+    text-align: center;
+  }
+
+  .heatmap-wrap img {
+    max-width: 100%;
+    border-radius: 4px;
+    display: block;
+    margin: 0 auto;
+  }
+
+  /* ── Events grid ──────────────────────────────────────────────────── */
+  .event-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+    gap: var(--gap);
+  }
+
+  .event-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .event-card .thumb {
+    width: 100%;
+    aspect-ratio: 16 / 9;
+    background: var(--surface2);
+    display: block;
+    object-fit: cover;
+  }
+
+  .event-card .thumb-missing {
+    width: 100%;
+    aspect-ratio: 16 / 9;
+    background: var(--surface2);
+    color: var(--text-dim);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 12px;
+    text-align: center;
+  }
+
+  .event-card .body {
+    padding: 10px 12px;
+  }
+
+  .event-card .label-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+  }
+
+  .event-card .zone-label {
+    font-weight: 600;
+    font-size: 13px;
+  }
+
+  .event-card .confidence {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--accent);
+    background: var(--surface2);
+    border-radius: 999px;
+    padding: 2px 8px;
+    white-space: nowrap;
+  }
+
+  .event-card .time-range {
+    margin-top: 6px;
+    font-size: 12px;
+    color: var(--text-dim);
+  }
+
+  /* ── Chain of custody ─────────────────────────────────────────────── */
+  table.custody {
+    width: 100%;
+    border-collapse: collapse;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    overflow: hidden;
+  }
+
+  table.custody th, table.custody td {
+    text-align: left;
+    padding: 10px 14px;
+    border-bottom: 1px solid var(--border);
+    font-size: 13px;
+  }
+
+  table.custody th {
+    background: var(--surface2);
+    color: var(--text-dim);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    font-size: 11px;
+  }
+
+  table.custody tr:last-child td {
+    border-bottom: none;
+  }
+
+  table.custody td.hash {
+    font-family: "Cascadia Mono", Consolas, "SF Mono", monospace;
+    font-size: 12px;
+    word-break: break-all;
+    color: var(--text-dim);
+  }
+
+  .no-export-note {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-left: 3px solid var(--warning);
+    border-radius: var(--radius);
+    padding: 12px 16px;
+    color: var(--text-dim);
+    font-size: 13px;
+  }
+
+  footer {
+    margin-top: 48px;
+    padding-top: 16px;
+    border-top: 1px solid var(--border);
+    color: var(--text-dim);
+    font-size: 11px;
+    text-align: center;
+  }
+
+  @media print {
+    body { padding: 0 24px; }
+    .event-card, .summary-card, table.custody, .heatmap-wrap, .no-export-note {
+      break-inside: avoid;
+    }
+  }
+</style>
+</head>
+<body>
+
+  <header>
+    <h1>Incident Report</h1>
+    <div class="source-name">{{ source_name }}</div>
+    <div class="generated-at">Generated {{ generated_at }}</div>
+  </header>
+
+  <section>
+    <h2>Summary</h2>
+    <div class="summary-grid">
+      <div class="summary-card">
+        <div class="label">Events Included</div>
+        <div class="value">{{ included_count }} of {{ total_count }} events included</div>
+      </div>
+      <div class="summary-card">
+        <div class="label">Total Duration</div>
+        <div class="value">{{ total_duration_fmt }}</div>
+      </div>
+      <div class="summary-card">
+        <div class="label">Resolution</div>
+        <div class="value">{{ resolution }}</div>
+      </div>
+      <div class="summary-card">
+        <div class="label">Codec</div>
+        <div class="value">{{ codec }}</div>
+      </div>
+    </div>
+  </section>
+
+  {% if heatmap_b64 %}
+  <section>
+    <h2>Activity Heatmap</h2>
+    <div class="heatmap-wrap">
+      <img src="data:image/png;base64,{{ heatmap_b64 | safe }}" alt="Activity heatmap">
+    </div>
+  </section>
+  {% endif %}
+
+  <section>
+    <h2>Events</h2>
+    <div class="event-grid">
+      {% for ev in events %}
+      <div class="event-card">
+        {% if ev.thumb_b64 %}
+        <img class="thumb" src="data:image/jpeg;base64,{{ ev.thumb_b64 | safe }}" alt="Event {{ ev.event_index }} thumbnail">
+        {% else %}
+        <div class="thumb-missing">No thumbnail</div>
+        {% endif %}
+        <div class="body">
+          <div class="label-row">
+            <span class="zone-label">{{ ev.zone_label or "Motion" }}</span>
+            <span class="confidence">{{ "%.0f"|format((ev.peak_motion_score or 0) * 100) }}%</span>
+          </div>
+          <div class="time-range">
+            {% if ev.start_clock and ev.end_clock %}
+              {{ ev.start_clock }} &ndash; {{ ev.end_clock }}
+            {% else %}
+              {{ ev.start_s }}s &ndash; {{ ev.end_s }}s
+            {% endif %}
+          </div>
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+  </section>
+
+  <section>
+    <h2>Chain of Custody</h2>
+    <table class="custody">
+      <thead>
+        <tr>
+          <th>File</th>
+          <th>Role</th>
+          <th>SHA-256</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>{{ source_filename }}</td>
+          <td>Source</td>
+          <td class="hash">{% if source_hash %}{{ source_hash }}{% else %}<span style="color: var(--warning);">Source file unavailable for verification</span>{% endif %}</td>
+        </tr>
+        {% if output_filename %}
+        <tr>
+          <td>{{ output_filename }}</td>
+          <td>Exported</td>
+          <td class="hash">{{ output_hash }}</td>
+        </tr>
+        {% endif %}
+      </tbody>
+    </table>
+    {% if not output_filename %}
+    <div class="no-export-note" style="margin-top: var(--gap);">
+      No export has been produced for this job yet.
+    </div>
+    {% endif %}
+  </section>
+
+  <footer>
+    Generated by CCTV Video Processor &mdash; {{ generated_at }}
+  </footer>
+
+</body>
+</html>

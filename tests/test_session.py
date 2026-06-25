@@ -2,7 +2,7 @@ import threading
 import copy
 import pytest
 import app.session as session_module
-from app.session import reset, update, snapshot, append_event, toggle_event
+from app.session import reset, update, snapshot, append_event, toggle_event, bulk_toggle_events
 
 
 def test_initial_status_is_idle():
@@ -52,6 +52,36 @@ def test_toggle_event_out_of_range_raises():
     reset()
     with pytest.raises((IndexError, KeyError)):
         toggle_event(99)
+
+
+# ── T003: bulk_toggle_events tests (TDD — written before implementation) ────
+
+
+def test_bulk_toggle_include():
+    reset()
+    append_event({"start_s": 0.0, "end_s": 1.0, "peak_motion_score": 0.5, "included": False})
+    append_event({"start_s": 1.0, "end_s": 2.0, "peak_motion_score": 0.6, "included": False})
+    bulk_toggle_events([0, 1], include=True)
+    s = snapshot()
+    assert s["events"][0]["included"] is True
+    assert s["events"][1]["included"] is True
+
+
+def test_bulk_toggle_exclude():
+    reset()
+    append_event({"start_s": 0.0, "end_s": 1.0, "peak_motion_score": 0.5, "included": True})
+    append_event({"start_s": 1.0, "end_s": 2.0, "peak_motion_score": 0.6, "included": True})
+    bulk_toggle_events([0, 1], include=False)
+    s = snapshot()
+    assert s["events"][0]["included"] is False
+    assert s["events"][1]["included"] is False
+
+
+def test_bulk_toggle_invalid_index():
+    reset()
+    append_event({"start_s": 0.0, "end_s": 1.0, "peak_motion_score": 0.5, "included": True})
+    with pytest.raises((IndexError, KeyError)):
+        bulk_toggle_events([0, 99], include=False)
 
 
 def test_thread_safe_concurrent_updates():
