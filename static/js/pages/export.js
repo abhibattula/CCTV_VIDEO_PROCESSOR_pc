@@ -77,6 +77,8 @@ export function mount(container, params) {
         <div class="section-label">Reports &amp; Data Export</div>
         <div class="export-opts-row" style="display:flex;gap:10px">
           <button class="btn" id="report-pdf-btn">Generate PDF Report</button>
+          <button class="btn" id="event-csv-btn">Event Log (CSV)</button>
+          <button class="btn" id="event-json-btn">Event Log (JSON)</button>
         </div>
         <p class="muted" id="report-status-text" style="font-size:12px;margin-top:8px"></p>
       </div>
@@ -463,6 +465,31 @@ export function mount(container, params) {
       btn.disabled = false;
     }, 3000);
   });
+
+  // ── Event Log Export (T025) ─────────────────────────────────────────────────
+
+  async function downloadEventLog(fmt) {
+    const btn = container.querySelector(fmt === "csv" ? "#event-csv-btn" : "#event-json-btn");
+    const status = container.querySelector("#report-status-text");
+    btn.disabled = true;
+    status.textContent = `Generating ${fmt.toUpperCase()} event log…`;
+    try {
+      const resp = await fetch(`/api/job/export/${fmt}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ output_dir: outputDir || null, label_filter: labelFilter }),
+      });
+      const data = await resp.json();
+      status.textContent = resp.ok ? `Saved: ${data.output_path}` : (data.detail || "Export failed");
+    } catch (err) {
+      status.textContent = "Export failed: " + err.message;
+    } finally {
+      btn.disabled = false;
+    }
+  }
+
+  container.querySelector("#event-csv-btn").addEventListener("click", () => downloadEventLog("csv"));
+  container.querySelector("#event-json-btn").addEventListener("click", () => downloadEventLog("json"));
 
   loadSummary().then(() => {
     loadCustomPresets();
