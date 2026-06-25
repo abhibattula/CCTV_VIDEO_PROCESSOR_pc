@@ -236,6 +236,115 @@ async def report_html():
     return HTMLResponse(html)
 
 
+@router.get("/job/intel-report.html")
+async def intel_report_html():
+    snap = session.snapshot()
+    job_id = snap.get("job_id")
+    source_path = snap.get("source_path")
+
+    # Guard 1: no active job
+    if not job_id or not source_path:
+        return JSONResponse({"error": "No active job"}, status_code=400)
+
+    # Guard 2: detection in progress
+    if snap.get("status") == "detecting":
+        return JSONResponse({"error": "Detection is still in progress"}, status_code=400)
+
+    # Guard 3: no included events
+    included = [ev for ev in snap["events"] if ev.get("included", True)]
+    if not included:
+        return JSONResponse({"error": "No events to report — no events are currently included"}, status_code=400)
+
+    job_dir = _job_dir(job_id)
+
+    try:
+        from app.core import thumbnail_gen
+        thumbnail_gen.run(job_id=job_id, source_path=source_path, events=included, logger=_make_log_fn(job_id))
+
+        for ev in included:
+            ev["thumb_b64"] = _b64_file(job_dir / "thumbnails" / f"{ev['event_index']}.jpg") or ""
+
+        heatmap_b64 = _b64_file(job_dir / "heatmap.png") or ""
+    except OSError as exc:
+        return JSONResponse({"error": f"Could not access a required file: {exc}"}, status_code=400)
+
+    source_info = snap.get("source_info") or {}
+    settings = snap.get("settings") or {}
+
+    # Descriptions dict — empty strings until T011 integrates FrameDescriber
+    descriptions = {ev["event_index"]: "" for ev in included}
+
+    from app.core.narrative_synthesizer import (
+        executive_summary, activity_stats, object_inventory, timeline_entries
+    )
+
+    summary = executive_summary(included, source_info, settings)
+    stats = activity_stats(included, source_info)
+    inventory = object_inventory(included)
+    timeline = timeline_entries(included, descriptions)
+
+    # Key moments: top 3 by peak_motion_score desc, tiebreak by event_index asc
+    key_moments_raw = sorted(
+        included,
+        key=lambda ev: (-ev.get("peak_motion_score", 0), ev.get("event_index", 0))
+    )[:3]
+    key_moments = []
+    for km in key_moments_raw:
+        idx = km.get("event_index", 0)
+        key_moments.append({
+            "event_num": idx + 1,
+            "start_clock": km.get("start_clock") or seconds_to_clock(km.get("start_s", 0)),
+            "end_clock": km.get("end_clock") or seconds_to_clock(km.get("end_s", 0)),
+            "label": km.get("zone_label") or "motion",
+            "confidence_pct": round(km.get("peak_motion_score", 0) * 100),
+            "thumb_b64": km.get("thumb_b64") or "",
+            "description": descriptions.get(idx, ""),
+        })
+
+    # Duration format
+    duration_s = source_info.get("duration_s", 0) or 0
+    duration_fmt = seconds_to_clock(duration_s)
+
+    # Build events JSON for Data Appendix
+    import json
+    events_records = []
+    for ev in included:
+        rec = {
+            "event_index": ev.get("event_index"),
+            "start_s": ev.get("start_s"),
+            "end_s": ev.get("end_s"),
+            "start_clock": ev.get("start_clock") or seconds_to_clock(ev.get("start_s", 0)),
+            "end_clock": ev.get("end_clock") or seconds_to_clock(ev.get("end_s", 0)),
+            "peak_motion_score": ev.get("peak_motion_score"),
+            "zone_label": ev.get("zone_label"),
+            "included": ev.get("included", True),
+        }
+        desc = descriptions.get(ev.get("event_index"), "")
+        if desc:
+            rec["description"] = desc
+        events_records.append(rec)
+    events_json = json.dumps(events_records, indent=2)
+
+    from app.core.intel_report_renderer import render as render_intel
+    html = render_intel({
+        "source_name": Path(source_path).stem,
+        "source_path": source_path,
+        "generated_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        "detection_mode": stats["detection_mode"],
+        "duration_fmt": duration_fmt,
+        "executive_summary": summary,
+        "stats": stats,
+        "object_inventory": inventory,
+        "timeline": timeline,
+        "key_moments": key_moments,
+        "heatmap_b64": heatmap_b64,
+        "settings": settings,
+        "moondream_available": False,  # updated in T011
+        "events_json": events_json,
+    })
+    return HTMLResponse(html)
+
+
 @router.post("/job/start")
 async def start_job(req: StartJobRequest):
     snap = session.snapshot()
