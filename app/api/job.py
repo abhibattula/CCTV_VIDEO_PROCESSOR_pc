@@ -57,6 +57,11 @@ class ExportRequest(BaseModel):
     label_filter: list[str] = []
 
 
+class EventLogExportRequest(BaseModel):
+    output_dir: Optional[str] = None
+    label_filter: list[str] = []
+
+
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
 def _job_dir(job_id: str) -> Path:
@@ -83,6 +88,13 @@ def _b64_file(path: Path) -> Optional[str]:
     if not path.exists():
         return None
     return base64.b64encode(path.read_bytes()).decode("ascii")
+
+
+def _filtered_included_events(snap: dict, label_filter: list[str]) -> list[dict]:
+    included = [ev for ev in snap["events"] if ev.get("included", True)]
+    if label_filter:
+        included = [ev for ev in included if ev.get("zone_label", "") in label_filter]
+    return included
 
 
 # ── Endpoints ─────────────────────────────────────────────────────────────────
@@ -384,3 +396,64 @@ async def export_job(req: ExportRequest):
 
     threading.Thread(target=_run, daemon=True).start()
     return JSONResponse({"status": "exporting"})
+
+
+@router.post("/job/export/csv")
+async def export_events_csv(req: EventLogExportRequest):
+    snap = session.snapshot()
+    if not snap.get("job_id") or not snap.get("source_path"):
+        return JSONResponse({"error": "No active job"}, status_code=400)
+    if snap.get("status") == "detecting":
+        raise HTTPException(status_code=400, detail="Detection is still in progress for this job")
+
+    included = _filtered_included_events(snap, req.label_filter)
+    if not included:
+        raise HTTPException(status_code=400, detail="No events match the current filter.")
+
+    try:
+        output_dir = Path(req.output_dir or snap.get("output_dir") or (Path.home() / "Desktop"))
+        output_dir.mkdir(parents=True, exist_ok=True)
+    except OSError as exc:
+        raise HTTPException(status_code=400, detail=f"Could not access output folder: {exc}")
+
+    source_name = Path(snap["source_path"]).stem
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    out_path = output_dir / f"{source_name}_events_{timestamp}.csv"
+
+    import csv
+    fieldnames = ["event_index", "start_s", "end_s", "start_clock", "end_clock",
+                  "peak_motion_score", "zone_label", "included"]
+    with open(out_path, "w", newline="", encoding="utf-8") as f:
+        writer = csv.DictWriter(f, fieldnames=fieldnames, extrasaction="ignore")
+        writer.writeheader()
+        writer.writerows(included)
+
+    return JSONResponse({"output_path": str(out_path)})
+
+
+@router.post("/job/export/json")
+async def export_events_json(req: EventLogExportRequest):
+    snap = session.snapshot()
+    if not snap.get("job_id") or not snap.get("source_path"):
+        return JSONResponse({"error": "No active job"}, status_code=400)
+    if snap.get("status") == "detecting":
+        raise HTTPException(status_code=400, detail="Detection is still in progress for this job")
+
+    included = _filtered_included_events(snap, req.label_filter)
+    if not included:
+        raise HTTPException(status_code=400, detail="No events match the current filter.")
+
+    try:
+        output_dir = Path(req.output_dir or snap.get("output_dir") or (Path.home() / "Desktop"))
+        output_dir.mkdir(parents=True, exist_ok=True)
+    except OSError as exc:
+        raise HTTPException(status_code=400, detail=f"Could not access output folder: {exc}")
+
+    source_name = Path(snap["source_path"]).stem
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    out_path = output_dir / f"{source_name}_events_{timestamp}.json"
+
+    import json
+    out_path.write_text(json.dumps(included, indent=2), encoding="utf-8")
+
+    return JSONResponse({"output_path": str(out_path)})
