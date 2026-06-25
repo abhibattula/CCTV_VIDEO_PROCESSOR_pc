@@ -363,3 +363,86 @@ def test_heatmap_served_when_present(client, monkeypatch, tmp_path):
     resp = client.get("/api/job/heatmap")
     assert resp.status_code == 200
     assert resp.headers["content-type"].startswith("image/png")
+
+
+# ── T023: CSV/JSON event log export endpoint tests (TDD — written before T024 implementation) ──
+
+def test_export_csv_writes_expected_rows(client, tmp_path):
+    _seed_events(client, 3)
+
+    resp = client.post("/api/job/export/csv", json={"output_dir": str(tmp_path)})
+    assert resp.status_code == 200
+    data = resp.json()
+    assert "output_path" in data
+
+    out_path = Path(data["output_path"])
+    assert out_path.exists()
+
+    import csv
+    with open(out_path, newline="", encoding="utf-8") as f:
+        rows = list(csv.DictReader(f))
+
+    assert len(rows) == 3
+    for i, row in enumerate(rows):
+        assert int(row["event_index"]) == i
+        assert float(row["start_s"]) == float(i)
+        assert float(row["end_s"]) == float(i + 1)
+        assert row["zone_label"] == ("Person" if i % 2 == 0 else "Car")
+
+
+def test_export_csv_respects_label_filter(client, tmp_path):
+    _seed_events(client, 3)  # zone_label alternates Person, Car, Person
+
+    resp = client.post(
+        "/api/job/export/csv",
+        json={"output_dir": str(tmp_path), "label_filter": ["Person"]},
+    )
+    assert resp.status_code == 200
+    data = resp.json()
+    out_path = Path(data["output_path"])
+    assert out_path.exists()
+
+    import csv
+    with open(out_path, newline="", encoding="utf-8") as f:
+        rows = list(csv.DictReader(f))
+
+    assert len(rows) == 2
+    assert all(row["zone_label"] == "Person" for row in rows)
+
+
+def test_export_csv_no_included_events(client, tmp_path):
+    _seed_events(client, 2)
+    import app.session as session
+    snap = session.snapshot()
+    for ev in snap["events"]:
+        ev["included"] = False
+    session.update(events=snap["events"])
+
+    resp = client.post("/api/job/export/csv", json={"output_dir": str(tmp_path)})
+    assert resp.status_code == 400
+    detail = resp.json()["detail"].lower()
+    assert "no events" in detail or "match" in detail
+
+
+def test_export_json_writes_expected_structure(client, tmp_path):
+    _seed_events(client, 3)
+
+    resp = client.post("/api/job/export/json", json={"output_dir": str(tmp_path)})
+    assert resp.status_code == 200
+    data = resp.json()
+    assert "output_path" in data
+
+    out_path = Path(data["output_path"])
+    assert out_path.exists()
+
+    import json
+    written = json.loads(out_path.read_text(encoding="utf-8"))
+
+    assert isinstance(written, list)
+    assert len(written) == 3
+    for i, ev in enumerate(written):
+        assert ev["event_index"] == i
+        assert ev["start_s"] == float(i)
+        assert ev["end_s"] == float(i + 1)
+        assert ev["zone_label"] == ("Person" if i % 2 == 0 else "Car")
+        assert ev["included"] is True
