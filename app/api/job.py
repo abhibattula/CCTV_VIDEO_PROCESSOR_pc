@@ -402,7 +402,7 @@ async def export_job(req: ExportRequest):
 async def export_events_csv(req: EventLogExportRequest):
     snap = session.snapshot()
     if not snap.get("job_id") or not snap.get("source_path"):
-        return JSONResponse({"error": "No active job"}, status_code=400)
+        raise HTTPException(status_code=400, detail="No active job")
     if snap.get("status") == "detecting":
         raise HTTPException(status_code=400, detail="Detection is still in progress for this job")
 
@@ -435,7 +435,7 @@ async def export_events_csv(req: EventLogExportRequest):
 async def export_events_json(req: EventLogExportRequest):
     snap = session.snapshot()
     if not snap.get("job_id") or not snap.get("source_path"):
-        return JSONResponse({"error": "No active job"}, status_code=400)
+        raise HTTPException(status_code=400, detail="No active job")
     if snap.get("status") == "detecting":
         raise HTTPException(status_code=400, detail="Detection is still in progress for this job")
 

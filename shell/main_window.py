@@ -158,9 +158,17 @@ class MainWindow(QMainWindow):
                 report_page.printToPdf(pdf_path)
             else:
                 report_page.deleteLater()
+                try:
+                    self._pending_report_pages.remove(report_page)
+                except ValueError:
+                    pass
 
         def on_pdf_finished(file_path, success):
             report_page.deleteLater()
+            try:
+                self._pending_report_pages.remove(report_page)
+            except ValueError:
+                pass
 
         report_page.loadFinished.connect(on_load_finished)
         report_page.pdfPrintingFinished.connect(on_pdf_finished)
