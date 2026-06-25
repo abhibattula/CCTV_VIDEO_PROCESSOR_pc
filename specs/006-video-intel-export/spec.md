@@ -157,12 +157,12 @@ appendix into a JSON validator — it passes without errors. Measure file size �
 
 **US1 — Intelligence Report Generation**
 
-- **FR-P6-001**: The system MUST generate a report only from a completed or cancelled detection run — not while detection is in progress.
+- **FR-P6-001**: The system MUST generate a report only when detection is NOT in progress. Any session status other than `"detecting"` is permitted (including `completed`, `cancelled`, `export_done`, `export_error`) — consistent with the existing CSV/JSON export behaviour.
 - **FR-P6-002**: The report MUST include an executive summary in plain language, covering what was detected, when activity was highest, and the overall activity level.
-- **FR-P6-003**: The report MUST include an activity statistics section: total included-event count, total active duration (seconds + percentage of video length), and the time range of peak activity.
+- **FR-P6-003**: The report MUST include an activity statistics section: total included-event count, total active duration (seconds + percentage of video length), and the time range of peak activity. "Busiest period" is defined as the clock-formatted start and end times of the shortest continuous window that contains the highest number of included events, evaluated as a 60-second sliding window over the video timeline.
 - **FR-P6-004**: When the detection mode is YOLO, the report MUST include an object inventory table: object class, count, first appearance time, last appearance time.
 - **FR-P6-005**: The report MUST include a chronological timeline table with one row per included event: event number, start time (clock + seconds), end time, duration, label, confidence score, and description.
-- **FR-P6-006**: The report MUST include a "Key Moments" section with the 3 highest-confidence included events (fewer if fewer exist), each with thumbnail (PDF: embedded image; Markdown: path) and description.
+- **FR-P6-006**: The report MUST include a "Key Moments" section with the 3 highest-confidence included events (fewer if fewer exist), each with thumbnail (PDF: embedded image; Markdown: path) and description. Events are ranked by `peak_motion_score` descending; ties are broken by `event_index` ascending (earlier event wins).
 - **FR-P6-007**: The report MUST include a heatmap section. If a heatmap file exists it MUST be embedded in the PDF and referenced in Markdown. If absent, the section MUST state "Heatmap not available for this run."
 - **FR-P6-008**: The report MUST include a detection configuration section: mode, sensitivity, padding, minimum event duration, minimum gap, and configured zones.
 - **FR-P6-009**: The Markdown version MUST include a JSON data appendix as a fenced code block containing all included events as a valid JSON array.
@@ -185,7 +185,8 @@ appendix into a JSON validator — it passes without errors. Measure file size �
 - **FR-P6-020**: The Markdown file MUST include every event timestamp in both elapsed-seconds format and wall-clock format (or elapsed-only if no recording start time is set).
 - **FR-P6-021**: The JSON data appendix MUST be valid JSON — parseable by a standard JSON library without modifications.
 - **FR-P6-022**: Each event object in the JSON appendix MUST include an `event_index` integer matching the event's row in the timeline table.
-- **FR-P6-023**: The generated Markdown file MUST be under 100 KB for any video up to 60 minutes with up to 200 included events.
+- **FR-P6-023**: The generated Markdown file MUST be under 100 KB for any video up to 60 minutes with up to 200 included events. The file MUST be written with UTF-8 encoding. Event description strings in the timeline table MUST be truncated to at most 200 characters if they would cause the file to approach the 100 KB limit; descriptions in the JSON appendix are subject to the same 200-character cap.
+- **FR-P6-024**: The output directory MUST be created automatically (including parent directories) if it does not already exist — consistent with the existing CSV/JSON export behaviour.
 
 ### Key Entities
 
