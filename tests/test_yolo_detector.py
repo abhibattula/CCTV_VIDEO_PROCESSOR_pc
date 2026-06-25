@@ -111,14 +111,15 @@ def test_emitted_events_have_event_index():
     well past the first 20% of frames, so an early-exit-on-first-event
     strategy doesn't actually shorten the common case here — the test
     genuinely needs to process most of the video before anything closes,
-    same as an unbounded run (confirmed empirically to take ~14 minutes).
-    on_event still requests cancellation the instant the first event closes
-    (free speedup if a future test video makes detection happen earlier),
-    and a watchdog timer forces cancellation at 960s (~16 min, a safety
-    margin above the measured ~14 min organic runtime) purely to turn a
-    genuine hang into a clear test failure instead of an infinite wait —
-    not to artificially shorten a run that's expected to use most of that
-    time.
+    same as an unbounded run (confirmed empirically to take ~14 minutes on a
+    warm model). on_event still requests cancellation the instant the first
+    event closes (free speedup if a future test video makes detection happen
+    earlier), and a watchdog timer forces cancellation at 1800s (30 min) to
+    turn a genuine hang into a clear test failure; the higher limit vs. the
+    organic ~14 min runtime is intentional — this test runs first in the
+    YOLO suite on a cold model, and YOLOv8's first-ever inference on a
+    machine triggers one-time JIT compilation that can add 5-10+ minutes of
+    overhead not present on subsequent warm runs.
     """
     from app.core.yolo_detector import run
     from app.utils.ffprobe import probe
@@ -132,7 +133,7 @@ def test_emitted_events_have_event_index():
         events_found.append(ev)
         cancel.set()
 
-    watchdog = threading.Timer(960.0, cancel.set)
+    watchdog = threading.Timer(1800.0, cancel.set)
     watchdog.start()
 
     settings = {
@@ -161,7 +162,7 @@ def test_emitted_events_have_event_index():
         watchdog.cancel()
 
     assert len(events_found) >= 1, (
-        "Expected at least one detection event from the test video within the 960s watchdog window"
+        "Expected at least one detection event from the test video within the 1800s watchdog window"
     )
 
     for ev in events_found:
