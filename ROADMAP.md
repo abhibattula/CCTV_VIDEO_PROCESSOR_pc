@@ -1,9 +1,10 @@
 # Roadmap — Future Phases
 
 This is a living list of features and improvements identified as good next
-steps for this project, beyond what's shipped (Phases 1-4: detection, timeline
+steps for this project, beyond what's shipped (Phases 1-5: detection, timeline
 review, undo, export presets, theme, ROI zone drawing, Stop Application, New
-Project). Nothing here is scheduled or committed — when one of these gets
+Project, activity heatmap overlay, PDF/HTML incident report, CSV/JSON event log
+export). Nothing here is scheduled or committed — when one of these gets
 picked up, it should run through the project's normal speckit pipeline
 (`/speckit.specify` → `/speckit.clarify` → `/speckit.plan` → `/speckit.tasks` →
 `/speckit.analyze` → `/speckit.implement`) and get its own numbered spec under
@@ -101,27 +102,20 @@ existing feature, not a new capability.
 
 ---
 
-## C. Professional Reporting
+## C. Professional Reporting — ✅ Shipped in Phase 5
 
-One-click PDF/HTML incident report: a thumbnail grid with timestamps, labels,
-and confidence scores per event — the document a security manager actually
-hands to a client or insurance adjuster, instead of just a video file.
-Optionally include a SHA-256 hash of the source file and the exported clip
-for basic chain-of-custody integrity.
+PDF/HTML incident report with per-event thumbnail grid, activity heatmap,
+timestamps, labels, confidence scores, and chain-of-custody SHA-256 hashes
+for source and exported files. CSV and JSON event log export (one-click,
+timestamped files, respects label filter). Activity heatmap overlay on the
+zone-drawing preview after detection. All shipped in Phase 5.
 
-**Why this is the best effort-to-impact ratio on this list**: every piece of
-underlying data (events, timestamps, labels, confidence, thumbnails) already
-exists in this app today. This is a templating/rendering task (e.g. Jinja2 →
-HTML, or HTML → PDF via a headless render), not new detection or export
-logic — meaning it's almost entirely additive with very low risk to anything
-already shipped.
-
-**Builds on**: `app/core/thumbnail_gen.py` (per-event thumbnails already
-generated), `app/api/job.py`'s events list, the existing export-preset UI
-pattern in `static/js/pages/export.js` (a "Generate Report" button would sit
-naturally alongside the existing export controls).
-
-**Effort**: Low-medium. **Impact**: High.
+**Remaining ideas in this space** (not yet implemented):
+- Label-filter support on the HTML report (currently always shows the full
+  included set — no per-label report generation)
+- A real completion signal from PDF printing back into the SPA (current UX is
+  an optimistic 3-second message, same pattern as Stop Application)
+- Async/background thumbnail generation for very large event sets
 
 ---
 
@@ -168,8 +162,7 @@ support burden.
 This is one reasonable sequence, not the only one — re-evaluate when any item
 is actually picked up:
 
-1. **C (Professional Reporting)** — cheapest path to "this feels like a real
-   commercial product," zero architectural risk, 100% reuse of existing data.
+1. ~~**C (Professional Reporting)**~~ — **shipped in Phase 5**
 2. **D (Settings + first-run polish)** — same low-risk, high-perceived-value
    profile; natural to bundle 2-3 of these into one phase the way Phase 3
    bundled undo+presets+theme.

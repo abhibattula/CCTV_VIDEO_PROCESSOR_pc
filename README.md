@@ -107,8 +107,13 @@ The app is two processes glued together by `launcher.py`:
    current settings as a named custom preset (`app/api/presets.py`), which persists
    across restarts and appears alongside the built-ins; an optional burn-in overlay
    stamps each clip with its timestamp and label via FFmpeg's `drawtext` filter.
+5. **Report & data export** — after detection (or export), click "Generate PDF Report"
+   on the Export page to produce a standalone incident report with per-event thumbnails
+   (`app/core/thumbnail_gen.py`), the activity heatmap, and chain-of-custody hashes
+   (`app/core/report_renderer.py` + `app/templates/report.html`). "Event Log (CSV/JSON)"
+   exports the included event list as a spreadsheet or structured JSON.
 
-### Region of interest, theme, and app-level controls
+### Region of interest, heatmap, theme, and app-level controls
 
 - **Detection zones** — before starting detection, the Home page shows a preview of
   the video's first frame; draw one or more free-form regions on it
@@ -116,6 +121,11 @@ The app is two processes glued together by `launcher.py`:
   those regions instead of the full frame. Zones are per-job only — drawing nothing
   analyzes the whole frame exactly as before, and loading a different file always
   starts with a blank slate.
+- **Activity heatmap** — after detection completes, navigate back to the Home page
+  and check "Show Activity Heatmap" in the zone-drawing toolbar; a JET-colormapped
+  overlay appears on the preview, showing where across the frame motion accumulated
+  during the run. The overlay is semi-transparent and pointer-events-none, so zone
+  drawing still works through it.
 - **Light/dark theme** — a toggle in the nav bar (`static/js/theme.js`) switches the
   whole UI instantly, with the choice remembered across restarts via `localStorage`.
 - **Stop** — a nav-bar control that gracefully shuts down the backend after a
@@ -154,12 +164,22 @@ it exists.
 review/filter on a timeline → export.
 
 - Region-of-interest zones — restrict detection to one or more drawn areas of the frame
+- **Activity heatmap** — after detection, an optional JET-colormapped overlay on the
+  zone-drawing preview shows where motion accumulated across the whole run; toggle it
+  on/off with a single checkbox without re-running detection
 - Tag/label filtering with a score-threshold slider and live "N shown / M total" count
 - Multi-select + bulk include/exclude with a 20-entry undo stack
 - Keyboard-driven review (no mouse required end-to-end)
 - Confidence badges, coloured label pills, compact post-detection label summary
 - Three built-in export presets plus your own named, persisted custom presets,
   optional timestamp+label burn-in overlay
+- **PDF/HTML incident report** — one click on the Export page generates a
+  self-contained report: thumbnail grid per event, embedded activity heatmap,
+  chain-of-custody SHA-256 hashes for source and exported files; prints directly to
+  PDF via Qt's embedded Chromium with no extra tools or dependencies
+- **CSV/JSON event log export** — download the included event list as a structured
+  spreadsheet or machine-readable JSON (respects the current label filter; second
+  click produces a new timestamped file, not an overwrite)
 - Light/dark theme toggle, remembered across restarts
 - In-app Stop control (graceful backend shutdown) and New Project control (abandon
   the current job and start over without restarting the app), both reachable from
@@ -193,11 +213,14 @@ CCTV VIDEO PROCESSOR PC/
 │   │   ├── shell_bridge.py  ← /api/shell/* — Qt ↔ web file-dialog bridge
 │   │   └── system.py        ← /api/system/* — CPU/RAM stats, capability checks
 │   ├── core/
-│   │   ├── detection_engine.py  ← MOG2 background subtraction
-│   │   ├── yolo_detector.py     ← optional YOLO object detection
+│   │   ├── detection_engine.py  ← MOG2 background subtraction + heatmap accumulation
+│   │   ├── yolo_detector.py     ← optional YOLO object detection + heatmap accumulation
 │   │   ├── export_engine.py     ← FFmpeg cut/merge/burn-in/preview
-│   │   ├── thumbnail_gen.py     ← poster frame extraction
+│   │   ├── thumbnail_gen.py     ← poster frame extraction per event
+│   │   ├── report_renderer.py   ← Jinja2 incident report renderer
 │   │   └── log_buffer.py        ← SSE fan-out ring buffer
+│   ├── templates/
+│   │   └── report.html          ← standalone incident report template (base64 images, no external deps)
 │   └── utils/                   ← ffprobe, bundled-ffmpeg resolver, time/system helpers
 │
 ├── shell/                   ← PyQt6 desktop wrapper
@@ -232,7 +255,7 @@ CCTV VIDEO PROCESSOR PC/
 python -m pytest tests/ -v
 ```
 
-Expected: **74 passed, 2 skipped** (the skips are `ffprobe`-specific cases that don't
+Expected: **97 passed, 2 skipped** (the skips are `ffprobe`-specific cases that don't
 apply on Windows; FFmpeg itself is bundled and fully functional).
 
 The backend follows test-first development — every engine (`detection_engine`,

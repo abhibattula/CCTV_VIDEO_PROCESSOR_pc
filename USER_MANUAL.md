@@ -124,6 +124,15 @@ across videos. If the preview can't be generated (a corrupted or zero-duration
 file), you'll see "Preview unavailable — detection will run on the full frame"
 instead, and detection still works normally.
 
+**After detection completes — Activity Heatmap:** navigate back to the Home page
+(click "Home" in the nav bar) to return to the same zone-drawing view. A
+**"Show Activity Heatmap"** checkbox now appears in the toolbar above the preview.
+Check it to overlay a colour map (blue = low activity → red = high activity) on the
+preview frame, showing exactly where across the frame motion accumulated during the
+run. The overlay is semi-transparent so you can still see the video frame underneath,
+and zone drawing still works with it visible. Uncheck it to hide the overlay.
+The heatmap is produced for both MOG2 and Object Detection modes.
+
 ### Step 2 — Configure Detection Settings
 
 | Setting | What it does | Recommended |
@@ -241,6 +250,18 @@ Or configure manually:
 | **Label Scope** | Restrict export to one label (e.g. only "Person" events), or "All labels" |
 | **Output Folder** | Click Browse… to choose where files are saved. Default: Desktop |
 
+### Reports & Data Export
+
+Below the manual export settings is a **Reports & Data Export** card with three buttons:
+
+| Button | What it does |
+|--------|-------------|
+| **Generate PDF Report** | Produces a self-contained incident report as a PDF file — one page per event with a thumbnail, timestamp, label, and confidence score, plus the activity heatmap (if one was generated), and a chain-of-custody table with SHA-256 hashes of the source video and the exported clip. Saved to your chosen output folder automatically, no extra dialog. |
+| **Event Log (CSV)** | Exports the currently-included events as a `.csv` spreadsheet — one row per event with columns for index, start/end times, clock times, peak motion score, zone label, and include flag. Respects the Label Scope filter (if one is set, only matching events are exported). A second click produces a fresh timestamped file alongside the first rather than overwriting it. |
+| **Event Log (JSON)** | Same as CSV but as structured JSON — an array of event objects. Useful for piping into other tools or scripts. |
+
+All three buttons use the **Output Folder** chosen above, or the Desktop if none was set. CSV and JSON export is available regardless of whether you have run a video export — it is a separate, repeatable operation and is not blocked by an in-progress video export.
+
 Click **Export Now**. A progress bar fills as FFmpeg processes the clips. When complete:
 - The output file path is displayed
 - **Open Folder** opens File Explorer at the export location
@@ -348,7 +369,7 @@ If the app crashes during export, the next launch will automatically:
 python -m pytest tests/ -v
 ```
 
-Expected result: **74 passed, 2 skipped** (the 2 skips are for `ffprobe`-specific cases that don't apply on Windows — FFmpeg itself is bundled and everything works fine). There is no frontend test runner; frontend behaviour is verified by driving the real app directly.
+Expected result: **97 passed, 2 skipped** (the 2 skips are for `ffprobe`-specific cases that don't apply on Windows — FFmpeg itself is bundled and everything works fine). There is no frontend test runner; frontend behaviour is verified by driving the real app directly.
 
 ---
 
