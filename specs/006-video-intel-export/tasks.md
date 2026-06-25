@@ -60,7 +60,7 @@ Frontend `static/js/` tasks use the quickstart.md exemption (manually verified, 
   - `executive_summary(events: list[dict], source_info: dict, settings: dict) -> str` — 2-3 sentence paragraph. For YOLO: name the dominant class and event count. For MOG2: describe motion activity and active_pct.
   - `activity_stats(events: list[dict], source_info: dict) -> dict` — returns dict with: `event_count`, `active_s` (sum of durations), `active_pct` (clamped 0–100), `busiest_period` (clock-formatted start–end of the 60-second sliding window containing the most events; "N/A" if 0 events), `avg_confidence` (mean peak_motion_score), `detection_mode` (from events' zone_label pattern).
   - `object_inventory(events: list[dict]) -> list[dict]` — for YOLO (any event has non-None zone_label): group by zone_label, return [{"label", "count", "first_clock", "last_clock"}] sorted by count desc. For MOG2 (all zone_label=None): return [].
-  - `timeline_entries(events: list[dict], descriptions: dict[int, str]) -> list[dict]` — return one dict per event: {"event_num" (1-based), "start_clock", "start_s", "end_clock", "duration_s", "label" (zone_label or "motion"), "confidence_pct" (round(peak_motion_score*100)), "description" (descriptions.get(event_index, "") or "N/A")}. Description truncated to 200 chars.
+  - `timeline_entries(events: list[dict], descriptions: dict[int, str]) -> list[dict]` — return one dict per event: {"event_num" (1-based), "start_clock", "start_s", "end_clock", "duration_s", "label" (zone_label or "motion"), "confidence_pct" (round(peak_motion_score*100)), "description" (descriptions.get(event_index, "") or "N/A")}. Description **always** truncated to 200 chars — unconditional, not conditional on file size. This is the single source of truth for truncation; callers trust it.
   Run `pytest tests/test_intel_report.py -k "executive_summary or object_inventory or activity_stats"` — 6 tests must pass.
 
 - [ ] T004 [P] [US1] Create `app/templates/intel_report.html` — self-contained Jinja2 template (autoescape=True, inline `<style>`, all images as `data:image/jpeg;base64,...` or `data:image/png;base64,...` URIs, no external links). Sections in order:
@@ -112,7 +112,7 @@ Frontend `static/js/` tasks use the quickstart.md exemption (manually verified, 
     - `## Activity Heatmap` — reference to heatmap file path (not embedded in Markdown)
     - `## Detection Configuration` — Markdown table of settings
     - `## Data Appendix (JSON)` — ` ```json\n{json.dumps(events_records, indent=2)}\n``` ` where events_records is list of dicts with: event_index, start_s, end_s, start_clock, end_clock, peak_motion_score, zone_label, included (omit description key if empty)
-  - Enforce UTF-8 + 100KB: `md_text = ...`; if `len(md_text.encode("utf-8")) > 100*1024` then truncate timeline description columns further (already capped at 200 chars in timeline_entries; this is a safety net)
+  - Enforce UTF-8 + 100KB: `md_text = ...`; assert `len(md_text.encode("utf-8")) < 100*1024` (descriptions are already ≤200 chars from `timeline_entries()` — this is a final size assertion, NOT a second truncation pass; if it fires, the description cap in T003 needs reducing)
   - `out_path = output_dir / f"{source_stem}_intelligence_{timestamp}.md"` ; `out_path.write_text(md_text, encoding="utf-8")`
   - Return `JSONResponse({"md_path": str(out_path), "moondream_available": FrameDescriber.is_available()})`
   Run `pytest tests/test_intel_report.py -k "export_writes or json_appendix"` — 2 tests must pass. Depends on T006.
@@ -125,14 +125,15 @@ Frontend `static/js/` tasks use the quickstart.md exemption (manually verified, 
   Note: T008 can be implemented in parallel with T003/T004 but can only be verified after T006 is complete.
 
 - [ ] T009 [US1] Add "Video Intelligence" card section to `static/js/pages/export.js` after the existing "Incident Report" card:
-  - Card structure: header "Video Intelligence Report", description text, button "Generate Intelligence Report (Markdown + PDF)", status div
+  - Card structure: header "Video Intelligence Report", static description paragraph (include sub-text: "Tip: if Moondream2 is installed, visual descriptions are added to the timeline automatically. First use downloads the model (~2 GB, one-time)."), button "Generate Intelligence Report (Markdown + PDF)", status div
   - On button click:
     1. Disable button, show "Generating..."
     2. `fetch('/api/job/intel-report/export', {method: 'POST'})` with try/catch
     3. On success: read `{md_path, moondream_available}` from JSON response; derive pdf_path = md_path.replace(/\.md$/, '.pdf'); dispatch `new CustomEvent('cctv:generate-intel-report', {detail: {pdf_path}})` on `document`; show "Markdown saved to {md_path}. PDF generating to same folder."
-    4. If `!moondream_available`: append "Install moondream (pip install moondream) to add visual descriptions."
+    4. If `!moondream_available`: append "Install moondream (pip install moondream) to enable visual descriptions."
     5. On error: show error message from response JSON
-  - Verify with quickstart.md Scenario 1 (MOG2, no moondream) and Scenario 7 (excluded events check). Depends on T007 and T008.
+  - **Acceptance criteria** (covers T012 — no separate task needed): moondream install notice shows when `moondream_available` is false; notice does NOT show when `moondream_available` is true; static Moondream2 tip shows unconditionally in the card sub-text.
+  - Verify with quickstart.md Scenario 1 (MOG2, no moondream), Scenario 2 (moondream notice present), and Scenario 7 (excluded events check). Depends on T007 and T008.
 
 **Checkpoint**: `pytest tests/test_intel_report.py -v` — 10 of 12 tests pass (frame_describer tests still FAIL). Export page shows Video Intelligence card. Markdown and PDF generated for a completed MOG2 or YOLO run.
 
@@ -189,9 +190,7 @@ Frontend `static/js/` tasks use the quickstart.md exemption (manually verified, 
   - In HTML context: pass `moondream_available = FrameDescriber.is_available()` (already returned by POST; add to GET context too for template conditional)
   Depends on T010.
 
-- [ ] T012 [US2] The frontend `static/js/pages/export.js` moondream notice is already implemented in T009 (`if (!moondream_available)` branch). Verify this notice appears correctly with quickstart.md Scenario 2 (no moondream installed). If the branch was already added in T009, this task is a verification-only step — run Scenario 2 and mark complete. If the conditional was omitted in T009, add it now.
-
-**Checkpoint**: `pytest tests/test_intel_report.py -v` — all 12 tests PASS. With moondream not installed: descriptions column shows "N/A", no crash. With moondream installed: descriptions are natural language.
+**Checkpoint**: `pytest tests/test_intel_report.py -v` — all 12 tests PASS. With moondream not installed: descriptions column shows "N/A", no crash. With moondream installed: descriptions are natural language. Verify quickstart.md Scenario 5 (moondream installed + cached) if moondream is available in the environment.
 
 ---
 
@@ -212,7 +211,7 @@ Frontend `static/js/` tasks use the quickstart.md exemption (manually verified, 
 **Purpose**: Final verification pass, documentation update.
 
 - [ ] T014 [P] Run full test suite `pytest tests/ -v` from project root. ALL existing tests (49+) PLUS all 12 new intel_report tests MUST pass. Fix any regressions before marking complete.
-- [ ] T015 [P] Run quickstart.md Scenarios 1–8 (full manual verification of all acceptance scenarios). Document any issues found. Fix before marking complete.
+- [ ] T015 [P] Run quickstart.md Scenarios 1–8 (full manual verification of all acceptance scenarios). Document any issues found. Fix before marking complete. **Timing check (SC-P6-002)**: time the POST /api/job/intel-report/export for a ~50-event session with model cached or not installed — confirm HTTP response arrives in under 2 minutes (first-run model download excluded).
 - [ ] T016 [P] Update `ROADMAP.md`: add a `## F. Video Intelligence Export — ✅ Shipped in Phase 6` entry (similar to the Phase 5 note in section C), listing what was delivered. Remove Phase 6 from the "Suggested Order" roadmap if listed there.
 - [ ] T017 [P] Update `docs/superpowers/specs/2026-06-25-video-intelligence-export-design.md`: change `**Status**: Approved — ready for speckit pipeline` to `**Status**: Shipped in Phase 6 (2026-06-25)`.
 
@@ -246,7 +245,7 @@ T009 depends on T007 and T008.
 
 ### Within Phase 4 — Task Order
 
-T010 → T011 → T012 (sequential: each builds on the previous)
+T010 → T011 (sequential: T011 integrates FrameDescriber into both endpoints; moondream notice is part of T009, no separate T012)
 
 ### Parallel Opportunities
 
