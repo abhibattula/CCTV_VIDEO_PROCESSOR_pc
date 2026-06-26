@@ -2,7 +2,7 @@
 
 **Date**: 2026-06-25  
 **Branch**: `006-video-intel-export`  
-**Status**: Approved — ready for speckit pipeline
+**Status**: Shipped in Phase 6 (2026-06-25)
 
 ---
 
