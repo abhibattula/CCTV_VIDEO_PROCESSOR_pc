@@ -8,7 +8,7 @@ class FrameDescriber:
         try:
             import moondream  # noqa: F401
             return True
-        except ImportError:
+        except Exception:
             return False
 
     @classmethod
