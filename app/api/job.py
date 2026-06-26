@@ -272,8 +272,11 @@ async def intel_report_html():
     source_info = snap.get("source_info") or {}
     settings = snap.get("settings") or {}
 
-    # Descriptions dict — empty strings until T011 integrates FrameDescriber
-    descriptions = {ev["event_index"]: "" for ev in included}
+    from app.core.frame_describer import FrameDescriber
+    descriptions = {}
+    for ev in included:
+        thumb = job_dir / "thumbnails" / f"{ev['event_index']}.jpg"
+        descriptions[ev["event_index"]] = FrameDescriber.describe(thumb) if thumb.exists() else ""
 
     from app.core.narrative_synthesizer import (
         executive_summary, activity_stats, object_inventory, timeline_entries
@@ -340,7 +343,7 @@ async def intel_report_html():
         "key_moments": key_moments,
         "heatmap_b64": heatmap_b64,
         "settings": settings,
-        "moondream_available": False,  # updated in T011
+        "moondream_available": FrameDescriber.is_available(),
         "events_json": events_json,
     })
     return HTMLResponse(html)
@@ -375,8 +378,11 @@ async def intel_report_export():
     source_info = snap.get("source_info") or {}
     settings = snap.get("settings") or {}
 
-    # Descriptions dict — empty strings until T011 integrates FrameDescriber
-    descriptions = {ev["event_index"]: "" for ev in included}
+    from app.core.frame_describer import FrameDescriber
+    descriptions = {}
+    for ev in included:
+        thumb = job_dir / "thumbnails" / f"{ev['event_index']}.jpg"
+        descriptions[ev["event_index"]] = FrameDescriber.describe(thumb) if thumb.exists() else ""
 
     from app.core.narrative_synthesizer import (
         executive_summary, activity_stats, object_inventory, timeline_entries
@@ -527,11 +533,7 @@ async def intel_report_export():
     out_path = output_dir / f"{source_stem}_intelligence_{timestamp}.md"
     out_path.write_text(md_text, encoding="utf-8")
 
-    try:
-        from app.core.frame_describer import FrameDescriber
-        moondream_available = FrameDescriber.is_available()
-    except ImportError:
-        moondream_available = False
+    moondream_available = FrameDescriber.is_available()
 
     return JSONResponse({
         "md_path": str(out_path),
