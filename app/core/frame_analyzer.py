@@ -19,7 +19,7 @@ class FrameAnalyzer:
         """Return True if Florence-2 transformers library is installed AND model weights cached."""
         try:
             from transformers import Florence2ForConditionalGeneration  # noqa: F401
-        except ImportError:
+        except Exception:
             return False
         weights_dir = (
             Path.home() / ".cache" / "huggingface" / "hub" / "models--microsoft--Florence-2-base"

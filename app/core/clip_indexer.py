@@ -20,7 +20,7 @@ class ClipIndexer:
         try:
             import open_clip  # noqa: F401
             return True
-        except ImportError:
+        except Exception:
             return False
 
     @classmethod
