@@ -5,9 +5,6 @@ from fastapi.testclient import TestClient
 from app.main import create_app
 import app.session as session_module
 
-_app = create_app()
-
-
 @pytest.fixture(autouse=True)
 def reset_session():
     session_module.session.reset()
@@ -17,7 +14,8 @@ def reset_session():
 
 @pytest.fixture
 def client():
-    return TestClient(_app)
+    with TestClient(create_app()) as c:
+        yield c
 
 
 def _read_sse_events(client, n=5):
