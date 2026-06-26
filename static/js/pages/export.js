@@ -89,7 +89,7 @@ export function mount(container, params) {
         <p class="muted" style="font-size:12px;margin:6px 0 10px">
           Natural language report describing what happened in the video — executive summary,
           timeline, object inventory, and PDF. Saved to your output folder.<br>
-          <span style="margin-top:4px;display:inline-block">Tip: if Moondream2 is installed, visual descriptions are added to the timeline automatically. First use downloads the model (~2 GB, one-time).</span>
+          <span style="margin-top:4px;display:inline-block">Tip: install <code>transformers</code> (<code>pip install transformers accelerate</code>) to add AI visual descriptions to the timeline. First use downloads the model (~900 MB, one-time, fully offline).</span>
         </p>
         <button class="btn" id="intel-report-btn">Generate Intelligence Report (Markdown + PDF)</button>
         <p class="muted" id="intel-report-status" style="font-size:12px;margin-top:8px"></p>
@@ -520,7 +520,7 @@ export function mount(container, params) {
         window.dispatchEvent(new CustomEvent("cctv:generate-intel-report", { detail: { pdf_path: pdfPath } }));
         status.textContent = `Markdown saved to ${data.md_path}. PDF generating to same folder.`;
         if (!data.moondream_available) {
-          status.textContent += " Install moondream (pip install moondream) to enable visual descriptions.";
+          status.textContent += " Run 'pip install transformers accelerate' to enable AI visual descriptions.";
         }
       }
     } catch (err) {

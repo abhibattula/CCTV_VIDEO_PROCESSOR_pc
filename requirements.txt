@@ -33,5 +33,8 @@ httpx==0.27.0
 # Optional — object detection mode (install separately)
 # ultralytics>=8.2.0
 
-# Optional — visual frame descriptions in intelligence reports (install separately)
-# pip install moondream   (~2GB model downloaded on first use to ~/.cache/huggingface/)
+# Optional — AI visual frame descriptions in intelligence reports (install separately)
+# pip install transformers accelerate
+# Model Salesforce/blip-image-captioning-base (~900 MB) downloads on first use to
+# ~/.cache/huggingface/ — fully offline after that, no API key required.
+# torch is already installed as a transitive dependency of ultralytics.

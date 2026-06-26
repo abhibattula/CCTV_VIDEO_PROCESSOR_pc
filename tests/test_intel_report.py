@@ -126,20 +126,21 @@ def test_frame_describer_absent_returns_empty(monkeypatch, tmp_path):
     real_import = builtins.__import__
 
     def mock_import(name, *args, **kwargs):
-        if name == "moondream":
-            raise ImportError("moondream not installed")
+        if name == "transformers":
+            raise ImportError("transformers not installed")
         return real_import(name, *args, **kwargs)
 
     monkeypatch.setattr(builtins, "__import__", mock_import)
     FrameDescriber._model = None
+    FrameDescriber._processor = None
     result = FrameDescriber.describe(tmp_path / "fake.jpg")
     assert result == ""
 
 
 def test_frame_describer_missing_file_returns_empty(tmp_path):
     from app.core.frame_describer import FrameDescriber
-    # Only applies when moondream IS importable — test the file-not-found path.
-    # If moondream is not installed this also returns "" from is_available() check.
+    # Non-existent path → Image.open raises FileNotFoundError → caught → "".
+    # If transformers not installed, is_available() returns "" directly.
     result = FrameDescriber.describe(tmp_path / "nonexistent_12345.jpg")
     assert result == ""
 
