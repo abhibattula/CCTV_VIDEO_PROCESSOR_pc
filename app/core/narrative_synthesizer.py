@@ -187,13 +187,13 @@ def timeline_entries(events: list[dict], descriptions: dict) -> list[dict]:
     """
     Build one timeline entry dict per event.
 
-    IMPORTANT: description is ALWAYS truncated to 200 chars, unconditionally.
+    Description is taken verbatim — no truncation applied.
     """
     entries: list[dict] = []
     for ev in events:
         event_index = ev.get("event_index", 0)
         raw_desc = descriptions.get(event_index, "") or "N/A"
-        description = raw_desc[:200]  # unconditional truncation
+        description = raw_desc
 
         entries.append(
             {
@@ -224,16 +224,95 @@ class NarrativeSynthesizer:
     """OO wrapper around module-level narrative functions.
 
     Provides an instance interface expected by LLMSynthesizer.synthesize().
-    T006 will add temporal_analysis() and trend_direction() as class methods
-    and enrich executive_summary() to incorporate them.
+    Includes temporal_analysis() and trend_direction() as class methods
+    and an enriched executive_summary() that incorporates them.
     """
 
-    def executive_summary(self, events: list) -> str:
-        """Return a rule-based executive summary string.
+    def temporal_analysis(self, events: list, duration_s: float) -> dict:
+        """
+        Divide video into thirds and count events in each.
 
-        Delegates to the module-level executive_summary() function with
-        default source_info so callers only need to pass the events list.
+        Returns:
+            {"early": int, "middle": int, "late": int, "peak_third": str}
+            peak_third is "early", "middle", or "late" (highest count; ties go to earliest).
+        """
+        third = duration_s / 3.0 if duration_s > 0 else 1.0
+        early = sum(1 for e in events if e.get("start_s", 0) < third)
+        middle = sum(1 for e in events if third <= e.get("start_s", 0) < 2 * third)
+        late = sum(1 for e in events if e.get("start_s", 0) >= 2 * third)
+
+        if early >= middle and early >= late:
+            peak = "early"
+        elif middle >= late:
+            peak = "middle"
+        else:
+            peak = "late"
+
+        return {"early": early, "middle": middle, "late": late, "peak_third": peak}
+
+    def trend_direction(self, events: list, duration_s: float) -> str:
+        """
+        Compare first-half vs second-half event density.
+
+        Returns one of: "rising", "falling", "sporadic", "uniform"
+        - "rising"   : 2nd-half count >= 1.5x 1st-half count
+        - "falling"  : 1st-half count >= 1.5x 2nd-half count
+        - "uniform"  : both halves equal (or within ~10%)
+        - "sporadic" : uneven but no clear rising/falling pattern
+        """
+        half = duration_s / 2.0 if duration_s > 0 else 1.0
+        first = sum(1 for e in events if e.get("start_s", 0) < half)
+        second = sum(1 for e in events if e.get("start_s", 0) >= half)
+
+        if first == 0 and second == 0:
+            return "uniform"
+        if first == 0:
+            return "rising"
+        if second == 0:
+            return "falling"
+
+        ratio = second / first
+        if ratio >= 1.5:
+            return "rising"
+        if ratio <= 1 / 1.5:
+            return "falling"
+        if abs(ratio - 1.0) <= 0.1:
+            return "uniform"
+        return "sporadic"
+
+    def executive_summary(self, events: list, duration_s: float = None) -> str:
+        """Return a rule-based executive summary string, enriched with temporal context.
+
+        Delegates base summary to the module-level executive_summary() function, then
+        appends temporal distribution and trend information derived from the two new
+        analysis methods.
+
+        Args:
+            events: List of event dicts, each with at least "start_s".
+            duration_s: Recording duration in seconds. Inferred from event timestamps
+                        when not provided.
         """
         # NOTE: bare name 'executive_summary' resolves to the module-level
         # function above (not self.executive_summary) — no recursion.
-        return executive_summary(events, source_info={}, settings={})
+        base = executive_summary(events, source_info={}, settings={})
+        if not events:
+            return base
+
+        # Infer duration when not explicitly supplied
+        dur = (
+            duration_s
+            if duration_s is not None
+            else max(
+                (e.get("end_s", e.get("start_s", 0)) for e in events),
+                default=0,
+            )
+        )
+
+        temporal = self.temporal_analysis(events, dur)
+        trend = self.trend_direction(events, dur)
+
+        return (
+            f"{base} "
+            f"Activity was concentrated in the {temporal['peak_third']} portion of the recording. "
+            f"Activity trend: {trend}."
+        )
