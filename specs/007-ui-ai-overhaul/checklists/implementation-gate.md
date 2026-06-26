@@ -25,7 +25,7 @@
 - [x] CHK009 — Are the exact severity levels for log entries (INFO, EVENT, WARN, ERROR) enumerated with their trigger conditions in the spec? [Clarity, Spec §FR-016] ✓ Plan §Log Panel Polish enumerates all four with example entries
 - [x] CHK010 — Is "highest-confidence events" for Scene Breakdown defined as the `confidence` field from detection data? [Clarity, Spec §FR-010, data-model.md §SceneBreakdownEntry] ✓ data-model.md defines "sorted by confidence descending"
 - [x] CHK011 — Is the LLM fallback notice text specified precisely enough that two implementers would write the same string? [Clarity, Spec §FR-013] ✓ Spec gives example: "Executive summary: rule-based synthesis — LLM API unavailable"
-- [ ] CHK012 — Is the meaning of `current=0, total=0` for single-step stages ("markdown", "pdf") documented in the contracts? [Clarity, contracts/api.md] ⚠️ GAP: the contracts/api.md shows `"total": 0` for single-step stages but does not state this explicitly
+- [x] CHK012 — Is the meaning of `current=0, total=0` for single-step stages ("markdown", "pdf") documented in the contracts? [Clarity, contracts/api.md] ✓ FIXED: contracts/api.md §Field semantics now states this explicitly
 
 ---
 
@@ -35,7 +35,7 @@
 - [x] CHK014 — Are SSE event field names consistent across plan.md, contracts/api.md, and data-model.md? [Consistency] ✓ All three documents use `"ts"` for the timestamp field in `report_stage` events
 - [x] CHK015 — Is the `florence_available` field definition consistent between `/api/job/status` contract and its computation logic (transformers installed AND model weights cached)? [Consistency, contracts/api.md]
 - [x] CHK016 — Is the breaking change (`moondream_available` → `florence_available`) noted in both contracts/api.md and the task that must update export.js? [Consistency, contracts/api.md §Deprecated Fields]
-- [ ] CHK017 — Does the session state reset (`session.reset()`) clear the four new `report_stage_*` fields? [Consistency, data-model.md §Session State Extensions, plan.md §Global Constraints] ⚠️ Plan states "reset to defaults when session.reset() is called" but does not specify they must be added to `_DEFAULTS`
+- [x] CHK017 — Does the session state reset (`session.reset()`) clear the four new `report_stage_*` fields? [Consistency, data-model.md §Session State Extensions, plan.md §Global Constraints] ✓ FIXED: data-model.md now explicitly states all 5 fields (incl. report_done_pending) must be in `_DEFAULTS`; T007 updated accordingly
 
 ---
 
@@ -53,8 +53,8 @@
 - [x] CHK022 — Are requirements defined for the case where `formats=["pdf"]` but the Qt PDF bridge is unavailable? [Coverage, Spec §Edge Cases] ✓ "if Markdown was also requested it is still written; warning shown"
 - [x] CHK023 — Is the behaviour defined when fewer than 5 events exist (Scene Breakdown with <5 entries)? [Coverage, Spec §Edge Cases] ✓ "shows all available events (minimum 1)"
 - [x] CHK024 — Is the behaviour defined when a thumbnail file is missing at report generation time? [Coverage, Spec §Edge Cases] ✓ "that event's description is empty; other events unaffected"
-- [ ] CHK025 — Are requirements defined for what happens when a CLIP `.npy` write fails mid-generation (e.g. disk full)? [Coverage, Gap] ⚠️ Not explicitly addressed — should it abort CLIP silently and continue, or surface an error?
-- [ ] CHK026 — Are requirements defined for concurrent/simultaneous report generation attempts (two tabs)? [Coverage, Gap] ⚠️ Session is single-job but concurrent POST calls from two tabs are not addressed
+- [x] CHK025 — Are requirements defined for what happens when a CLIP `.npy` write fails mid-generation (e.g. disk full)? [Coverage, Gap] ✓ FIXED: tasks.md Global Constraint #11: "log WARNING, skip embedding for that event, continue report — do NOT abort"
+- [x] CHK026 — Are requirements defined for concurrent/simultaneous report generation attempts (two tabs)? [Coverage, Gap] ✓ FIXED: contracts/api.md §Concurrent call behaviour: second POST overwrites first — accepted per Principle I single-job architecture
 - [x] CHK027 — Is the model download progress scenario (first-run Florence-2 download) covered in spec edge cases? [Coverage, Spec §Edge Cases] ✓ "progress display should show 'Downloading AI model (first time)…'"
 
 ---
@@ -62,7 +62,7 @@
 ## Non-Functional Requirements
 
 - [x] CHK028 — Is disk space consumption (~230 MB Florence-2, ~600 MB CLIP) documented for the user? [NFR, plan.md §Technical Context]
-- [ ] CHK029 — Is a per-frame CPU inference timeout specified for Florence-2 to prevent indefinite blocking? [NFR, Gap] ⚠️ No timeout defined — a single slow/hung inference call could freeze report generation
+- [x] CHK029 — Is a per-frame CPU inference timeout specified for Florence-2 to prevent indefinite blocking? [NFR, Gap] ✓ FIXED: tasks.md Global Constraint #10: 30-second timeout per task via ThreadPoolExecutor; on timeout set field to "" and log WARN
 - [x] CHK030 — Is the SSE polling interval documented such that the "<500 ms progress update" goal can be validated? [NFR, plan.md §Architecture §SSE Stage Progress Pattern]
 
 ---
@@ -78,7 +78,7 @@
 
 ## Ambiguities & Conflicts
 
-- [ ] CHK035 — Does FR-013 create a conflict with FR-007 (format persists)? If the user selects "Markdown only" and the LLM notice only appears in the report header, is the notice visible in PDF format at all? [Ambiguity, Spec §FR-013] — Note: LLM notice is in the report content, not the format modal; no actual conflict but worth confirming
+- [x] CHK035 — Does FR-013 create a conflict with FR-007 (format persists)? [Ambiguity, Spec §FR-013] ✓ CONFIRMED: LLM notice is in report body content (not format modal), present in both MD and PDF output — no conflict
 - [x] CHK036 — Is the `object_caption` empty-string contract (not None) for MOG2 events (no crop to describe) documented? [Ambiguity, data-model.md §FrameAnalysis Validation rules]
 - [x] CHK037 — Is the SVG `viewBox="0 0 800 48"` coordinate space documented so both the backend SVG generator and any future frontend consumer produce consistent output? [Ambiguity, plan.md §SVG Activity Timeline, data-model.md §ActivityTimeline]
 

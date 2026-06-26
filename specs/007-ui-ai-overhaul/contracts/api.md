@@ -100,6 +100,8 @@ types MUST be silently ignored by all clients.
 | `llm_used` | `bool` | Yes | Was Claude Haiku API used for executive summary? |
 | `llm_notice` | `str` | Yes | `""` if LLM used; notice text if fallback used (e.g. "rule-based synthesis — LLM API unavailable") |
 
+**Concurrent call behaviour** (CHK026): If two POST calls arrive simultaneously (e.g. two browser tabs), the second call's `session.update()` calls overwrite the first — consistent with the session-first single-job architecture (Principle I). The first client's SSE stream may miss stage events from the second call; this is accepted behaviour and requires no error handling.
+
 **Error responses**:
 
 | Status | Condition |
