@@ -53,8 +53,17 @@ Frontend JS (`static/js/`) is exempt — verified via quickstart.md manual scena
   - `tests/test_frame_analyzer.py` — new file: tests for `FrameAnalyzer.analyze()`, `FrameAnalyzer.is_available()`, empty return when Florence-2 absent, correct dict shape `{caption, object_caption, detections, clip_embedding_path}`
   - `tests/test_llm_synthesizer.py` — new file: tests for `LLMSynthesizer.synthesize()` with no API key → returns rule-based string, with mock API error → falls back, `llm_used` flag returns correctly
   - `tests/test_narrative_synthesizer.py` — update existing file: add tests for new `temporal_analysis()` method (early/middle/late counts), `trend_direction()` method (rising/falling/sporadic/uniform)
-  - `tests/test_intel_report.py` — partial update: add test that `job.py` export endpoint accepts `formats=["md"]` param and returns `pdf_path=None`; mock FrameAnalyzer
-  - Run `pytest` to confirm all new tests FAIL (not skip) before proceeding to T003
+  - `tests/test_intel_report.py` — partial update (C1 FIX — Principle III: new app/core/ logic requires failing tests first):
+    - Test that `job.py` export endpoint accepts `formats=["md"]` param and returns `pdf_path=None`; mock FrameAnalyzer
+    - Test response fields: `florence_available` is bool, `llm_used` is bool, `llm_notice` is str (M2 FIX)
+    - Test `intel_report_renderer._build_svg_timeline(events, duration_s)` returns a string starting with `<svg` containing at least one `<rect` per event
+    - Test `intel_report_renderer._annotate_thumbnail(thumb_path, detections=[])` returns a non-empty base64 string when thumb exists; returns non-empty base64 string when thumb missing (fallback)
+    - Test `intel_report_renderer._build_scene_breakdown(events)` returns list of length min(5, len(events)); each entry has keys `{rank, caption, object_caption, detections, thumbnail_b64}`
+  - `tests/test_stream.py` — new file (C2 FIX — Principle III: new app/api/ logic requires failing tests first):
+    - Test that when session `report_stage` is non-empty, SSE poll emits a `report_stage` type event with stage/current/total/ts fields
+    - Test that when session `report_done_pending` is True, SSE poll emits a `report_done` type event with md_path/pdf_path; after emission `report_done_pending` is reset to False
+    - Test that when `report_stage=""` and `report_done_pending=False`, no `report_stage` or `report_done` events are emitted
+  - Run `pytest` to confirm all new tests FAIL (not skip — ImportError or AttributeError is acceptable) before proceeding to T003
 
 ---
 
@@ -66,7 +75,7 @@ Frontend JS (`static/js/`) is exempt — verified via quickstart.md manual scena
 
 - [ ] T003 [US1] Implement `app/core/frame_analyzer.py` — Florence-2 multi-task singleton:
   - Class `FrameAnalyzer` with class-level singleton `_instance`
-  - `is_available() -> bool`: try importing `Florence2ForConditionalGeneration`; return True if weights cached at `~/.cache/huggingface/hub/models--microsoft--Florence-2-base`
+  - `is_available() -> bool`: try importing `Florence2ForConditionalGeneration`; return True if weights cached at `Path.home() / ".cache" / "huggingface" / "hub" / "models--microsoft--Florence-2-base"` (M1 FIX — use pathlib.Path, not bare `~` string)
   - `analyze(image_path: Path) -> dict`: loads image with PIL, runs three tasks:
     1. `<MORE_DETAILED_CAPTION>` → `caption`
     2. `<OD>` → `detections` (list of `{label, bbox}`)
@@ -128,7 +137,8 @@ Frontend JS (`static/js/`) is exempt — verified via quickstart.md manual scena
 - [ ] T007 [US2] Update three files — session state, API endpoint, SSE stream:
 
   **`app/session.py`**:
-  - Add four fields to `_DEFAULTS`: `"report_stage": "", "report_stage_current": 0, "report_stage_total": 0, "report_stage_timestamp": ""`
+  - Add FIVE fields to `_DEFAULTS` (H1 FIX — adds `report_done_pending` to prevent race condition):
+    `"report_stage": "", "report_stage_current": 0, "report_stage_total": 0, "report_stage_timestamp": "", "report_done_pending": False`
 
   **`app/api/job.py`** — update `POST /job/intel-report/export`:
   - Accept JSON body `{"formats": list[str]}` (default `["md", "pdf"]` if missing); validate each element is "md" or "pdf"; return HTTP 400 if list is empty or contains invalid values
@@ -137,13 +147,12 @@ Frontend JS (`static/js/`) is exempt — verified via quickstart.md manual scena
   - Emit stage events via `session.update(report_stage="thumbnails", report_stage_current=n, report_stage_total=total)` at each stage boundary; for `ai_analysis` also update `report_stage_timestamp`
   - Response body: `{md_path: str|None, pdf_path: str|None, florence_available: bool, llm_used: bool, llm_notice: str}` — remove `moondream_available` field
   - Skip PDF generation if `"pdf"` not in formats (do not call Qt bridge); skip .md write if `"md"` not in formats
-  - Reset `report_stage` to `""` on completion (success or error) via `session.update(report_stage="")`
+  - On completion (success OR error): `session.update(report_stage="", report_done_pending=True)` — set `report_done_pending=True` BEFORE clearing `report_stage` so the SSE loop can capture it (H1 FIX)
 
   **`app/api/stream.py`**:
   - In the SSE poll loop, when `snap.get("report_stage")` is non-empty, emit:
     `{"type": "report_stage", "stage": ..., "current": ..., "total": ..., "ts": ...}`
-  - When `report_stage` transitions from non-empty to `""` AND `md_path` or `pdf_path` is present, emit:
-    `{"type": "report_done", "md_path": ..., "pdf_path": ...}` once, then stop emitting report_done
+  - When `snap.get("report_done_pending")` is True, emit `{"type": "report_done", "md_path": ..., "pdf_path": ...}` THEN call `session.update(report_done_pending=False)` to prevent duplicate emission (H1 FIX — no prior-state tracking needed; `report_done_pending` flag is the single source of truth)
 
   All tests from T002's job.py section must pass.
 
@@ -153,7 +162,7 @@ Frontend JS (`static/js/`) is exempt — verified via quickstart.md manual scena
 
 **Story goal**: Scene Breakdown section with annotated thumbnails, SVG activity timeline, full-length descriptions, confidence colour bars.
 
-**Independent test criteria**: Generate a report via the running app; open the HTML/PDF and verify Scene Breakdown section and SVG timeline are present.
+**Independent test criteria**: `pytest tests/test_intel_report.py -v` — all intel_report_renderer tests pass (written in T002). Additionally: generate a report via the running app; verify Scene Breakdown section and SVG timeline are present in the output.
 
 - [ ] T008 [US2] Update two files — renderer and HTML template:
 
@@ -226,7 +235,7 @@ Frontend JS (`static/js/`) is exempt — verified via quickstart.md manual scena
 **Purpose**: Remove replaced module, update optional deps docs, update ROADMAP.
 
 - [ ] T012 Cleanup three items (no new tests needed — existing tests must still pass):
-  - Delete `app/core/frame_describer.py` (replaced by frame_analyzer.py); ensure no remaining imports
+  - Before deleting `app/core/frame_describer.py`: run `grep -r "frame_describer" app/ tests/` and update ALL found import sites (L1 FIX — job.py and others may still reference frame_describer); then delete the file
   - Update `requirements.txt`: replace the BLIP comment block with documentation for new optional deps:
     ```
     # Optional — AI visual frame analysis in intelligence reports (install separately)

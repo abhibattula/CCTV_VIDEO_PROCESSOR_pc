@@ -28,6 +28,12 @@
 }
 ```
 
+**Field semantics for `report_stage` event** (L2 FIX — clarifies FR-009 mapping):
+- `current` = the frame number currently being analysed (1-based during `ai_analysis` stage)
+- `total` = total number of frames to analyse in this stage
+- `ts` = source video timestamp of the frame being analysed (e.g. "00:01:23")
+- For single-step stages (`markdown`, `pdf`): `current=0`, `total=0`, `ts=""` — the stage simply appears active then completes
+
 **Backwards compatibility**: New event types are additive. Existing consumers that
 only handle `progress`, `event`, `complete` events are unaffected — unknown event
 types MUST be silently ignored by all clients.
@@ -47,6 +53,7 @@ types MUST be silently ignored by all clients.
   "report_stage_current": 0,
   "report_stage_total": 0,
   "report_stage_timestamp": "",
+  "report_done_pending": false,
   "florence_available": true,
   "llm_available": false
 }

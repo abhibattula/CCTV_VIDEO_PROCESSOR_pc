@@ -92,10 +92,19 @@ New fields added to `app/session.py` `_DEFAULTS` dict:
 "report_stage_current": 0,
 "report_stage_total": 0,
 "report_stage_timestamp": "",  # video timestamp of frame currently being analysed
+"report_done_pending": False,  # H1 FIX: set True once when generation completes;
+                               # SSE loop emits report_done then clears to False
 ```
 
-These fields are read by `stream.py` in the SSE poll loop and emitted as
-`report_stage` events when `report_stage != ""`.
+These fields are read by `stream.py` in the SSE poll loop:
+- `report_stage != ""` → emit `report_stage` event
+- `report_done_pending == True` → emit `report_done` event, then `session.update(report_done_pending=False)`
+
+**Setting order in job.py at generation completion** (prevents race condition):
+```python
+session.update(report_done_pending=True)  # set BEFORE clearing report_stage
+session.update(report_stage="")
+```
 
 ---
 
