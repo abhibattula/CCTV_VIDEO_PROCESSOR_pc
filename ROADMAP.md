@@ -1,10 +1,10 @@
 # Roadmap — Future Phases
 
 This is a living list of features and improvements identified as good next
-steps for this project, beyond what's shipped (Phases 1-5: detection, timeline
+steps for this project, beyond what's shipped (Phases 1-6: detection, timeline
 review, undo, export presets, theme, ROI zone drawing, Stop Application, New
 Project, activity heatmap overlay, PDF/HTML incident report, CSV/JSON event log
-export). Nothing here is scheduled or committed — when one of these gets
+export, Video Intelligence Report with Moondream2 visual descriptions). Nothing here is scheduled or committed — when one of these gets
 picked up, it should run through the project's normal speckit pipeline
 (`/speckit.specify` → `/speckit.clarify` → `/speckit.plan` → `/speckit.tasks` →
 `/speckit.analyze` → `/speckit.implement`) and get its own numbered spec under
@@ -157,23 +157,48 @@ support burden.
 
 ---
 
+## F. Video Intelligence Export — ✅ Shipped in Phase 6
+
+Natural language "Video Intelligence Report" (Markdown + PDF) generated from any
+completed detection run. Report includes: executive summary, activity statistics,
+object inventory (YOLO), chronological timeline, key moments with thumbnails,
+activity heatmap section, detection configuration, and a machine-readable JSON
+data appendix structured for AI chatbot RAG context.
+
+Optional Moondream2 local vision model (~2 GB, offline, `pip install moondream`)
+adds visual descriptions to each event thumbnail in the timeline — graceful fallback
+when not installed. Markdown output is structured for Phase 7's in-app AI chatbot.
+
+All shipped in Phase 6.
+
+**Remaining ideas in this space** (not yet implemented):
+- Phase 7: in-app AI chatbot that loads the intelligence report Markdown as RAG
+  context and lets the user ask natural language questions about the footage
+- LLM-generated executive summary (Phase 7's chatbot backend would handle this,
+  replacing the current rule-based synthesis)
+- Per-session Moondream download progress indicator (currently endpoint blocks
+  silently on first ~2 GB download; a WebSocket progress stream would improve UX)
+
+---
+
 ## Suggested Order
 
 This is one reasonable sequence, not the only one — re-evaluate when any item
 is actually picked up:
 
 1. ~~**C (Professional Reporting)**~~ — **shipped in Phase 5**
-2. **D (Settings + first-run polish)** — same low-risk, high-perceived-value
+2. ~~**F (Video Intelligence Export)**~~ — **shipped in Phase 6**
+3. **D (Settings + first-run polish)** — same low-risk, high-perceived-value
    profile; natural to bundle 2-3 of these into one phase the way Phase 3
    bundled undo+presets+theme.
-3. **B1 (face/plate blur)** — contained, high-impact, standalone; doesn't
+4. **B1 (face/plate blur)** — contained, high-impact, standalone; doesn't
    touch the job/session architecture.
-4. **A (batch processing)** — deliberately last among the "foundational"
+5. **A (batch processing)** — deliberately last among the "foundational"
    items, because it deserves its own explicit conversation about the
    single-job-at-a-time tradeoff rather than being smuggled in as a side
    effect of something else.
-5. **B2/B3 (semantic search, object tracking)** — the most exciting and the
+6. **B2/B3 (semantic search, object tracking)** — the most exciting and the
    most speculative; best explored once the more foundational items above are
    in place and there's a clearer sense of what users actually ask for next.
-6. **B4, E** — low-effort items that can slot into whichever phase has spare
+7. **B4, E** — low-effort items that can slot into whichever phase has spare
    capacity; no need to schedule them on their own.

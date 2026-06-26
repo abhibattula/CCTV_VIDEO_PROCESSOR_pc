@@ -83,6 +83,18 @@ export function mount(container, params) {
         <p class="muted" id="report-status-text" style="font-size:12px;margin-top:8px"></p>
       </div>
 
+      <!-- Video Intelligence Report (Phase 6) -->
+      <div class="card export-section" id="intel-report-section">
+        <div class="section-label">Video Intelligence Report</div>
+        <p class="muted" style="font-size:12px;margin:6px 0 10px">
+          Natural language report describing what happened in the video — executive summary,
+          timeline, object inventory, and PDF. Saved to your output folder.<br>
+          <span style="margin-top:4px;display:inline-block">Tip: install <code>transformers</code> (<code>pip install transformers accelerate</code>) to add AI visual descriptions to the timeline. First use downloads the model (~900 MB, one-time, fully offline).</span>
+        </p>
+        <button class="btn" id="intel-report-btn">Generate Intelligence Report (Markdown + PDF)</button>
+        <p class="muted" id="intel-report-status" style="font-size:12px;margin-top:8px"></p>
+      </div>
+
       <!-- Export action -->
       <div id="export-action-row">
         <button class="btn btn-primary btn-lg" id="export-btn">Export Now</button>
@@ -490,6 +502,33 @@ export function mount(container, params) {
 
   container.querySelector("#event-csv-btn").addEventListener("click", () => downloadEventLog("csv"));
   container.querySelector("#event-json-btn").addEventListener("click", () => downloadEventLog("json"));
+
+  // ── Video Intelligence Report (T009) ────────────────────────────────────────
+
+  container.querySelector("#intel-report-btn").addEventListener("click", async () => {
+    const btn = container.querySelector("#intel-report-btn");
+    const status = container.querySelector("#intel-report-status");
+    btn.disabled = true;
+    status.textContent = "Generating…";
+    try {
+      const resp = await fetch("/api/job/intel-report/export", { method: "POST" });
+      const data = await resp.json();
+      if (!resp.ok) {
+        status.textContent = data.detail || "Generation failed.";
+      } else {
+        const pdfPath = data.md_path.replace(/\.md$/, ".pdf");
+        window.dispatchEvent(new CustomEvent("cctv:generate-intel-report", { detail: { pdf_path: pdfPath } }));
+        status.textContent = `Markdown saved to ${data.md_path}. PDF generating to same folder.`;
+        if (!data.moondream_available) {
+          status.textContent += " Run 'pip install transformers accelerate' to enable AI visual descriptions.";
+        }
+      }
+    } catch (err) {
+      status.textContent = "Error: " + err.message;
+    } finally {
+      btn.disabled = false;
+    }
+  });
 
   loadSummary().then(() => {
     loadCustomPresets();
