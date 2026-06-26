@@ -213,3 +213,27 @@ def timeline_entries(events: list[dict], descriptions: dict) -> list[dict]:
         )
 
     return entries
+
+
+# ---------------------------------------------------------------------------
+# NarrativeSynthesizer class — thin OO wrapper used by LLMSynthesizer
+# Extended by T006 with temporal_analysis() and trend_direction()
+# ---------------------------------------------------------------------------
+
+class NarrativeSynthesizer:
+    """OO wrapper around module-level narrative functions.
+
+    Provides an instance interface expected by LLMSynthesizer.synthesize().
+    T006 will add temporal_analysis() and trend_direction() as class methods
+    and enrich executive_summary() to incorporate them.
+    """
+
+    def executive_summary(self, events: list) -> str:
+        """Return a rule-based executive summary string.
+
+        Delegates to the module-level executive_summary() function with
+        default source_info so callers only need to pass the events list.
+        """
+        # NOTE: bare name 'executive_summary' resolves to the module-level
+        # function above (not self.executive_summary) — no recursion.
+        return executive_summary(events, source_info={}, settings={})
