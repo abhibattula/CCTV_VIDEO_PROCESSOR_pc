@@ -1,236 +1,247 @@
-# Spec: Phase 10 — Test Coverage Gaps
+# Feature Specification: Phase 10 — Test Coverage Gaps
 
-**Branch:** `010-test-coverage-gaps` off `009-stability-fixes`
-**Date:** 2026-06-29
-**Status:** Approved for implementation
-
----
-
-## Overview
-
-The CCTV Video Processor has accumulated 140 tests across 9 phases. A full coverage audit
-(conducted 2026-06-29) identified critical untested paths, zero-coverage modules, and a CI
-blind spot where video-dependent tests silently skip. This phase closes those gaps through
-~58 new tests across 7 new or expanded test files, raising the suite to ~198 tests.
+**Feature Branch**: `010-test-coverage-gaps`  
+**Created**: 2026-06-29  
+**Status**: Approved for Planning  
 
 ---
 
-## Coverage Audit — Findings
+## User Scenarios & Testing *(mandatory)*
 
-### Zero-Coverage Modules (no test file exists)
+### User Story 1 — Job Lifecycle Test Coverage (Priority: P1)
 
-| Module | Lines | Risk | Details |
-|--------|-------|------|---------|
-| `app/api/shell_bridge.py` | 59 | HIGH | 4 endpoints: `set_filepath`, `get_pending_path`, `open_output_folder`, `set_output_dir` — Browse/drag-drop path (B1 fix in Phase 9 has no regression tests) |
-| `app/api/system.py` | 28 | LOW | `system_stats`, `system_capabilities` endpoints |
-| `app/core/clip_indexer.py` | 73 | MEDIUM | `ClipIndexer` class used by export pipeline |
-| `app/core/log_buffer.py` | 59 | MEDIUM | Ring buffer with thread safety; used in every job run |
-| `app/core/report_renderer.py` | 26 | LOW | Template rendering wrapper |
-| `shell/main_window.py` | ~500 | HIGH | Extractable logic: `closeEvent`, `check_shutdown`, `_get_output_dir`, PDF result bridge |
-| `launcher.py` | ~60 | MEDIUM | SIGINT handler + QTimer setup |
+A developer modifying the job start, cancel, or query endpoints needs automated
+checks that catch regressions without requiring a real video file. Currently the
+entire `start_job` handler (~60 lines), `cancel_job`, and `get_events` have zero
+automated coverage — the most critical code paths in the application.
 
-### Critical Missing Cases in Covered Modules
+**Why this priority**: `start_job` orchestrates the detection thread, session
+transitions, and error handling. Any regression here breaks the core user
+workflow silently in CI.
 
-| Gap | File | Risk |
-|-----|------|------|
-| `start_job` endpoint — entire 60-line handler untested | `app/api/job.py` | CRITICAL |
-| `cancel_job` endpoint — zero tests | `app/api/job.py` | HIGH |
-| `get_events` endpoint — zero tests | `app/api/job.py` | MEDIUM |
-| Status conflict: `POST /job/start` while status is `"detecting"` | `app/api/job.py` | HIGH |
-| Thread exception propagates to `session.error_msg` | `app/api/job.py` | HIGH |
-| YOLO ImportError path in `start_job` | `app/api/job.py` | MEDIUM |
+**Independent Test**: Can be fully tested by verifying session state transitions,
+HTTP response codes, and thread completion behaviour using a fake detector
+function, delivering a verifiable job lifecycle without a real video file.
 
-### CI Blind Spot — Silently Skipped Tests
+**Acceptance Scenarios**:
 
-| Test file | Skipped | Condition |
-|-----------|---------|-----------|
-| `test_detection_engine.py` | 5 of 8 | No test video |
-| `test_ffprobe.py` | 2 of 9 | No test video |
-| `test_api_job.py` | 3 of 31 | No test video |
-| `test_ffmpeg_path.py` | 2 of 4 | No ffprobe binary |
-
-Each video-dependent test needs a paired mock test that exercises the same logic path
-without a real video file, so regressions are caught in CI.
-
-### Thin Coverage (meaningful logic, few tests)
-
-| Module | Lines | Current Tests | Untested Logic |
-|--------|-------|---------------|----------------|
-| `app/core/narrative_synthesizer.py` | 318 | 4 | `timeline_entries`, `seconds_to_clock` edges, `NarrativeSynthesizer` class |
-| `app/api/stream.py` | 157 | 4 | Cancel mid-stream, client reconnect, heartbeat timing |
-| `app/core/thumbnail_gen.py` | 57 | 2 | ffmpeg failure path |
-| `app/core/llm_synthesizer.py` | 90 | 4 | Timeout path, offline fallback |
+1. **Given** session status is `"idle"`, **When** `POST /api/job/start` is called, **Then** response is `{"status": "detecting"}` and session transitions to `"detecting"`
+2. **Given** session status is already `"detecting"`, **When** `POST /api/job/start` is called again, **Then** response is HTTP 400 with an informative message
+3. **Given** `start_job` is called with a fake detector that raises an exception, **When** the detection thread runs, **Then** session status becomes `"error"` and `error_msg` is populated
+4. **Given** `ultralytics` package is absent and mode is `"yolo"`, **When** `POST /api/job/start` is called, **Then** response is HTTP 400 before any thread is spawned
+5. **Given** a fake detector emits 2 events then completes, **When** the thread finishes, **Then** session status becomes `"completed"` and `event_count` equals 2
+6. **Given** a job is running, **When** `POST /api/job/cancel` is called, **Then** the cancel signal is set and session eventually becomes `"cancelled"`
+7. **Given** session has events stored, **When** `GET /api/job/events` is called, **Then** the response contains the correct event list
 
 ---
 
-## User Stories
+### User Story 2 — Shell Bridge API Coverage (Priority: P1)
 
-### US1 — `start_job`, `cancel_job`, `get_events` Coverage (P1)
+A developer making changes to the Browse/drag-drop pipeline (`/api/shell/*`)
+needs regression tests. Phase 9 fixed the browse race condition (B1) but added
+no backend tests for the four shell bridge endpoints.
 
-**Goal:** The core job lifecycle — start, run, cancel, query — is covered by automated tests
-that run without a real video file. Developers can refactor `start_job` with confidence.
+**Why this priority**: Shell bridge endpoints gate the primary file selection UX.
+Without tests, the Phase 9 B1 fix has no regression guard.
 
-**Acceptance Criteria:**
-- `POST /job/start` returns `{"status": "detecting"}` and transitions session to `detecting`
-- `POST /job/start` returns 400 when status is already `"detecting"`
-- Thread exception causes session status to become `"error"` with `error_msg` set
-- YOLO mode with missing `ultralytics` package returns 400 with helpful message
-- With fake detector: status transitions `detecting → completed`, `event_count` matches emitted events
-- `POST /job/cancel` sets `_cancel_event`, session status becomes `"cancelled"`
-- Fake detector respects `cancel_event.is_set()` and stops early
-- `GET /job/events` returns current events list from session
+**Independent Test**: Can be fully tested by calling the shell bridge endpoints
+directly via the FastAPI test client and asserting session state changes, independently
+of the detection pipeline.
 
-**New file:** `tests/test_api_job_lifecycle.py`
-**Test count:** ~14
+**Acceptance Scenarios**:
 
----
-
-### US2 — Shell Bridge Endpoint Coverage (P1)
-
-**Goal:** The Browse/drag-drop pipeline (`/api/shell/*`) is regression-tested. Phase 9 fixed
-B1 (browse race condition) but added no backend API tests for the bridge endpoints.
-
-**Acceptance Criteria:**
-- `POST /api/shell/filepath` stores path in session pending state; returns 200
-- `GET /api/shell/pending-path` returns stored path and clears it on first read
-- `GET /api/shell/pending-path` returns `{"path": null}` when nothing pending
-- `POST /api/shell/output-dir` updates `session.output_dir` and returns 200
-- `POST /api/shell/output-dir` with empty string returns 400
-- `GET /api/shell/open-output-folder` calls `os.startfile` with correct path (mocked)
-- `GET /api/shell/open-output-folder` returns 400 when no output folder set
-
-**New file:** `tests/test_api_shell_bridge.py`
-**Test count:** ~8
+1. **Given** a valid file path, **When** `POST /api/shell/filepath` is called, **Then** the path is stored in session pending state and HTTP 200 is returned
+2. **Given** a path was stored, **When** `GET /api/shell/pending-path` is called, **Then** the stored path is returned and cleared atomically (second call returns `null`)
+3. **Given** nothing is pending, **When** `GET /api/shell/pending-path` is called, **Then** response is `{"path": null}`
+4. **Given** a valid directory path, **When** `POST /api/shell/output-dir` is called, **Then** `session.output_dir` is updated and HTTP 200 is returned
+5. **Given** an empty string is sent, **When** `POST /api/shell/output-dir` is called, **Then** HTTP 400 is returned
+6. **Given** an output folder is set in session, **When** `POST /api/shell/open-output-folder` is called, **Then** the OS folder-open command is invoked with the correct path (mocked)
+7. **Given** no output folder is set, **When** `POST /api/shell/open-output-folder` is called, **Then** HTTP 400 is returned
 
 ---
 
-### US3 — `log_buffer` and `clip_indexer` Unit Coverage (P2)
+### User Story 3 — Utility Class Contract Coverage (Priority: P2)
 
-**Goal:** The two zero-coverage utility classes used internally by the job pipeline have
-unit tests that document their contracts and catch regressions.
+A developer working on the log streaming or CLIP embedding pipeline needs unit
+tests that document the contracts of `LogBuffer` and `ClipIndexer` and catch
+regressions in their internal behaviour.
 
-**Acceptance criteria — LogBuffer:**
-- `append(job_id, line)` stores lines retrievable via `get(job_id)`
-- Ring buffer caps at configured size; oldest lines dropped when full
-- `reset(job_id)` clears only that job's buffer, leaving others intact
-- Concurrent appends from multiple threads do not corrupt internal state
-- `get` on unknown job_id returns empty list (not KeyError)
+**Why this priority**: `LogBuffer` is used in every job run; a regression in its
+ring-buffer or pub/sub logic would break all streaming output. `ClipIndexer` is
+a graceful-degradation wrapper; tests verify it never raises to callers.
 
-**Acceptance criteria — ClipIndexer:**
-- `add(event)` stores event retrievable by index
-- `get(idx)` returns correct event for valid index
-- `get(idx)` raises `IndexError` for out-of-range index
-- `clear()` resets the index to empty
-- `count` property returns correct number of indexed events
+**Independent Test**: Both classes can be fully tested with no external dependencies:
+`LogBuffer` via direct method calls; `ClipIndexer` via monkeypatching its availability
+check and embed function.
 
-**New files:** `tests/test_log_buffer.py`, `tests/test_clip_indexer.py`
-**Test count:** ~12
+**Acceptance Scenarios — LogBuffer**:
 
----
+1. **Given** lines are appended for a job, **When** `subscribe(job_id)` is called, **Then** the queue immediately contains the replayed history lines
+2. **Given** a subscriber queue exists, **When** `append(job_id, line)` is called, **Then** the new line is placed on the queue (requires asyncio event loop)
+3. **Given** a job's history is at ring-buffer capacity, **When** one more line is appended, **Then** the oldest line is dropped and buffer size does not exceed the limit
+4. **Given** a job's history exists, **When** `reset(job_id)` is called, **Then** that job's history is cleared and other jobs' histories are unaffected
+5. **Given** `close(job_id)` is called, **When** a subscriber reads the queue, **Then** the sentinel `"__DONE__"` is eventually received
 
-### US4 — Narrative Synthesizer Gap Coverage (P2)
+**Acceptance Scenarios — ClipIndexer**:
 
-**Goal:** The 318-line `narrative_synthesizer.py` module — which drives all human-readable
-report text — has comprehensive tests for its untested functions and class.
-
-**Acceptance Criteria:**
-- `seconds_to_clock(0)` returns `"0:00:00"`
-- `seconds_to_clock(3661)` returns `"1:01:01"`
-- `seconds_to_clock(90)` returns `"0:01:30"`
-- `timeline_entries` returns one entry per event, sorted by `start_s`
-- `timeline_entries` with empty events list returns empty list
-- `timeline_entries` includes `description` field from provided descriptions dict
-- `NarrativeSynthesizer.run()` calls `executive_summary`, `activity_stats`, `timeline_entries`
-- `NarrativeSynthesizer.run()` result contains keys `summary`, `stats`, `timeline`
-
-**Expanded file:** `tests/test_narrative_synthesizer.py` (append, preserve existing)
-**Test count:** ~8
+1. **Given** `open_clip` package is not installed, **When** `is_available()` is called, **Then** it returns `False`
+2. **Given** `is_available()` is monkeypatched to return `False`, **When** `embed(image_path)` is called, **Then** it returns `None` without raising
+3. **Given** `_do_embed` raises an exception, **When** `embed(image_path)` is called, **Then** it returns `None` without raising (graceful degradation)
+4. **Given** `_do_embed` is monkeypatched to return a sidecar path, **When** `embed(image_path)` is called, **Then** it returns that path
+5. **Given** `is_available()` returns `True` but the image file does not exist, **When** `embed(image_path)` is called, **Then** it returns `None` without raising
 
 ---
 
-### US5 — Extractable Qt Shell Logic (P2)
+### User Story 4 — Narrative Synthesizer Coverage (Priority: P2)
 
-**Goal:** Business logic inside `shell/main_window.py` that does not require a running Qt
-display is unit-tested with PyQt6 mocked at import time. This provides regression coverage
-for the Phase 9 B3/B4/B6 fixes without needing a GUI environment.
+A developer modifying the report text generation functions needs comprehensive
+checks across the 318-line `narrative_synthesizer.py` module. Currently only
+4 tests exist, leaving `seconds_to_clock`, `timeline_entries`, and the
+`NarrativeSynthesizer` class untested.
 
-**Qt mocking strategy:** `sys.modules` patching of `PyQt6.QtWidgets`, `PyQt6.QtCore`,
-`PyQt6.QtWebEngineWidgets`, `PyQt6.QtGui` before importing `shell.main_window` — only the
-pure-Python logic paths are exercised.
+**Why this priority**: The narrative module drives all human-readable report
+content. Gaps here allow silent regressions in output formatting.
 
-**Acceptance Criteria:**
-- `_get_desktop_path()` in `shell/main_window.py` returns a non-empty string (Windows + fallback)
-- `closeEvent` logic: when `requests.get` returns status `"detecting"`, event is ignored (hide)
-- `closeEvent` logic: when `requests.get` returns status `"idle"`, `quit()` is called
-- `closeEvent` logic: when `requests.get` raises (backend down), `quit()` is called
-- `check_shutdown` calls `QTimer.singleShot` with 2000ms after backend stops
-- `_inject_js_bridge` injects `window._cctvPdfResult = null` into the JS string
+**Independent Test**: Pure-function module with no external dependencies — all
+scenarios testable by calling functions directly with synthetic event data.
 
-**New file:** `tests/test_shell_logic.py`
-**Test count:** ~6
+**Acceptance Scenarios**:
 
----
-
-### US6 — SSE Stream, System API, and Completeness (P3)
-
-**Goal:** Remaining low-hanging gaps are closed: SSE cancel behaviour, system API contract,
-thumbnail error path, and paired mock tests for CI blind spots.
-
-**Acceptance Criteria — SSE stream:**
-- When `cancel_event` is set mid-stream, `_event_generator` stops yielding within one poll cycle
-- Generator yields `data: ping` heartbeat when no events pending
-- Client disconnect (GeneratorExit) is handled without exception propagating
-
-**Acceptance Criteria — System API:**
-- `GET /api/system/stats` returns JSON with keys `cpu_percent`, `ram_percent`, `disk_free_gb`
-- `GET /api/system/capabilities` returns JSON with key `florence_available` (bool)
-
-**Acceptance Criteria — Thumbnail error path:**
-- `thumbnail_gen.run()` with a failing ffmpeg command (mocked) does not raise; logs error and continues
-
-**Acceptance Criteria — CI blind spot mock pairs:**
-- `test_create_job_valid_file` has a paired mock version that does not require test video
-- `test_preview_frame_extracts_and_caches` has a paired mock version
-- `test_thumbnail_stage_progress_after_run` has a paired mock version
-
-**New/expanded files:** expand `tests/test_stream.py`, add `tests/test_api_system.py`, expand `tests/test_thumbnail_gen.py`
-**Test count:** ~10
+1. **Given** `s = 0`, **When** `seconds_to_clock(0)` is called, **Then** result is `"00:00"`
+2. **Given** `s = 90`, **When** `seconds_to_clock(90)` is called, **Then** result is `"01:30"`
+3. **Given** `s = 3661`, **When** `seconds_to_clock(3661)` is called, **Then** result is `"01:01:01"`
+4. **Given** a list of 3 events with `start_s` values, **When** `timeline_entries(events, {})` is called, **Then** result contains 3 entries each with `event_num`, `start_clock`, `end_clock`, `duration_s`, `label`, `confidence_pct`, `description`
+5. **Given** an empty events list, **When** `timeline_entries([], {})` is called, **Then** result is `[]`
+6. **Given** descriptions dict contains an entry for `event_index=0`, **When** `timeline_entries` is called, **Then** that description appears verbatim in the entry
+7. **Given** a missing description for an event, **When** `timeline_entries` is called, **Then** the `description` field defaults to `"N/A"`
+8. **Given** events spread across all three time thirds, **When** `temporal_analysis(events, duration_s)` is called, **Then** result has `"early"`, `"middle"`, `"late"` counts and `"peak_third"` identifying the most active third
+9. **Given** second-half events are more than 1.5× first-half, **When** `trend_direction(events, duration_s)` is called, **Then** result is `"rising"`
 
 ---
 
-## New and Expanded Test Files
+### User Story 5 — Qt Shell Logic Coverage (Priority: P2)
 
-| File | Story | Status |
-|------|-------|--------|
-| `tests/test_api_job_lifecycle.py` | US1 | New |
-| `tests/test_api_shell_bridge.py` | US2 | New |
-| `tests/test_log_buffer.py` | US3 | New |
-| `tests/test_clip_indexer.py` | US3 | New |
-| `tests/test_narrative_synthesizer.py` | US4 | Expand |
-| `tests/test_shell_logic.py` | US5 | New |
-| `tests/test_stream.py` | US6 | Expand |
-| `tests/test_api_system.py` | US6 | New |
-| `tests/test_thumbnail_gen.py` | US6 | Expand |
+A developer modifying `shell/main_window.py` needs tests for the extractable
+business logic that does not require a running display. Phase 9 fixed B3 (close
+behaviour), B4 (PDF result bridge), and B6 (Desktop path) — none of these fixes
+have regression tests.
+
+**Why this priority**: Phase 9 fixes to shutdown and PDF feedback have no
+automated guards; any future edit can silently break them.
+
+**Independent Test**: PyQt6 modules are replaced with minimal stub types before
+importing `shell.main_window`, allowing pure-Python logic paths to be exercised
+without a display server.
+
+**Acceptance Scenarios**:
+
+1. **Given** Windows shell API is available, **When** `_get_desktop_path()` is called, **Then** it returns a non-empty string (Windows CSIDL path or `~/Desktop` fallback)
+2. **Given** backend reports status `"detecting"`, **When** `closeEvent` is triggered, **Then** the close event is ignored (window stays open or hides to tray, `quit()` not called)
+3. **Given** backend reports status `"idle"`, **When** `closeEvent` is triggered, **Then** `quit()` is called
+4. **Given** backend request raises an exception, **When** `closeEvent` is triggered, **Then** `quit()` is called (fail-safe)
+5. **Given** backend has stopped, **When** `check_shutdown` runs, **Then** `QTimer.singleShot` is called with a 2000 ms delay
 
 ---
 
-## Success Criteria
+### User Story 6 — SSE Stream, System API, and CI Blind Spots (Priority: P3)
 
-| Criterion | Target |
-|-----------|--------|
-| Total test count | ≥ 195 (from 140) |
-| Zero-coverage modules eliminated | 6 of 7 (Qt shell partially covered via mocks) |
-| `start_job` endpoint coverage | All 6 acceptance criteria passing |
-| CI blind spot mock pairs | 3 new mock variants, always run |
-| All new tests pass without test video or ffprobe binary | Yes |
-| No existing test broken | Yes |
+A developer working on the SSE stream, system API endpoints, or thumbnail
+generation needs tests for currently uncovered paths. Additionally, 12 tests
+silently skip in CI due to missing video files; each needs a mock counterpart
+that always runs.
+
+**Why this priority**: CI blind spots mean broken code can ship undetected.
+System API and SSE edge cases have never been validated.
+
+**Independent Test**: System API testable via test client; SSE testable via
+asyncio; mock counterparts testable with monkeypatched subprocess calls.
+
+**Acceptance Scenarios — System API**:
+
+1. **Given** a running app, **When** `GET /api/system/stats` is called, **Then** response JSON contains exactly keys `cpu_pct`, `ram_pct`, `cpu_temp`
+2. **Given** a running app without `ultralytics`, **When** `GET /api/system/capabilities` is called, **Then** response JSON contains `{"yolo_available": false}`
+
+**Acceptance Scenarios — SSE stream**:
+
+3. **Given** `_MAX_IDLE_POLLS` consecutive idle polls occur, **When** the generator loop runs, **Then** it exits cleanly (does not hang)
+4. **Given** a `GeneratorExit` is raised during iteration, **When** the generator handles it, **Then** no exception propagates to the caller
+
+**Acceptance Scenarios — Thumbnail error path**:
+
+5. **Given** the ffmpeg subprocess call fails, **When** `thumbnail_gen.run()` is called, **Then** the error is logged and the function returns without raising
+
+**Acceptance Scenarios — CI mock counterparts**:
+
+6. **Given** no real video file is present, **When** mock-paired variants of the 12 skipped tests run, **Then** they pass by exercising the same logic path through monkeypatching
+
+---
+
+### Edge Cases
+
+- What happens when `start_job` is called while status is `"exporting"`? (same 400 rejection as `"detecting"`)
+- What happens when `LogBuffer.close()` is called with no subscribers? (no-op, no exception)
+- What happens when `ClipIndexer.embed()` is called with a path that is a directory? (returns None without raising)
+- What happens when `seconds_to_clock` receives a float with sub-second precision? (truncated to int)
+- What happens when `timeline_entries` receives events with no `event_index` key? (defaults to 0)
+
+---
+
+## Requirements *(mandatory)*
+
+### Functional Requirements
+
+- **FR-001**: The test suite MUST include checks for all six acceptance-criteria groups in US1 (job lifecycle state machine and thread lifecycle)
+- **FR-002**: The test suite MUST include checks for all seven acceptance-criteria items in US2 (shell bridge endpoints)
+- **FR-003**: The test suite MUST include checks for the five LogBuffer acceptance criteria and five ClipIndexer acceptance criteria in US3
+- **FR-004**: The test suite MUST include checks for all nine narrative synthesizer acceptance criteria in US4, using correct expected values derived from the actual implementation
+- **FR-005**: The test suite MUST include checks for all five Qt shell logic acceptance criteria in US5 using PyQt6 module mocking
+- **FR-006**: The test suite MUST include checks for all six acceptance-criteria items in US6 (system API, SSE, thumbnail, CI mock pairs)
+- **FR-007**: All new checks MUST pass in a standard developer environment without a connected video file, camera hardware, GPU, or display server
+- **FR-008**: No existing passing check MUST be broken by the new additions
+- **FR-009**: New checks for CI blind spots MUST run unconditionally (no `pytest.mark.skipif` on real-hardware conditions)
+- **FR-010**: Fake-detector checks for US1 thread lifecycle MUST use a detector that sleeps 50 ms then calls `on_event` twice, verifying real thread completion without busy-waiting
+
+### Key Entities
+
+- **TestSession**: Reusable fixture that resets `app.session` to a known `"ready"` state before each test, providing `job_id`, `source_path`, `source_info`
+- **FakeDetector**: A callable matching the `detection_engine.run` signature that sleeps 50 ms, optionally checks `cancel_event`, then emits 2 synthetic events via `on_event` — used for thread lifecycle tests without a real video
+- **MockDetector**: A callable matching the `detection_engine.run` signature that returns immediately (lambda) — used for state machine tests where thread speed matters
+- **QtStubRegistry**: A dict of minimal PyQt6 stub types (QApplication, QMainWindow, QTimer, QWebEngineView, etc.) inserted into `sys.modules` before importing `shell.main_window`, removed and restored after each test
+
+---
+
+## Success Criteria *(mandatory)*
+
+### Measurable Outcomes
+
+- **SC-001**: At least 55 new automated checks are added, raising the total suite count from 140 to at least 195
+- **SC-002**: Zero new checks use `pytest.mark.skipif` with hardware-availability conditions; all new checks pass unconditionally in a standard developer machine environment
+- **SC-003**: All 6 zero-coverage modules identified in the audit (shell bridge, system API, ClipIndexer, LogBuffer, narrative synthesizer gaps, Qt shell logic) have at least one passing check after this phase
+- **SC-004**: The critical job lifecycle path (`start_job` through `completed` status) has both a state-machine check (instant mock) and a thread lifecycle check (fake detector with real thread completion)
+- **SC-005**: All new checks pass without modification when run in CI (no video file, no ffprobe, no GPU, no display)
+- **SC-006**: No previously passing check is broken by the new additions (suite passes as a whole)
+
+---
+
+## Assumptions
+
+- The test suite runs with `pytest` and uses the FastAPI `TestClient` for endpoint tests
+- `app.session` can be reset between tests by importing the module and calling `session.reset()` or by direct state manipulation
+- The `detection_engine.run` function can be monkeypatched at the module level for job lifecycle tests
+- PyQt6 is not installed in the CI environment; Qt shell tests must work via `sys.modules` patching regardless of whether PyQt6 is installed
+- `open_clip` is not installed in the standard CI environment; ClipIndexer tests must not depend on it being present
+- The `LogBuffer` ring buffer size is controlled by `app.config.LOG_RING_SIZE` and is at least 100 lines
+- All test files live under the `tests/` directory and follow the existing `test_*.py` naming convention
+- `report_renderer.py` and `launcher.py` are out of scope for this phase (see Out of Scope section)
 
 ---
 
 ## Out of Scope
 
-- Full Qt GUI automation (requires display server; deferred)
-- YOLO detector end-to-end tests (requires ultralytics + model weights)
-- Florence-2 model tests (requires weights; covered by `test_frame_analyzer.py` mocks)
-- Performance/load tests
-- `launcher.py` SIGINT handler (requires spawning a subprocess with signal delivery)
+- Full Qt GUI automation (requires display server; deferred to a future phase)
+- YOLO end-to-end tests (requires `ultralytics` package and model weights)
+- Florence-2 model tests (requires model weights; covered by existing `test_frame_analyzer.py` mocks)
+- Performance and load tests
+- `launcher.py` SIGINT handler (requires spawning a subprocess with OS signal delivery)
+- `report_renderer.py` (Jinja2 template wrapper; low risk, deferred)
+- `llm_synthesizer.py` timeout/offline path (deferred; requires careful asyncio mocking)
