@@ -156,9 +156,10 @@ without a display server.
 ### User Story 6 — SSE Stream, System API, and CI Blind Spots (Priority: P3)
 
 A developer working on the SSE stream, system API endpoints, or thumbnail
-generation needs tests for currently uncovered paths. Additionally, 12 tests
-silently skip in CI due to missing video files; each needs a mock counterpart
-that always runs.
+generation needs tests for currently uncovered paths. Additionally, tests
+silently skip in CI due to missing video files (5 detection_engine, 8 ffprobe,
+3 api_job, 2 thumbnail_gen, 2 ffmpeg_path — verified by grep); a representative
+subset needs mock counterparts that always run in CI.
 
 **Why this priority**: CI blind spots mean broken code can ship undetected.
 System API and SSE edge cases have never been validated.
@@ -182,7 +183,7 @@ asyncio; mock counterparts testable with monkeypatched subprocess calls.
 
 **Acceptance Scenarios — CI mock counterparts**:
 
-6. **Given** no real video file is present, **When** mock-paired variants of the 12 skipped tests run, **Then** they pass by exercising the same logic path through monkeypatching
+6. **Given** no real video file is present, **When** mock-paired variants of the highest-value CI-skipped tests run (at least 9: 3 api_job + 3 detection_engine + 3 ffprobe), **Then** they pass by exercising the same logic path through monkeypatching
 
 ---
 
@@ -200,8 +201,8 @@ asyncio; mock counterparts testable with monkeypatched subprocess calls.
 
 ### Functional Requirements
 
-- **FR-001**: The test suite MUST include checks for all six acceptance-criteria groups in US1 (job lifecycle state machine and thread lifecycle)
-- **FR-002**: The test suite MUST include checks for all seven acceptance-criteria items in US2 (shell bridge endpoints)
+- **FR-001**: The test suite MUST include checks for all seven acceptance-criteria items in US1 (job lifecycle state machine and thread lifecycle — AC1–AC7)
+- **FR-002**: The test suite MUST include checks for all six acceptance-criteria items in US2 (shell bridge endpoints — AC1–AC6)
 - **FR-003**: The test suite MUST include checks for the five LogBuffer acceptance criteria and five ClipIndexer acceptance criteria in US3
 - **FR-004**: The test suite MUST include checks for all nine narrative synthesizer acceptance criteria in US4, using correct expected values derived from the actual implementation
 - **FR-005**: The test suite MUST include checks for all five Qt shell logic acceptance criteria in US5 using PyQt6 module mocking
