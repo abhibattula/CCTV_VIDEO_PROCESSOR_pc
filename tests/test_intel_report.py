@@ -1,10 +1,7 @@
 """
-Phase 6 — Video Intelligence Export
-TDD fail-first tests for narrative_synthesizer, frame_describer, and intel-report endpoints.
-ALL 12 tests must FAIL before any implementation exists.
-
-Imports of non-existent modules are placed inside each test function so pytest
-can collect all 12 tests individually and report each one as FAILED/ERROR.
+Phase 6/7 — Video Intelligence Export
+TDD tests for narrative_synthesizer and intel-report endpoints.
+FrameDescriber tests removed in Phase 7 (T012) — replaced by FrameAnalyzer (Florence-2).
 """
 import pytest
 from pathlib import Path
@@ -117,36 +114,7 @@ def test_activity_stats_correct_percentages():
 
 
 # ---------------------------------------------------------------------------
-# Tests 7–8: frame_describer unit tests
-# ---------------------------------------------------------------------------
-
-def test_frame_describer_absent_returns_empty(monkeypatch, tmp_path):
-    from app.core.frame_describer import FrameDescriber
-    import builtins
-    real_import = builtins.__import__
-
-    def mock_import(name, *args, **kwargs):
-        if name == "transformers":
-            raise ImportError("transformers not installed")
-        return real_import(name, *args, **kwargs)
-
-    monkeypatch.setattr(builtins, "__import__", mock_import)
-    FrameDescriber._model = None
-    FrameDescriber._processor = None
-    result = FrameDescriber.describe(tmp_path / "fake.jpg")
-    assert result == ""
-
-
-def test_frame_describer_missing_file_returns_empty(tmp_path):
-    from app.core.frame_describer import FrameDescriber
-    # Non-existent path → Image.open raises FileNotFoundError → caught → "".
-    # If transformers not installed, is_available() returns "" directly.
-    result = FrameDescriber.describe(tmp_path / "nonexistent_12345.jpg")
-    assert result == ""
-
-
-# ---------------------------------------------------------------------------
-# Tests 9–12: API endpoint tests
+# Tests 7–12: API endpoint tests
 # ---------------------------------------------------------------------------
 
 def test_intel_report_html_400_no_job(client):

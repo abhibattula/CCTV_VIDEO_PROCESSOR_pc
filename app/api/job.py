@@ -288,11 +288,14 @@ async def intel_report_html():
             tp = job_dir / "thumbnails" / f"{ev['event_index']}.jpg"
             ev["thumbnail_path"] = str(tp) if tp.exists() else None
 
-    from app.core.frame_describer import FrameDescriber
     descriptions = {}
     for ev in included:
         thumb = job_dir / "thumbnails" / f"{ev['event_index']}.jpg"
-        descriptions[ev["event_index"]] = FrameDescriber.describe(thumb) if thumb.exists() else ""
+        if thumb.exists():
+            analysis = FrameAnalyzer.analyze(thumb)
+            descriptions[ev["event_index"]] = analysis.get("caption", "")
+        else:
+            descriptions[ev["event_index"]] = ""
 
     from app.core.narrative_synthesizer import (
         NarrativeSynthesizer, executive_summary, activity_stats, object_inventory, timeline_entries
@@ -381,7 +384,7 @@ async def intel_report_html():
         "key_moments": key_moments,
         "heatmap_b64": heatmap_b64,
         "settings": settings,
-        "moondream_available": FrameDescriber.is_available(),
+        "florence_available": FrameAnalyzer.is_available(),
         "events_json": events_json,
     })
     return HTMLResponse(html)
