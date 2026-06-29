@@ -264,7 +264,7 @@ All three buttons use the **Output Folder** chosen above, or the Desktop if none
 
 ### Video Intelligence Report (Phase 7 — Enhanced AI)
 
-The **Generate Intelligence Report** button (below the Reports & Data Export card) produces an enhanced report powered by Florence-2 AI and optional Claude Haiku.
+The **Generate Intelligence Report** button (below the Reports & Data Export card) produces an enhanced report powered by Florence-2 AI.
 
 **Choosing your report format**
 
@@ -283,15 +283,27 @@ Your choice is remembered for the next run (stored in the browser's local storag
 Report generation runs in four stages, each shown as a labelled progress bar:
 
 1. **Thumbnails** — extracting poster frames for each event
-2. **AI Analysis** — Florence-2 runs object detection and scene captions on each thumbnail (this is the longest stage on CPU)
+2. **AI Analysis** — Florence-2 runs object detection and scene captions on each thumbnail (this is the longest stage on CPU — see performance note below)
 3. **Writing** — NarrativeSynthesizer assembles the Markdown report; if `ANTHROPIC_API_KEY` is set, Claude Haiku writes the executive summary here
 4. **PDF** — Chromium renders the HTML preview to PDF (skipped in Markdown-only mode)
 
-Each bar fills as its stage completes. The overall process typically takes 30–60 seconds on CPU for a 12-event run.
+Each bar fills as its stage completes.
+
+**CPU performance note**: Florence-2 runs entirely offline on your machine. On CPU hardware, each event thumbnail takes roughly 1–3 minutes to analyse (3 tasks × ~30–90 seconds each depending on output length). For a 12-event run this means 15–35 minutes for the AI Analysis stage. If Florence-2 is not installed, this stage is skipped and descriptions fall back to rule-based synthesis — report generation completes in under a minute. A GPU (NVIDIA CUDA) would reduce each task to under 5 seconds.
+
+**Installing Florence-2 (optional, offline)**
+
+Florence-2 is not included in the base install. To enable AI scene descriptions:
+
+```
+pip install torch torchvision einops transformers open-clip-torch
+```
+
+On first use the model weights (~230 MB) download from HuggingFace and are cached locally. All subsequent runs are fully offline.
 
 **AI Analysis badges**
 
-Before generating the report, the Export page shows AI readiness badges in the summary strip — **Florence-2 ready** (green) if the model is loaded, **LLM synthesis on** (blue) if `ANTHROPIC_API_KEY` is set.
+Before generating the report, the Export page shows AI readiness badges in the summary strip — **Florence-2 ready** (green) if the model weights are cached locally.
 
 **Scene Breakdown section**
 
@@ -299,7 +311,7 @@ After the main chronological timeline, the report includes a **Scene Breakdown**
 
 **Optional LLM executive summary**
 
-If you set the environment variable `ANTHROPIC_API_KEY` before launching the app, the report's executive summary is written by Claude Haiku via the Anthropic API instead of the built-in rule-based text. The Executive Summary section of the report carries a small italic notice indicating whether Claude Haiku or rule-based synthesis was used. If the API call fails (e.g. no network, invalid key), the app falls back to the rule-based summary silently — generation still completes normally.
+If you set the environment variable `ANTHROPIC_API_KEY` before launching the app, the report's executive summary is written by Claude Haiku via the Anthropic API instead of the built-in rule-based text. The Executive Summary section of the report carries a small italic notice indicating whether Claude Haiku or rule-based synthesis was used. If the API call fails (e.g. no network, invalid key), the app falls back to the rule-based summary silently — generation still completes normally. This is entirely optional; the app works fully offline without it.
 
 To set the key on Windows before launching:
 ```

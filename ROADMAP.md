@@ -189,15 +189,18 @@ All shipped in Phase 6.
 **Branch:** `007-ui-ai-overhaul`
 
 ### What shipped
-- **Florence-2-base** replaces BLIP — task-driven prompts, object detection, region captions
-- **CLIP ViT-B/32** semantic frame indexing — `.clip.npy` sidecars for Phase 8 search
-- **Claude Haiku API** optional executive summary (set `ANTHROPIC_API_KEY`)
+- **Florence-2-base** replaces BLIP — task-driven prompts, object detection, region captions (fully offline; install separately with `pip install torch torchvision einops transformers`)
+- **CLIP ViT-B/32** semantic frame indexing — `.clip.npy` sidecars for Phase 8 search (install with `pip install open-clip-torch`)
+- **Claude Haiku API** optional executive summary (set `ANTHROPIC_API_KEY`; fully optional — app works offline without it)
 - **Report format modal** — choose Markdown / PDF / both before generating
 - **4-stage SSE progress** — live Thumbnails → AI Analysis → Writing → PDF bars
 - **Scene Breakdown** in HTML preview — annotated thumbnails, bounding boxes, detected object label pills
 - **SVG Activity Timeline** — visual event density strip at top of report
 - **Log panel polish** — timestamps, severity colours, Show/Hide toggle, Copy button
 - **NarrativeSynthesizer** enriched: `temporal_analysis()`, `trend_direction()`, full captions
+
+### CPU performance note
+Florence-2 runs fully offline on CPU. Each event thumbnail takes ~1–3 minutes to analyse on CPU (3 tasks × 30–90 seconds each). A 12-event run takes 15–35 minutes for the AI Analysis stage. GPU (NVIDIA CUDA) reduces this to seconds per task. When Florence-2 is not installed, AI Analysis is skipped and the report generates in under a minute using rule-based synthesis.
 
 ### Foundation laid
 - CLIP embeddings enable Phase 8 semantic search ("find frames with a person")

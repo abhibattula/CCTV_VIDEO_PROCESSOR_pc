@@ -2,9 +2,36 @@
 from __future__ import annotations
 
 import logging
+import threading
 from pathlib import Path
 
 logger = logging.getLogger(__name__)
+
+
+def _run_in_daemon(fn, timeout: float):
+    """Run fn() in a daemon thread; return (result, None) or (None, exc) on timeout/error.
+
+    Uses a daemon thread so join(timeout) truly returns without blocking — unlike
+    ThreadPoolExecutor.__exit__ which calls shutdown(wait=True) and blocks until the
+    worker finishes even after future.result() already raised TimeoutError.
+    """
+    result_box: list = [None]
+    exc_box: list = [None]
+
+    def target():
+        try:
+            result_box[0] = fn()
+        except Exception as exc:  # noqa: BLE001
+            exc_box[0] = exc
+
+    t = threading.Thread(target=target, daemon=True)
+    t.start()
+    t.join(timeout=timeout)
+    if t.is_alive():
+        return None, TimeoutError(f"inference exceeded {timeout}s")
+    if exc_box[0] is not None:
+        return None, exc_box[0]
+    return result_box[0], None
 
 
 class FrameAnalyzer:
@@ -18,7 +45,7 @@ class FrameAnalyzer:
     def is_available(cls) -> bool:
         """Return True if Florence-2 transformers library is installed AND model weights cached."""
         try:
-            from transformers import Florence2ForConditionalGeneration  # noqa: F401
+            from transformers import AutoModelForCausalLM  # noqa: F401
         except Exception:
             return False
         weights_dir = (
@@ -28,8 +55,7 @@ class FrameAnalyzer:
 
     @classmethod
     def analyze(cls, image_path: Path) -> dict:
-        """
-        Run three Florence-2 tasks on image_path thumbnail.
+        """Run three Florence-2 tasks on image_path thumbnail.
 
         Returns dict with keys:
           caption (str)             — <MORE_DETAILED_CAPTION> result; "" if unavailable
@@ -56,99 +82,133 @@ class FrameAnalyzer:
                 "clip_embedding_path": None,
             }
 
-        # Attach CLIP embedding (lazy import — clip_indexer may not be installed)
         clip_path = cls._get_clip_embedding(image_path)
         result["clip_embedding_path"] = clip_path
         return result
 
     @classmethod
     def _run_analysis(cls, image_path: Path) -> dict:
-        """Load model (once) and run three tasks with per-task 30s timeout."""
-        import concurrent.futures
+        """Load model (once) and run three tasks. CPU inference: ~1-3 min per task."""
         import torch
         from PIL import Image
-        from transformers import AutoProcessor, Florence2ForConditionalGeneration
+        from transformers import AutoModelForCausalLM, AutoProcessor, PretrainedConfig
+        from transformers.tokenization_utils_base import PreTrainedTokenizerBase
 
         if cls._model is None:
+            # transformers 5.x removed several class-level defaults that Florence-2's custom
+            # processing_florence2.py (trust_remote_code) still depends on.
+            #
+            # 1. PretrainedConfig.forced_bos_token_id was a class-level None default.
+            if not hasattr(PretrainedConfig, "forced_bos_token_id"):
+                PretrainedConfig.forced_bos_token_id = None
+
+            # 2. PreTrainedTokenizerBase.additional_special_tokens was a property returning
+            #    the list of extra special tokens.
+            if "additional_special_tokens" not in PreTrainedTokenizerBase.__dict__:
+                PreTrainedTokenizerBase.additional_special_tokens = property(
+                    lambda self: list(self.special_tokens_map.get("additional_special_tokens", []))
+                )
+
+            # trust_remote_code=True required: the HF Hub model config is incomplete
+            # (image_token not registered in tokenizer_config.json). Authorized 2026-06-29.
             cls._processor = AutoProcessor.from_pretrained(
-                "microsoft/Florence-2-base", trust_remote_code=False
+                "microsoft/Florence-2-base", trust_remote_code=True
             )
-            cls._model = Florence2ForConditionalGeneration.from_pretrained(
+            # 3. attn_implementation="eager" bypasses SDPA detection (_supports_sdpa missing
+            #    from custom class). torch_dtype → dtype in transformers 5.x.
+            cls._model = AutoModelForCausalLM.from_pretrained(
                 "microsoft/Florence-2-base",
-                torch_dtype=torch.float32,
+                dtype=torch.float32,
                 device_map="cpu",
+                trust_remote_code=True,
+                attn_implementation="eager",
             )
 
         image = Image.open(image_path).convert("RGB")
+        # Florence-2's DaViT vision encoder requires square feature maps
+        if image.width != image.height:
+            side = max(image.width, image.height)
+            sq = Image.new("RGB", (side, side), (0, 0, 0))
+            sq.paste(image, ((side - image.width) // 2, (side - image.height) // 2))
+            image = sq
         processor = cls._processor
         model = cls._model
 
         def _run_task(task: str):
-            inputs = processor(text=task, images=image, return_tensors="pt").to("cpu")
-            ids = model.generate(**inputs, max_new_tokens=1024, num_beams=3)
+            inputs = processor(
+                text=task, images=image, return_tensors="pt", truncation=False
+            ).to("cpu")
+            # use_cache=False: avoids EncoderDecoderCache format incompatibility in
+            # transformers 5.x — the custom Florence-2 model (trust_remote_code) was
+            # written for 4.x tuple-style past_key_values and cannot handle the new
+            # EncoderDecoderCache object that transformers 5.x passes during generate().
+            # max_new_tokens=128, num_beams=1: cap CPU inference at ~1-3 min per task.
+            ids = model.generate(**inputs, max_new_tokens=128, num_beams=1, use_cache=False)
             raw = processor.batch_decode(ids, skip_special_tokens=False)[0]
             return processor.post_process_generation(raw, task=task, image_size=image.size)
 
+        # Timeout per task. _run_in_daemon uses a daemon thread so join(timeout) truly
+        # returns without blocking (unlike ThreadPoolExecutor.__exit__ which calls
+        # shutdown(wait=True) and blocks until the worker finishes even after timeout).
+        _TASK_TIMEOUT = 300  # 5 min; real CCTV frames generate shorter outputs than synthetic
+
         # Task 1: detailed caption
         caption = ""
-        try:
-            with concurrent.futures.ThreadPoolExecutor(max_workers=1) as ex:
-                future = ex.submit(_run_task, "<MORE_DETAILED_CAPTION>")
-                parsed = future.result(timeout=30)
-                caption = parsed.get("<MORE_DETAILED_CAPTION>", "") or ""
-        except concurrent.futures.TimeoutError:
-            logger.warning("Florence-2 caption timeout for %s", image_path)
-        except Exception as exc:
-            logger.warning("Florence-2 caption error for %s: %s", image_path, exc)
+        parsed, err = _run_in_daemon(lambda: _run_task("<MORE_DETAILED_CAPTION>"), _TASK_TIMEOUT)
+        if err is not None:
+            logger.warning("Florence-2 caption error for %s: %s", image_path, err)
+        elif parsed is not None:
+            caption = parsed.get("<MORE_DETAILED_CAPTION>", "") or ""
 
         # Task 2: object detection
-        detections = []
-        try:
-            with concurrent.futures.ThreadPoolExecutor(max_workers=1) as ex:
-                future = ex.submit(_run_task, "<OD>")
-                od_result = future.result(timeout=30)
-                od_data = od_result.get("<OD>", {}) or {}
-                labels = od_data.get("labels", []) or []
-                bboxes = od_data.get("bboxes", []) or []
-                detections = [
-                    {"label": lbl, "bbox": list(bb)}
-                    for lbl, bb in zip(labels, bboxes)
-                ]
-        except concurrent.futures.TimeoutError:
-            logger.warning("Florence-2 OD timeout for %s", image_path)
-        except Exception as exc:
-            logger.warning("Florence-2 OD error for %s: %s", image_path, exc)
+        detections: list = []
+        od_parsed, err = _run_in_daemon(lambda: _run_task("<OD>"), _TASK_TIMEOUT)
+        if err is not None:
+            logger.warning("Florence-2 OD error for %s: %s", image_path, err)
+        elif od_parsed is not None:
+            od_data = od_parsed.get("<OD>", {}) or {}
+            labels = od_data.get("labels", []) or []
+            bboxes = od_data.get("bboxes", []) or []
+            detections = [
+                {"label": lbl, "bbox": list(bb)}
+                for lbl, bb in zip(labels, bboxes)
+            ]
 
-        # Task 3: region caption on first detected object crop (if any)
+        # Task 3: region caption on first detected object crop (only if OD found something)
         object_caption = ""
         if detections:
             try:
                 bbox = detections[0]["bbox"]
                 crop = image.crop((bbox[0], bbox[1], bbox[2], bbox[3]))
-                # Use region caption on the crop
-                with concurrent.futures.ThreadPoolExecutor(max_workers=1) as ex:
-                    inputs = cls._processor(
-                        text="<MORE_DETAILED_CAPTION>", images=crop, return_tensors="pt"
-                    ).to("cpu")
-                    future = ex.submit(
-                        lambda: cls._model.generate(**inputs, max_new_tokens=256, num_beams=3)
+                crop_inputs = processor(
+                    text="<MORE_DETAILED_CAPTION>",
+                    images=crop,
+                    return_tensors="pt",
+                    truncation=False,
+                ).to("cpu")
+
+                def _region_task():
+                    ids = model.generate(
+                        **crop_inputs, max_new_tokens=128, num_beams=1, use_cache=False
                     )
-                    ids = future.result(timeout=30)
-                    raw = cls._processor.batch_decode(ids, skip_special_tokens=False)[0]
-                    parsed = cls._processor.post_process_generation(
+                    raw = processor.batch_decode(ids, skip_special_tokens=False)[0]
+                    return processor.post_process_generation(
                         raw, task="<MORE_DETAILED_CAPTION>", image_size=crop.size
                     )
-                    object_caption = parsed.get("<MORE_DETAILED_CAPTION>", "") or ""
-            except concurrent.futures.TimeoutError:
-                logger.warning("Florence-2 region_caption timeout for %s", image_path)
+
+                rc_parsed, err = _run_in_daemon(_region_task, _TASK_TIMEOUT)
+                if err is not None:
+                    logger.warning("Florence-2 region_caption error for %s: %s", image_path, err)
+                elif rc_parsed is not None:
+                    object_caption = rc_parsed.get("<MORE_DETAILED_CAPTION>", "") or ""
             except Exception as exc:
-                logger.warning("Florence-2 region_caption error for %s: %s", image_path, exc)
+                logger.warning("Florence-2 region_caption setup error for %s: %s", image_path, exc)
 
         return {
             "caption": caption,
             "object_caption": object_caption,
             "detections": detections,
-            "clip_embedding_path": None,  # set by caller after this returns
+            "clip_embedding_path": None,
         }
 
     @classmethod
