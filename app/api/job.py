@@ -472,8 +472,6 @@ async def intel_report_export(request: Request):
             report_stage_current=0,
             report_stage_total=total_events,
         )
-        for n, ev in enumerate(included):
-            session.update(report_stage_current=n)
 
         # Generate thumbnails via ffmpeg (best-effort; silent on failure)
         try:
@@ -485,6 +483,13 @@ async def intel_report_export(request: Request):
             )
         except Exception:
             pass  # Thumbnails are optional; continue without them
+
+        # Report 100% only after thumbnails are actually written
+        session.update(
+            report_stage="thumbnails",
+            report_stage_current=total_events,
+            report_stage_total=total_events,
+        )
 
         # ── Stage: ai_analysis ──────────────────────────────────────
         session.update(

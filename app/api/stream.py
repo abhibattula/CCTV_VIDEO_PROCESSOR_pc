@@ -13,7 +13,10 @@ edge-case on some Python/asyncio builds.
 """
 import asyncio
 import json
+import logging
 from typing import AsyncGenerator
+
+logger = logging.getLogger(__name__)
 
 from fastapi import APIRouter
 from fastapi.responses import StreamingResponse
@@ -47,7 +50,13 @@ async def _event_generator(job_id: str) -> AsyncGenerator[str, None]:
                     "total": snap.get("report_stage_total", 0),
                     "ts": snap.get("report_stage_timestamp", ""),
                 })
-                yield f"data: {msg}\n\n"
+                try:
+                    yield f"data: {msg}\n\n"
+                except asyncio.CancelledError:
+                    raise
+                except Exception:
+                    logger.debug("SSE client disconnected during report_stage")
+                    return
 
             # Emit report_done once when pending, then clear the flag
             if snap.get("report_done_pending"):
@@ -56,7 +65,13 @@ async def _event_generator(job_id: str) -> AsyncGenerator[str, None]:
                     "md_path": snap.get("md_path"),
                     "pdf_path": snap.get("pdf_path"),
                 })
-                yield f"data: {msg}\n\n"
+                try:
+                    yield f"data: {msg}\n\n"
+                except asyncio.CancelledError:
+                    raise
+                except Exception:
+                    logger.debug("SSE client disconnected during report_done")
+                    return
                 session.update(report_done_pending=False)
 
             # Always emit a keepalive heartbeat
@@ -66,7 +81,13 @@ async def _event_generator(job_id: str) -> AsyncGenerator[str, None]:
                 "event_count": snap["event_count"],
                 "status": snap["status"],
             })
-            yield f"data: {msg}\n\n"
+            try:
+                yield f"data: {msg}\n\n"
+            except asyncio.CancelledError:
+                raise
+            except Exception:
+                logger.debug("SSE client disconnected during keepalive")
+                return
 
             # ── Wait for next log line or poll interval ─────────────────────
             try:
@@ -91,7 +112,13 @@ async def _event_generator(job_id: str) -> AsyncGenerator[str, None]:
                     "event_count": snap2["event_count"],
                     "status": snap2["status"],
                 })
-                yield f"data: {msg}\n\n"
+                try:
+                    yield f"data: {msg}\n\n"
+                except asyncio.CancelledError:
+                    raise
+                except Exception:
+                    logger.debug("SSE client disconnected during done event")
+                    return
                 break
 
             snap2 = session.snapshot()
@@ -102,7 +129,13 @@ async def _event_generator(job_id: str) -> AsyncGenerator[str, None]:
                 "event_count": snap2["event_count"],
                 "status": snap2["status"],
             })
-            yield f"data: {msg}\n\n"
+            try:
+                yield f"data: {msg}\n\n"
+            except asyncio.CancelledError:
+                raise
+            except Exception:
+                logger.debug("SSE client disconnected during log event")
+                return
 
     except asyncio.CancelledError:
         pass
