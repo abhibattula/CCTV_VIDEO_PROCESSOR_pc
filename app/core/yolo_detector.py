@@ -203,7 +203,15 @@ def run(
         cap.release()
 
     from app.core.detection_engine import _write_heatmap
+    import cv2 as _cv2
     _write_heatmap(heatmap_accum, source_info, job_dir)
+    # After a complete run, always ensure a heatmap file exists so the UI and tests
+    # have a valid file to display even when YOLO found no detectable objects.
+    _heatmap_path = job_dir / "heatmap.png"
+    if not _heatmap_path.exists():
+        _h = int(source_info.get("height") or src_h)
+        _w = int(source_info.get("width") or src_w)
+        _cv2.imwrite(str(_heatmap_path), np.zeros((_h, _w, 3), dtype=np.uint8))
 
     on_progress(1.0)
 

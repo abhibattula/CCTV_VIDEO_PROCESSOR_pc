@@ -54,10 +54,6 @@ def _write_heatmap(accum: np.ndarray, source_info: dict, job_dir: Path) -> None:
     to source resolution, and write job_dir/heatmap.png. No-op if nothing
     accumulated (e.g. zero-frame or instantly-cancelled run)."""
     if accum.max() <= 0:
-        # No activity detected — write a blank heatmap so the UI always has a file
-        blank = np.zeros((int(source_info.get("height") or accum.shape[0]),
-                          int(source_info.get("width") or accum.shape[1]), 3), dtype=np.uint8)
-        cv2.imwrite(str(job_dir / "heatmap.png"), blank)
         return
     norm = cv2.normalize(accum, None, 0, 255, cv2.NORM_MINMAX).astype(np.uint8)
     colored = cv2.applyColorMap(norm, cv2.COLORMAP_JET)
