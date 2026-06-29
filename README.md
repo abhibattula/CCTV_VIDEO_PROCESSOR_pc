@@ -188,8 +188,8 @@ review/filter on a timeline → export.
   both; choice is remembered across sessions
 - **Real-time 4-stage report progress** — live SSE bars for Thumbnails → AI Analysis
   → Writing → PDF so you can see exactly where generation is
-- **Scene Breakdown with annotated thumbnails** — bounding boxes, confidence bars, and
-  Florence-2 region captions per event in the HTML preview
+- **Scene Breakdown with annotated thumbnails** — bounding boxes, detected object label pills, and
+  Florence-2 region captions per event in the HTML preview (confidence bars appear in the event timeline table)
 - **SVG Activity Timeline** — visual event density strip at the top of every report
 - Light/dark theme toggle, remembered across restarts
 - In-app Stop control (graceful backend shutdown) and New Project control (abandon

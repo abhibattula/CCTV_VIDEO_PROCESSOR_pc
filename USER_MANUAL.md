@@ -291,15 +291,15 @@ Each bar fills as its stage completes. The overall process typically takes 30–
 
 **AI Analysis badges**
 
-Event thumbnails in the report preview carry a small **Florence-2 ready** badge once AI analysis completes. This means the event has an AI-generated scene caption, detected object labels, and a region-level description — all generated locally without any cloud service.
+Before generating the report, the Export page shows AI readiness badges in the summary strip — **Florence-2 ready** (green) if the model is loaded, **LLM synthesis on** (blue) if `ANTHROPIC_API_KEY` is set.
 
 **Scene Breakdown section**
 
-After the main chronological timeline, the report includes a **Scene Breakdown** section. Each entry shows an annotated thumbnail with bounding boxes drawn around detected objects, a confidence bar for each box, and the Florence-2 region caption. This section is most useful for quickly spotting what objects were present in key moments without watching the clips.
+After the main chronological timeline, the report includes a **Scene Breakdown** section. Each entry shows an annotated thumbnail with bounding boxes drawn into the image, detected object label pills, and the Florence-2 region caption. This section is most useful for quickly spotting what objects were present in key moments without watching the clips.
 
 **Optional LLM executive summary**
 
-If you set the environment variable `ANTHROPIC_API_KEY` before launching the app, the report's executive summary is written by Claude Haiku via the Anthropic API instead of the built-in rule-based text. The report footer shows a small notice indicating which method was used. If the API call fails (e.g. no network, invalid key), the app falls back to the rule-based summary silently — generation still completes normally.
+If you set the environment variable `ANTHROPIC_API_KEY` before launching the app, the report's executive summary is written by Claude Haiku via the Anthropic API instead of the built-in rule-based text. The Executive Summary section of the report carries a small italic notice indicating whether Claude Haiku or rule-based synthesis was used. If the API call fails (e.g. no network, invalid key), the app falls back to the rule-based summary silently — generation still completes normally.
 
 To set the key on Windows before launching:
 ```

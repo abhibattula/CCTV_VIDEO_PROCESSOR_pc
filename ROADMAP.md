@@ -194,7 +194,7 @@ All shipped in Phase 6.
 - **Claude Haiku API** optional executive summary (set `ANTHROPIC_API_KEY`)
 - **Report format modal** — choose Markdown / PDF / both before generating
 - **4-stage SSE progress** — live Thumbnails → AI Analysis → Writing → PDF bars
-- **Scene Breakdown** in HTML preview — annotated thumbnails, bounding boxes, confidence bars
+- **Scene Breakdown** in HTML preview — annotated thumbnails, bounding boxes, detected object label pills
 - **SVG Activity Timeline** — visual event density strip at top of report
 - **Log panel polish** — timestamps, severity colours, Show/Hide toggle, Copy button
 - **NarrativeSynthesizer** enriched: `temporal_analysis()`, `trend_direction()`, full captions
