@@ -574,7 +574,7 @@
           <span class="rank">#{{ loop.index }}</span>
           <span class="timestamp">{{ entry.start_clock }} &ndash; {{ entry.end_clock }}</span>
         </div>
-        <img src="data:image/jpeg;base64,{{ entry.annotated_thumb_b64 }}" alt="Event thumbnail" class="scene-thumb">
+        {% if entry.annotated_thumb_b64 %}<img src="data:image/jpeg;base64,{{ entry.annotated_thumb_b64 }}" alt="Event thumbnail" class="scene-thumb">{% endif %}
         {% if entry.caption %}
         <p class="scene-caption">{{ entry.caption }}</p>
         {% endif %}

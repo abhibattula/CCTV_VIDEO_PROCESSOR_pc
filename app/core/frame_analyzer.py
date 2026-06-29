@@ -142,15 +142,15 @@ class FrameAnalyzer:
             # transformers 5.x — the custom Florence-2 model (trust_remote_code) was
             # written for 4.x tuple-style past_key_values and cannot handle the new
             # EncoderDecoderCache object that transformers 5.x passes during generate().
-            # max_new_tokens=128, num_beams=1: cap CPU inference at ~1-3 min per task.
-            ids = model.generate(**inputs, max_new_tokens=128, num_beams=1, use_cache=False)
+            # max_new_tokens=64, num_beams=1: halves worst-case CPU inference to ~180s/task.
+            ids = model.generate(**inputs, max_new_tokens=64, num_beams=1, use_cache=False)
             raw = processor.batch_decode(ids, skip_special_tokens=False)[0]
             return processor.post_process_generation(raw, task=task, image_size=image.size)
 
         # Timeout per task. _run_in_daemon uses a daemon thread so join(timeout) truly
         # returns without blocking (unlike ThreadPoolExecutor.__exit__ which calls
         # shutdown(wait=True) and blocks until the worker finishes even after timeout).
-        _TASK_TIMEOUT = 300  # 5 min; real CCTV frames generate shorter outputs than synthetic
+        _TASK_TIMEOUT = 90  # 90 s: real CCTV frames fire EOS ~20-45 s; 90 s gives 2× safety margin
 
         # Task 1: detailed caption
         caption = ""
@@ -189,7 +189,7 @@ class FrameAnalyzer:
 
                 def _region_task():
                     ids = model.generate(
-                        **crop_inputs, max_new_tokens=128, num_beams=1, use_cache=False
+                        **crop_inputs, max_new_tokens=64, num_beams=1, use_cache=False
                     )
                     raw = processor.batch_decode(ids, skip_special_tokens=False)[0]
                     return processor.post_process_generation(
