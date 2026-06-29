@@ -12,6 +12,8 @@
 
 - Q: How should US1 thread lifecycle tests detect that the fake-detector thread has finished? → A: Polling loop — `deadline = time.monotonic() + 5; while time.monotonic() < deadline: if session.snapshot()["status"] == "completed": break; time.sleep(0.05)` (tests production-realistic poll behaviour with a natural CI timeout)
 - Q: How should LogBuffer asyncio broadcasting tests provide an event loop without running real asyncio? → A: Mock `LogBuffer._loop` with a stub object and assert `call_soon_threadsafe(q.put_nowait, line)` was called with correct arguments (unit-tests the bridge call without real async machinery)
+- Accuracy fix (plan phase): US1 AC1 pre-condition corrected from `"idle"` to `"ready"` — `start_job` guard accepts only `("ready", "completed", "cancelled", "error")` per `app/api/job.py:747`; `"idle"` is the uninitialized default before `create_job` is called and would be rejected with HTTP 400
+- Accuracy fix (plan phase): US2 AC4-6 corrected — actual routes are `POST /shell/set-output-dir` (not `/shell/output-dir`) and `POST /shell/open-folder` (not `GET /shell/open-output-folder`); `open-folder` returns `{"ok": false}` on missing `output_path`, not HTTP 400; `set-output-dir` has no empty-string validation in the actual code
 
 ---
 
@@ -34,7 +36,7 @@ function, delivering a verifiable job lifecycle without a real video file.
 
 **Acceptance Scenarios**:
 
-1. **Given** session status is `"idle"`, **When** `POST /api/job/start` is called, **Then** response is `{"status": "detecting"}` and session transitions to `"detecting"`
+1. **Given** session status is `"ready"` (post `create_job`), **When** `POST /api/job/start` is called, **Then** response is `{"status": "detecting"}` and session transitions to `"detecting"`
 2. **Given** session status is already `"detecting"`, **When** `POST /api/job/start` is called again, **Then** response is HTTP 400 with an informative message
 3. **Given** `start_job` is called with a fake detector that raises an exception, **When** the detection thread runs, **Then** session status becomes `"error"` and `error_msg` is populated
 4. **Given** `ultralytics` package is absent and mode is `"yolo"`, **When** `POST /api/job/start` is called, **Then** response is HTTP 400 before any thread is spawned
@@ -62,10 +64,9 @@ of the detection pipeline.
 1. **Given** a valid file path, **When** `POST /api/shell/filepath` is called, **Then** the path is stored in session pending state and HTTP 200 is returned
 2. **Given** a path was stored, **When** `GET /api/shell/pending-path` is called, **Then** the stored path is returned and cleared atomically (second call returns `null`)
 3. **Given** nothing is pending, **When** `GET /api/shell/pending-path` is called, **Then** response is `{"path": null}`
-4. **Given** a valid directory path, **When** `POST /api/shell/output-dir` is called, **Then** `session.output_dir` is updated and HTTP 200 is returned
-5. **Given** an empty string is sent, **When** `POST /api/shell/output-dir` is called, **Then** HTTP 400 is returned
-6. **Given** an output folder is set in session, **When** `POST /api/shell/open-output-folder` is called, **Then** the OS folder-open command is invoked with the correct path (mocked)
-7. **Given** no output folder is set, **When** `POST /api/shell/open-output-folder` is called, **Then** HTTP 400 is returned
+4. **Given** a valid directory path, **When** `POST /api/shell/set-output-dir` is called, **Then** `session.output_dir` is updated and `{"ok": true}` is returned
+5. **Given** `session.output_path` is set (a previous export result), **When** `POST /api/shell/open-folder` is called, **Then** the OS folder-open command is invoked with the parent folder of `output_path` (mocked via `shell.platform_utils.open_folder`)
+6. **Given** `session.output_path` is not set, **When** `POST /api/shell/open-folder` is called, **Then** response is `{"ok": false}` (not HTTP 400)
 
 ---
 
