@@ -180,14 +180,17 @@ review/filter on a timeline → export.
 - **CSV/JSON event log export** — download the included event list as a structured
   spreadsheet or machine-readable JSON (respects the current label filter; second
   click produces a new timestamped file, not an overwrite)
-- **Enhanced AI Analysis (Phase 7)** — Florence-2-base replaces BLIP for task-driven
-  frame captions, object detection, and region descriptions; CLIP ViT-B/32 indexes
-  frames as semantic embeddings (`.clip.npy` sidecars) for future natural-language
-  search; optional Claude Haiku LLM executive summary via `ANTHROPIC_API_KEY`
+- **Quick Report PDF** — instant motion-only PDF with one click, no AI wait; fires the
+  same Incident Report flow; side-by-side with the Intelligence Report button
+- **Florence-2 AI Analysis** — task-driven frame captions, object detection, and region
+  descriptions; 90 s hard timeout per task (64 max tokens) so the report always
+  completes; CLIP ViT-B/32 indexes frames as semantic embeddings (`.clip.npy` sidecars)
+  for future natural-language search
 - **Report format choice** — a pre-generation modal lets you pick Markdown, PDF, or
   both; choice is remembered across sessions
 - **Real-time 4-stage report progress** — live SSE bars for Thumbnails → AI Analysis
-  → Writing → PDF so you can see exactly where generation is
+  → Writing → PDF; progress reflects actual work (thumbnail bar reaches 100% only after
+  files are written); SSE stream handles browser disconnect without terminal errors
 - **Scene Breakdown with annotated thumbnails** — bounding boxes, detected object label pills, and
   Florence-2 region captions per event in the HTML preview (confidence bars appear in the event timeline table)
 - **SVG Activity Timeline** — visual event density strip at the top of every report

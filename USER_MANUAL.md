@@ -262,11 +262,18 @@ Below the manual export settings is a **Reports & Data Export** card with three 
 
 All three buttons use the **Output Folder** chosen above, or the Desktop if none was set. CSV and JSON export is available regardless of whether you have run a video export — it is a separate, repeatable operation and is not blocked by an in-progress video export.
 
-### Video Intelligence Report (Phase 7 — Enhanced AI)
+### Video Intelligence Report
 
-The **Generate Intelligence Report** button (below the Reports & Data Export card) produces an enhanced report powered by Florence-2 AI.
+The Export page offers two report paths side-by-side in the **Video Intelligence Report** section:
 
-**Choosing your report format**
+| Button | What it does | When to use it |
+|--------|-------------|----------------|
+| **Quick Report (PDF)** | Instant motion-only PDF — same content as the existing Incident Report. Opens a save dialog within seconds. No AI wait. | You want a fast PDF right now |
+| **Generate Intelligence Report…** | Full AI-enhanced report: Florence-2 captions, SVG timeline, Scene Breakdown. Takes 5–20 min on CPU. | You want AI scene descriptions |
+
+Both buttons are disabled when there are no included events. Use the Timeline page to include at least one event first.
+
+**Choosing your Intelligence Report format**
 
 When you click **Generate Intelligence Report**, a small modal appears before generation starts. Choose one of three options:
 
@@ -289,7 +296,7 @@ Report generation runs in four stages, each shown as a labelled progress bar:
 
 Each bar fills as its stage completes.
 
-**CPU performance note**: Florence-2 runs entirely offline on your machine. On CPU hardware, each event thumbnail takes roughly 1–3 minutes to analyse (3 tasks × ~30–90 seconds each depending on output length). For a 12-event run this means 15–35 minutes for the AI Analysis stage. If Florence-2 is not installed, this stage is skipped and descriptions fall back to rule-based synthesis — report generation completes in under a minute. A GPU (NVIDIA CUDA) would reduce each task to under 5 seconds.
+**CPU performance note**: Florence-2 runs entirely offline on your machine. Each event thumbnail runs up to 3 tasks with a 90-second hard timeout per task — so AI Analysis completes within 4.5 min per event in the worst case, and typically much faster on real CCTV frames (EOS fires in 20–45 s on real footage). For a 5-event run: worst case ≈ 23 min; typical ≈ 8–11 min. If Florence-2 is not installed, this stage is skipped and descriptions fall back to rule-based synthesis — report generation completes in under a minute. A GPU (NVIDIA CUDA) would reduce each task to under 5 seconds.
 
 **Installing Florence-2 (optional, offline)**
 

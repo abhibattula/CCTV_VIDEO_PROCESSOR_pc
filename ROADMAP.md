@@ -1,13 +1,14 @@
 # Roadmap — Future Phases
 
 This is a living list of features and improvements identified as good next
-steps for this project, beyond what's shipped (Phases 1-7: detection, timeline
+steps for this project, beyond what's shipped (Phases 1-8: detection, timeline
 review, undo, export presets, theme, ROI zone drawing, Stop Application, New
 Project, activity heatmap overlay, PDF/HTML incident report, CSV/JSON event log
-export, Video Intelligence Report with Moondream2 visual descriptions,
-Florence-2 AI frame analysis, CLIP semantic embeddings, Claude Haiku LLM
-executive summary, report format modal, 4-stage SSE progress, Scene Breakdown
-with annotated thumbnails, SVG activity timeline, log panel polish). Nothing here is scheduled or committed — when one of these gets
+export, Video Intelligence Report with Florence-2 AI frame analysis (64-token,
+90 s timeout), Quick Report PDF button, SSE disconnect fix, accurate thumbnail
+progress, CLIP semantic embeddings, Claude Haiku LLM executive summary,
+report format modal, 4-stage SSE progress, Scene Breakdown with annotated
+thumbnails, SVG activity timeline, log panel polish). Nothing here is scheduled or committed — when one of these gets
 picked up, it should run through the project's normal speckit pipeline
 (`/speckit.specify` → `/speckit.clarify` → `/speckit.plan` → `/speckit.tasks` →
 `/speckit.analyze` → `/speckit.implement`) and get its own numbered spec under
