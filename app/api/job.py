@@ -5,6 +5,7 @@ All state lives in app.session — single in-memory dict, one job at a time.
 import base64
 import hashlib
 import subprocess
+import sys
 import threading
 import uuid
 from datetime import datetime
@@ -28,6 +29,21 @@ router = APIRouter()
 
 # Module-level cancel event reused per detection run
 _cancel_event: threading.Event = threading.Event()
+
+
+def _get_desktop_path() -> str:
+    """Return the real Desktop path, handling OneDrive Desktop Folder Backup on Windows 11."""
+    if sys.platform == "win32":
+        try:
+            import ctypes
+            import ctypes.wintypes
+            buf = ctypes.create_unicode_buffer(ctypes.wintypes.MAX_PATH)
+            ctypes.windll.shell32.SHGetFolderPathW(0, 0, 0, 0, buf)
+            if buf.value:
+                return buf.value
+        except Exception:
+            pass
+    return str(Path.home() / "Desktop")
 
 
 # ── Request bodies ────────────────────────────────────────────────────────────
@@ -689,7 +705,7 @@ async def intel_report_export(request: Request):
                 "narrative_synthesizer.timeline_entries()"
             )
 
-            output_dir = Path(snap.get("output_dir") or (Path.home() / "Desktop"))
+            output_dir = Path(snap.get("output_dir") or _get_desktop_path())
             output_dir.mkdir(parents=True, exist_ok=True)
 
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -701,7 +717,7 @@ async def intel_report_export(request: Request):
         # ── Stage: pdf (Qt bridge — fire-and-forget via main_window.py) ──
         if "pdf" in formats:
             _snap = session.snapshot()
-            _out_dir = _snap.get("output_dir") or str(Path.home() / "Desktop")
+            _out_dir = _snap.get("output_dir") or _get_desktop_path()
             pdf_path_str = str(
                 Path(_out_dir) /
                 f"incident_report_{datetime.now().strftime('%Y%m%d_%H%M%S')}.pdf"
@@ -853,7 +869,7 @@ async def export_job(req: ExportRequest):
     output_dir = req.output_dir or snap.get("output_dir")
     if not output_dir:
         import os
-        output_dir = str(Path.home() / "Desktop")
+        output_dir = _get_desktop_path()
     output_dir = Path(output_dir)
 
     session.update(status="exporting", progress=0.0)
@@ -900,7 +916,7 @@ async def export_events_csv(req: EventLogExportRequest):
         raise HTTPException(status_code=400, detail="No events match the current filter.")
 
     try:
-        output_dir = Path(req.output_dir or snap.get("output_dir") or (Path.home() / "Desktop"))
+        output_dir = Path(req.output_dir or snap.get("output_dir") or _get_desktop_path())
         output_dir.mkdir(parents=True, exist_ok=True)
     except OSError as exc:
         raise HTTPException(status_code=400, detail=f"Could not access output folder: {exc}")
@@ -933,7 +949,7 @@ async def export_events_json(req: EventLogExportRequest):
         raise HTTPException(status_code=400, detail="No events match the current filter.")
 
     try:
-        output_dir = Path(req.output_dir or snap.get("output_dir") or (Path.home() / "Desktop"))
+        output_dir = Path(req.output_dir or snap.get("output_dir") or _get_desktop_path())
         output_dir.mkdir(parents=True, exist_ok=True)
     except OSError as exc:
         raise HTTPException(status_code=400, detail=f"Could not access output folder: {exc}")

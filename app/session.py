@@ -21,7 +21,6 @@ _DEFAULTS: dict = {
     "output_path": None,        # set after successful export
     "error_msg": None,
     "pending_path": None,       # shell bridge file-picker result
-    "output_dir": None,         # user-selected output folder
     "job_id": None,
     # Phase 7 — report generation SSE progress (H1 race condition fix)
     "report_stage": "",             # "" | "thumbnails" | "ai_analysis" | "markdown" | "pdf"
@@ -31,20 +30,33 @@ _DEFAULTS: dict = {
     "report_done_pending": False,   # True until SSE loop emits report_done event
 }
 
+# Fields in _PERSISTENT survive session.reset() — they represent user preferences
+# that should not be wiped when loading a new video (e.g., output_dir chosen by user).
+_PERSISTENT: dict = {
+    "output_dir": None,         # user-selected output folder; preserved across video loads
+}
+
 _state: dict = {}
 
 
 def reset() -> None:
     """Reset session to initial defaults (called on app start and between jobs)."""
     with _lock:
+        # Preserve user preferences before clearing job state
+        saved_persistent = {k: _state.get(k, _PERSISTENT[k]) for k in _PERSISTENT}
         _state.clear()
         _state.update(copy.deepcopy(_DEFAULTS))
+        _state.update(saved_persistent)
 
 
 def update(**kwargs) -> None:
     """Update one or more top-level session fields atomically."""
     with _lock:
         _state.update(kwargs)
+        # Keep _PERSISTENT in sync so reset() preserves the latest value
+        for k in _PERSISTENT:
+            if k in kwargs:
+                _PERSISTENT[k] = kwargs[k]
 
 
 def snapshot() -> dict:
