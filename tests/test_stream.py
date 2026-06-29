@@ -75,3 +75,34 @@ def test_no_report_events_when_idle(client):
     events = _read_sse_events(client, n=8)
     report_events = [e for e in events if e.get("type") in ("report_stage", "report_done")]
     assert len(report_events) == 0
+
+
+# ── Phase 8 test (T006) ──────────────────────────────────────────────────────
+
+def test_sse_generator_handles_client_disconnect():
+    """Generator must terminate cleanly when ConnectionResetError is thrown into it
+    at a yield point (simulates Starlette propagating a socket-send failure)."""
+    import asyncio
+    from app.api.stream import _event_generator
+    import app.session as session_module
+    session_module.session.reset()
+
+    async def _run():
+        gen = _event_generator("test-job")
+        # Prime the generator — returns the first keepalive chunk
+        first = await gen.__anext__()
+        assert "data:" in first
+
+        # Throw a connection error at the current yield suspension point
+        try:
+            await gen.athrow(ConnectionResetError("peer closed connection"))
+        except StopAsyncIteration:
+            return  # Generator terminated cleanly — correct after fix
+        except ConnectionResetError:
+            raise AssertionError(
+                "Generator propagated ConnectionResetError instead of handling it. "
+                "Fix: wrap yield statements in try/except Exception in stream.py"
+            )
+        # If athrow() returned a value (generator yielded again), that is also acceptable
+
+    asyncio.run(_run())

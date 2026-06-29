@@ -446,3 +446,41 @@ def test_export_json_writes_expected_structure(client, tmp_path):
         assert ev["end_s"] == float(i + 1)
         assert ev["zone_label"] == ("Person" if i % 2 == 0 else "Car")
         assert ev["included"] is True
+
+
+# ── Phase 8 test (T007) ──────────────────────────────────────────────────────
+
+def test_thumbnail_stage_progress_after_run(client, tmp_path, monkeypatch):
+    """Thumbnail progress must not advance before thumbnail_gen.run() is called.
+    After the fix, report_stage_current == 0 when run() is invoked (no pre-run loop)."""
+    import app.session as session
+    session.reset()
+    session.update(
+        status="completed", job_id="test-job", source_path="/fake/video.mp4",
+        source_info={"duration_s": 60.0}, settings={"mode": "mog2"},
+        output_dir=str(tmp_path),
+    )
+    for i in range(2):
+        session.append_event({
+            "event_index": i, "start_s": float(i * 5), "end_s": float(i * 5 + 3),
+            "peak_motion_score": 0.6, "zone_label": None, "included": True,
+            "start_clock": f"00:00:0{i*5}", "end_clock": f"00:00:0{i*5+3}",
+        })
+
+    progress_at_run = []
+
+    def spy_run(*args, **kwargs):
+        snap = session.snapshot()
+        progress_at_run.append(snap.get("report_stage_current", -1))
+
+    monkeypatch.setattr("app.api.job.thumbnail_gen.run", spy_run)
+
+    resp = client.post("/api/job/intel-report/export")
+    assert resp.status_code == 200
+    assert progress_at_run, "thumbnail_gen.run() was never called"
+    # Before fix: progress_at_run[0] == 1 (loop ran ahead for 2 events, last index = 1)
+    # After fix:  progress_at_run[0] == 0 (initial state, no pre-run loop)
+    assert progress_at_run[0] == 0, (
+        f"Thumbnail progress was {progress_at_run[0]} when run() was called; expected 0. "
+        "Fix: remove the pre-thumbnail progress loop in app/api/job.py"
+    )

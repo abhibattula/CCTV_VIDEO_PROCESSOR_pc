@@ -280,3 +280,54 @@ def test_build_scene_breakdown_length(tmp_path):
     required_keys = {"event_index", "start_clock", "end_clock", "caption", "object_caption", "detections", "annotated_thumb_b64"}
     for entry in result_3:
         assert required_keys.issubset(set(entry.keys()))
+
+
+# ── Phase 8 test (T003) ──────────────────────────────────────────────────────
+
+def test_scene_card_no_broken_img_when_b64_empty():
+    """intel_report.html must NOT render a broken <img src="data:image/jpeg;base64,">
+    when annotated_thumb_b64 is an empty string (FR-005)."""
+    from app.core.intel_report_renderer import render as render_intel
+
+    context = {
+        "source_name": "test_video",
+        "source_path": "/test/video.mp4",
+        "generated_at": "2026-06-29 12:00:00",
+        "detection_mode": "mog2",
+        "duration_fmt": "00:01:00",
+        "executive_summary": "Test summary.",
+        "llm_notice": "",
+        "stats": {
+            "event_count": 1,
+            "active_s": 3.0,
+            "active_pct": 5.0,
+            "busiest_period": "00:00:00",
+            "avg_confidence": 0.6,
+            "detection_mode": "mog2",
+        },
+        "object_inventory": [],
+        "svg_timeline": "<svg width='100' height='20'></svg>",
+        "timeline": [],
+        "scene_breakdown": [{
+            "event_index": 0,
+            "start_clock": "00:00:00",
+            "end_clock": "00:00:03",
+            "caption": "",
+            "object_caption": "",
+            "detections": [],
+            "annotated_thumb_b64": "",  # ← empty: triggers the bug
+        }],
+        "key_moments": [],
+        "heatmap_b64": "",
+        "settings": {"mode": "mog2", "sensitivity": 50},
+        "florence_available": False,
+        "events_json": "[]",
+    }
+
+    html = render_intel(context)
+
+    broken = 'src="data:image/jpeg;base64,"'
+    assert broken not in html, (
+        "intel_report.html renders a broken img tag when annotated_thumb_b64 is ''. "
+        "Fix: wrap the <img> in {% if entry.annotated_thumb_b64 %} in intel_report.html"
+    )
