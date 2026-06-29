@@ -6,6 +6,15 @@
 
 ---
 
+## Clarifications
+
+### Session 2026-06-29
+
+- Q: How should US1 thread lifecycle tests detect that the fake-detector thread has finished? → A: Polling loop — `deadline = time.monotonic() + 5; while time.monotonic() < deadline: if session.snapshot()["status"] == "completed": break; time.sleep(0.05)` (tests production-realistic poll behaviour with a natural CI timeout)
+- Q: How should LogBuffer asyncio broadcasting tests provide an event loop without running real asyncio? → A: Mock `LogBuffer._loop` with a stub object and assert `call_soon_threadsafe(q.put_nowait, line)` was called with correct arguments (unit-tests the bridge call without real async machinery)
+
+---
+
 ## User Scenarios & Testing *(mandatory)*
 
 ### User Story 1 — Job Lifecycle Test Coverage (Priority: P1)
@@ -29,7 +38,7 @@ function, delivering a verifiable job lifecycle without a real video file.
 2. **Given** session status is already `"detecting"`, **When** `POST /api/job/start` is called again, **Then** response is HTTP 400 with an informative message
 3. **Given** `start_job` is called with a fake detector that raises an exception, **When** the detection thread runs, **Then** session status becomes `"error"` and `error_msg` is populated
 4. **Given** `ultralytics` package is absent and mode is `"yolo"`, **When** `POST /api/job/start` is called, **Then** response is HTTP 400 before any thread is spawned
-5. **Given** a fake detector emits 2 events then completes, **When** the thread finishes, **Then** session status becomes `"completed"` and `event_count` equals 2
+5. **Given** a fake detector emits 2 events then completes, **When** the thread finishes, **Then** session status becomes `"completed"` and `event_count` equals 2 (thread completion detected by polling `session.snapshot()["status"]` in a 5-second deadline loop with 50 ms sleep intervals)
 6. **Given** a job is running, **When** `POST /api/job/cancel` is called, **Then** the cancel signal is set and session eventually becomes `"cancelled"`
 7. **Given** session has events stored, **When** `GET /api/job/events` is called, **Then** the response contains the correct event list
 
@@ -77,7 +86,7 @@ check and embed function.
 **Acceptance Scenarios — LogBuffer**:
 
 1. **Given** lines are appended for a job, **When** `subscribe(job_id)` is called, **Then** the queue immediately contains the replayed history lines
-2. **Given** a subscriber queue exists, **When** `append(job_id, line)` is called, **Then** the new line is placed on the queue (requires asyncio event loop)
+2. **Given** a subscriber queue exists and `LogBuffer._loop` is replaced with a mock stub, **When** `append(job_id, line)` is called, **Then** `_loop.call_soon_threadsafe(q.put_nowait, line)` is called with the correct arguments (verified via mock assertion)
 3. **Given** a job's history is at ring-buffer capacity, **When** one more line is appended, **Then** the oldest line is dropped and buffer size does not exceed the limit
 4. **Given** a job's history exists, **When** `reset(job_id)` is called, **Then** that job's history is cleared and other jobs' histories are unaffected
 5. **Given** `close(job_id)` is called, **When** a subscriber reads the queue, **Then** the sentinel `"__DONE__"` is eventually received
@@ -199,7 +208,7 @@ asyncio; mock counterparts testable with monkeypatched subprocess calls.
 - **FR-007**: All new checks MUST pass in a standard developer environment without a connected video file, camera hardware, GPU, or display server
 - **FR-008**: No existing passing check MUST be broken by the new additions
 - **FR-009**: New checks for CI blind spots MUST run unconditionally (no `pytest.mark.skipif` on real-hardware conditions)
-- **FR-010**: Fake-detector checks for US1 thread lifecycle MUST use a detector that sleeps 50 ms then calls `on_event` twice, verifying real thread completion without busy-waiting
+- **FR-010**: Fake-detector checks for US1 thread lifecycle MUST use a detector that sleeps 50 ms then calls `on_event` twice; thread completion MUST be detected by polling `session.snapshot()["status"]` with 50 ms intervals up to a 5-second deadline (no busy-wait, no `thread.join`)
 
 ### Key Entities
 
