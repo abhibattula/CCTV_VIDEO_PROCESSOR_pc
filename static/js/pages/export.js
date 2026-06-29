@@ -197,7 +197,17 @@ export function mount(container, params) {
         <!-- AI readiness badges — populated by loadAiBadges() -->
         <div id="ai-badges" style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px"></div>
 
-        <button class="btn" id="intel-report-btn">Generate Intelligence Report&#x2026;</button>
+        <!-- Two report buttons side-by-side -->
+        <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-start">
+          <div style="display:flex;flex-direction:column;gap:4px">
+            <button class="btn" id="quick-report-btn">Quick Report (PDF)</button>
+            <span class="muted" style="font-size:11px;text-align:center">Instant &middot; rule-based synthesis</span>
+          </div>
+          <div style="display:flex;flex-direction:column;gap:4px">
+            <button class="btn" id="intel-report-btn">Generate Intelligence Report&#x2026;</button>
+            <span class="muted" style="font-size:11px;text-align:center">~5&ndash;20 min &middot; Florence-2</span>
+          </div>
+        </div>
         <p class="muted" id="intel-report-status" style="font-size:12px;margin-top:8px"></p>
 
         <!-- 4-stage SSE progress (hidden until generation starts) -->
@@ -493,6 +503,15 @@ export function mount(container, params) {
       securityBtn.title = "Requires Object Detection mode";
       securityBtn.style.opacity = "0.45";
       securityBtn.style.cursor = "not-allowed";
+    }
+
+    // Disable both report buttons when there are no included events
+    if (included.length === 0) {
+      const noEventsTitle = "No included events — include at least one on the Timeline page";
+      ["#quick-report-btn", "#intel-report-btn"].forEach(sel => {
+        const b = container.querySelector(sel);
+        if (b) { b.disabled = true; b.title = noEventsTitle; }
+      });
     }
 
     // AI readiness badges — read florence_available / llm_available from
@@ -833,6 +852,19 @@ export function mount(container, params) {
       btn.disabled = false;
     }
   }
+
+  // "Quick Report (PDF)" button → fire motion-only PDF immediately
+  container.querySelector("#quick-report-btn").addEventListener("click", () => {
+    const btn = container.querySelector("#quick-report-btn");
+    const statusEl = container.querySelector("#intel-report-status");
+    btn.disabled = true;
+    statusEl.textContent = "Generating Quick Report PDF…";
+    window.dispatchEvent(new CustomEvent("cctv:save-report-pdf"));
+    setTimeout(() => {
+      statusEl.textContent = "Quick Report saved to your output folder.";
+      btn.disabled = false;
+    }, 3000);
+  });
 
   // "Generate Intelligence Report…" button → show format modal
   container.querySelector("#intel-report-btn").addEventListener("click", () => {
