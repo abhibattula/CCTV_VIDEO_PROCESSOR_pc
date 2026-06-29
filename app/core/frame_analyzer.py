@@ -1,8 +1,11 @@
 """Florence-2 multi-task frame analysis. Gracefully absent when transformers not installed."""
 from __future__ import annotations
 
+import contextlib
+import io
 import logging
 import threading
+import warnings
 from pathlib import Path
 
 logger = logging.getLogger(__name__)
@@ -40,18 +43,23 @@ class FrameAnalyzer:
     _instance = None
     _model = None
     _processor = None
+    _availability_cache: bool | None = None  # set on first is_available() call; stable for process lifetime
 
     @classmethod
     def is_available(cls) -> bool:
         """Return True if Florence-2 transformers library is installed AND model weights cached."""
+        if cls._availability_cache is not None:
+            return cls._availability_cache
         try:
             from transformers import AutoModelForCausalLM  # noqa: F401
         except Exception:
+            cls._availability_cache = False
             return False
         weights_dir = (
             Path.home() / ".cache" / "huggingface" / "hub" / "models--microsoft--Florence-2-base"
         )
-        return weights_dir.exists()
+        cls._availability_cache = weights_dir.exists()
+        return cls._availability_cache
 
     @classmethod
     def analyze(cls, image_path: Path) -> dict:
@@ -111,18 +119,23 @@ class FrameAnalyzer:
 
             # trust_remote_code=True required: the HF Hub model config is incomplete
             # (image_token not registered in tokenizer_config.json). Authorized 2026-06-29.
-            cls._processor = AutoProcessor.from_pretrained(
-                "microsoft/Florence-2-base", trust_remote_code=True
-            )
-            # 3. attn_implementation="eager" bypasses SDPA detection (_supports_sdpa missing
-            #    from custom class). torch_dtype → dtype in transformers 5.x.
-            cls._model = AutoModelForCausalLM.from_pretrained(
-                "microsoft/Florence-2-base",
-                dtype=torch.float32,
-                device_map="cpu",
-                trust_remote_code=True,
-                attn_implementation="eager",
-            )
+            # Redirect stdout + suppress FutureWarnings so Florence-2's MISSING-keys
+            # weight table and transformers attention-mask warnings don't clutter the terminal.
+            with contextlib.redirect_stdout(io.StringIO()), \
+                 warnings.catch_warnings():
+                warnings.filterwarnings("ignore", category=FutureWarning, module="transformers")
+                cls._processor = AutoProcessor.from_pretrained(
+                    "microsoft/Florence-2-base", trust_remote_code=True
+                )
+                # 3. attn_implementation="eager" bypasses SDPA detection (_supports_sdpa missing
+                #    from custom class). torch_dtype → dtype in transformers 5.x.
+                cls._model = AutoModelForCausalLM.from_pretrained(
+                    "microsoft/Florence-2-base",
+                    dtype=torch.float32,
+                    device_map="cpu",
+                    trust_remote_code=True,
+                    attn_implementation="eager",
+                )
 
         image = Image.open(image_path).convert("RGB")
         # Florence-2's DaViT vision encoder requires square feature maps
