@@ -138,6 +138,55 @@ def test_export_with_label_filter(client, monkeypatch, tmp_path):
     assert captured.get("label_filter") == ["Person"]
 
 
+# ── Phase 9 TDD tests (B6: _get_desktop_path; B2: poll caching) ─────────────
+
+def test_get_desktop_path_returns_nonempty_string():
+    """_get_desktop_path() MUST return a non-empty string.
+    Written before implementation — MUST FAIL with ImportError until B6 implemented."""
+    from app.api.job import _get_desktop_path
+    result = _get_desktop_path()
+    assert isinstance(result, str), f"Expected str, got {type(result)}"
+    assert len(result) > 0, "_get_desktop_path() returned empty string"
+
+
+def test_get_job_does_not_recall_is_available_after_cache(client, monkeypatch):
+    """GET /api/job must not re-run the filesystem check on the second poll.
+    Written before implementation — MUST FAIL until T022 cache + T023 removal done."""
+    from app.core.frame_analyzer import FrameAnalyzer
+
+    # Reset the cache so the first call actually runs
+    FrameAnalyzer._availability_cache = None
+
+    call_count = [0]
+    real_is_available = FrameAnalyzer.__dict__.get("is_available")
+
+    original = FrameAnalyzer.is_available.__func__ if hasattr(FrameAnalyzer.is_available, "__func__") else None
+
+    from pathlib import Path
+    original_exists = Path.exists
+
+    def counting_exists(self):
+        if "Florence" in str(self) or "huggingface" in str(self):
+            call_count[0] += 1
+        return original_exists(self)
+
+    monkeypatch.setattr(Path, "exists", counting_exists)
+    FrameAnalyzer._availability_cache = None
+
+    # First poll
+    client.get("/api/job")
+    first_count = call_count[0]
+
+    # Second poll — cache should prevent re-checking
+    client.get("/api/job")
+    second_count = call_count[0]
+
+    assert second_count == first_count, (
+        f"Filesystem stat called {second_count - first_count} extra time(s) on second poll — "
+        "implement _availability_cache in FrameAnalyzer.is_available()"
+    )
+
+
 # ── T001: preview-frame endpoint tests (TDD — written before T002 implementation) ──
 
 def test_preview_frame_no_active_job_returns_400(client):
