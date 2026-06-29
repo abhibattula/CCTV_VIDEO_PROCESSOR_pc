@@ -273,6 +273,17 @@ async def intel_report_html():
 
     source_info = snap.get("source_info") or {}
     settings = snap.get("settings") or {}
+    duration_s = float(source_info.get("duration_s", 0) or 0)
+
+    # Normalise event fields for new-style renderer methods (label / confidence / thumbnail_path)
+    for ev in included:
+        if "label" not in ev:
+            ev["label"] = ev.get("zone_label") or "mog2"
+        if "confidence" not in ev:
+            ev["confidence"] = float(ev.get("peak_motion_score", 0.5))
+        if "thumbnail_path" not in ev:
+            tp = job_dir / "thumbnails" / f"{ev['event_index']}.jpg"
+            ev["thumbnail_path"] = str(tp) if tp.exists() else None
 
     from app.core.frame_describer import FrameDescriber
     descriptions = {}
@@ -281,10 +292,25 @@ async def intel_report_html():
         descriptions[ev["event_index"]] = FrameDescriber.describe(thumb) if thumb.exists() else ""
 
     from app.core.narrative_synthesizer import (
-        executive_summary, activity_stats, object_inventory, timeline_entries
+        NarrativeSynthesizer, executive_summary, activity_stats, object_inventory, timeline_entries
     )
 
-    summary = executive_summary(included, source_info, settings)
+    # Executive summary — use LLMSynthesizer when available, else rule-based
+    llm_notice = ""
+    if LLMSynthesizer.is_available():
+        try:
+            narrative_obj = NarrativeSynthesizer()
+            exec_summary_text, _llm_used, llm_notice = LLMSynthesizer().synthesize(
+                included, duration_s, narrative_obj
+            )
+            summary = exec_summary_text
+        except Exception:
+            summary = executive_summary(included, source_info, settings)
+            llm_notice = "Executive summary: rule-based synthesis — LLM API unavailable"
+    else:
+        summary = executive_summary(included, source_info, settings)
+        llm_notice = "Executive summary: rule-based synthesis — LLM API unavailable"
+
     stats = activity_stats(included, source_info)
     inventory = object_inventory(included)
     timeline = timeline_entries(included, descriptions)
@@ -308,7 +334,6 @@ async def intel_report_html():
         })
 
     # Duration format
-    duration_s = source_info.get("duration_s", 0) or 0
     duration_fmt = seconds_to_clock(duration_s)
 
     # Build events JSON for Data Appendix
@@ -331,7 +356,12 @@ async def intel_report_html():
         events_records.append(rec)
     events_json = json.dumps(events_records, indent=2)
 
-    from app.core.intel_report_renderer import render as render_intel
+    # Build new renderer artifacts (SVG timeline, scene breakdown)
+    from app.core.intel_report_renderer import IntelReportRenderer, render as render_intel
+    renderer = IntelReportRenderer()
+    svg_timeline = renderer._build_svg_timeline(included, duration_s)
+    scene_breakdown = renderer._build_scene_breakdown(included)
+
     html = render_intel({
         "source_name": Path(source_path).stem,
         "source_path": source_path,
@@ -339,9 +369,12 @@ async def intel_report_html():
         "detection_mode": stats["detection_mode"],
         "duration_fmt": duration_fmt,
         "executive_summary": summary,
+        "llm_notice": llm_notice,
         "stats": stats,
         "object_inventory": inventory,
+        "svg_timeline": svg_timeline,
         "timeline": timeline,
+        "scene_breakdown": scene_breakdown,
         "key_moments": key_moments,
         "heatmap_b64": heatmap_b64,
         "settings": settings,
