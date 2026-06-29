@@ -496,8 +496,8 @@ export function mount(container, params) {
     }
 
     // AI readiness badges — read florence_available / llm_available from
-    // /api/job/status (Phase 7 addition). Gracefully degrade if endpoint is
-    // unavailable or fields are absent.
+    // /api/job (Phase 7 extended the existing status snapshot). Gracefully
+    // degrade if fields are absent.
     loadAiBadges();
 
     return job;
@@ -509,7 +509,7 @@ export function mount(container, params) {
     const badgeEl = container.querySelector("#ai-badges");
     if (!badgeEl) return;
     try {
-      const resp = await fetch("/api/job/status");
+      const resp = await fetch("/api/job");
       const status = resp.ok ? await resp.json() : {};
 
       let html = "";
