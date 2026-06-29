@@ -17,7 +17,7 @@ function getTimestamp() {
 }
 
 function push(type, text, meta = {}) {
-  buffer.push({ ts: new Date().toISOString(), type, text, ...meta });
+  buffer.push({ ts: getTimestamp(), type, text, ...meta });
   if (buffer.length > MAX_ENTRIES) buffer.shift();
   if (onAppend) onAppend();
 }
@@ -109,8 +109,7 @@ function renderRows() {
   buffer.forEach(e => {
     const div = document.createElement("div");
     div.className = `debug-drawer__row debug-drawer__row--${e.type}`;
-    // Use slice(11, 23) to get HH:MM:SS.mmm from ISO timestamp (UTC)
-    div.textContent = `[${e.ts.slice(11, 23)}] ${e.type.toUpperCase()}: ${e.text}`;
+    div.textContent = `[${e.ts}] ${e.type.toUpperCase()}: ${e.text}`;
     if (e.httpStatus >= 400) {
       div.style.borderLeft = "3px solid #ef4444";
       div.style.paddingLeft = "6px";

@@ -183,7 +183,9 @@ export function mount(container) {
         updateStats(msg.progress || 0, msg.event_count || 0, msg.status || "—");
         return;
       }
-      if (msg.line) {
+      if (msg.type === "event") {
+        addLogEntry("EVENT", msg.line || "");
+      } else if (msg.line) {
         const sev = msg.status === "error" ? "ERROR" : "INFO";
         addLogEntry(sev, msg.line);
       }
