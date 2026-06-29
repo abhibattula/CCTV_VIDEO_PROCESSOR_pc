@@ -262,6 +262,55 @@ Below the manual export settings is a **Reports & Data Export** card with three 
 
 All three buttons use the **Output Folder** chosen above, or the Desktop if none was set. CSV and JSON export is available regardless of whether you have run a video export — it is a separate, repeatable operation and is not blocked by an in-progress video export.
 
+### Video Intelligence Report (Phase 7 — Enhanced AI)
+
+The **Generate Intelligence Report** button (below the Reports & Data Export card) produces an enhanced report powered by Florence-2 AI and optional Claude Haiku.
+
+**Choosing your report format**
+
+When you click **Generate Intelligence Report**, a small modal appears before generation starts. Choose one of three options:
+
+| Option | Output |
+|--------|--------|
+| **Markdown only** | A `.md` file — fast, no extra dependencies |
+| **PDF only** | A self-contained `.pdf` file via Qt's Chromium print engine |
+| **Both** | Markdown and PDF together (default) |
+
+Your choice is remembered for the next run (stored in the browser's local storage). Click **Generate** to confirm, or **Cancel** to dismiss.
+
+**4-stage progress bars**
+
+Report generation runs in four stages, each shown as a labelled progress bar:
+
+1. **Thumbnails** — extracting poster frames for each event
+2. **AI Analysis** — Florence-2 runs object detection and scene captions on each thumbnail (this is the longest stage on CPU)
+3. **Writing** — NarrativeSynthesizer assembles the Markdown report; if `ANTHROPIC_API_KEY` is set, Claude Haiku writes the executive summary here
+4. **PDF** — Chromium renders the HTML preview to PDF (skipped in Markdown-only mode)
+
+Each bar fills as its stage completes. The overall process typically takes 30–60 seconds on CPU for a 12-event run.
+
+**AI Analysis badges**
+
+Event thumbnails in the report preview carry a small **Florence-2 ready** badge once AI analysis completes. This means the event has an AI-generated scene caption, detected object labels, and a region-level description — all generated locally without any cloud service.
+
+**Scene Breakdown section**
+
+After the main chronological timeline, the report includes a **Scene Breakdown** section. Each entry shows an annotated thumbnail with bounding boxes drawn around detected objects, a confidence bar for each box, and the Florence-2 region caption. This section is most useful for quickly spotting what objects were present in key moments without watching the clips.
+
+**Optional LLM executive summary**
+
+If you set the environment variable `ANTHROPIC_API_KEY` before launching the app, the report's executive summary is written by Claude Haiku via the Anthropic API instead of the built-in rule-based text. The report footer shows a small notice indicating which method was used. If the API call fails (e.g. no network, invalid key), the app falls back to the rule-based summary silently — generation still completes normally.
+
+To set the key on Windows before launching:
+```
+set ANTHROPIC_API_KEY=sk-ant-...
+python launcher.py
+```
+
+**Log panel Show/Hide toggle**
+
+On the Processing page, the live detection log panel now has a **Show / Hide** toggle button in the panel header. Hide the log to give more screen space to the detection chart during a long run; click Show to bring it back. The panel also has a **Copy** button that copies the full log text to your clipboard — useful for pasting into a bug report.
+
 Click **Export Now**. A progress bar fills as FFmpeg processes the clips. When complete:
 - The output file path is displayed
 - **Open Folder** opens File Explorer at the export location

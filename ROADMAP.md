@@ -1,10 +1,13 @@
 # Roadmap — Future Phases
 
 This is a living list of features and improvements identified as good next
-steps for this project, beyond what's shipped (Phases 1-6: detection, timeline
+steps for this project, beyond what's shipped (Phases 1-7: detection, timeline
 review, undo, export presets, theme, ROI zone drawing, Stop Application, New
 Project, activity heatmap overlay, PDF/HTML incident report, CSV/JSON event log
-export, Video Intelligence Report with Moondream2 visual descriptions). Nothing here is scheduled or committed — when one of these gets
+export, Video Intelligence Report with Moondream2 visual descriptions,
+Florence-2 AI frame analysis, CLIP semantic embeddings, Claude Haiku LLM
+executive summary, report format modal, 4-stage SSE progress, Scene Breakdown
+with annotated thumbnails, SVG activity timeline, log panel polish). Nothing here is scheduled or committed — when one of these gets
 picked up, it should run through the project's normal speckit pipeline
 (`/speckit.specify` → `/speckit.clarify` → `/speckit.plan` → `/speckit.tasks` →
 `/speckit.analyze` → `/speckit.implement`) and get its own numbered spec under
@@ -172,12 +175,34 @@ when not installed. Markdown output is structured for Phase 7's in-app AI chatbo
 All shipped in Phase 6.
 
 **Remaining ideas in this space** (not yet implemented):
-- Phase 7: in-app AI chatbot that loads the intelligence report Markdown as RAG
-  context and lets the user ask natural language questions about the footage
-- LLM-generated executive summary (Phase 7's chatbot backend would handle this,
-  replacing the current rule-based synthesis)
-- Per-session Moondream download progress indicator (currently endpoint blocks
-  silently on first ~2 GB download; a WebSocket progress stream would improve UX)
+- Phase 7 shipped the LLM executive summary (Claude Haiku via `ANTHROPIC_API_KEY`)
+  and replaced Moondream2 with Florence-2; see Section G below.
+- In-app AI chatbot that loads the intelligence report Markdown as RAG context
+  and lets the user ask natural language questions about the footage (Phase 8 target)
+- Per-session Florence-2 / CLIP download progress indicator (currently downloads
+  block silently on first run; a WebSocket progress stream would improve UX)
+
+---
+
+## G. UI/UX Overhaul + Enhanced AI Analysis — ✅ Shipped in Phase 7
+
+**Branch:** `007-ui-ai-overhaul`
+
+### What shipped
+- **Florence-2-base** replaces BLIP — task-driven prompts, object detection, region captions
+- **CLIP ViT-B/32** semantic frame indexing — `.clip.npy` sidecars for Phase 8 search
+- **Claude Haiku API** optional executive summary (set `ANTHROPIC_API_KEY`)
+- **Report format modal** — choose Markdown / PDF / both before generating
+- **4-stage SSE progress** — live Thumbnails → AI Analysis → Writing → PDF bars
+- **Scene Breakdown** in HTML preview — annotated thumbnails, bounding boxes, confidence bars
+- **SVG Activity Timeline** — visual event density strip at top of report
+- **Log panel polish** — timestamps, severity colours, Show/Hide toggle, Copy button
+- **NarrativeSynthesizer** enriched: `temporal_analysis()`, `trend_direction()`, full captions
+
+### Foundation laid
+- CLIP embeddings enable Phase 8 semantic search ("find frames with a person")
+- LLMSynthesizer pattern reusable for Phase 8 chatbot
+- FrameAnalyzer detection data feeds Phase 8 video Q&A context
 
 ---
 
@@ -188,17 +213,19 @@ is actually picked up:
 
 1. ~~**C (Professional Reporting)**~~ — **shipped in Phase 5**
 2. ~~**F (Video Intelligence Export)**~~ — **shipped in Phase 6**
-3. **D (Settings + first-run polish)** — same low-risk, high-perceived-value
+3. ~~**G (UI/UX Overhaul + Enhanced AI)**~~ — **shipped in Phase 7**
+4. **D (Settings + first-run polish)** — same low-risk, high-perceived-value
    profile; natural to bundle 2-3 of these into one phase the way Phase 3
    bundled undo+presets+theme.
-4. **B1 (face/plate blur)** — contained, high-impact, standalone; doesn't
+5. **B1 (face/plate blur)** — contained, high-impact, standalone; doesn't
    touch the job/session architecture.
-5. **A (batch processing)** — deliberately last among the "foundational"
+6. **A (batch processing)** — deliberately last among the "foundational"
    items, because it deserves its own explicit conversation about the
    single-job-at-a-time tradeoff rather than being smuggled in as a side
    effect of something else.
-6. **B2/B3 (semantic search, object tracking)** — the most exciting and the
-   most speculative; best explored once the more foundational items above are
-   in place and there's a clearer sense of what users actually ask for next.
-7. **B4, E** — low-effort items that can slot into whichever phase has spare
+7. **B2/B3 (semantic search, object tracking)** — the most exciting and the
+   most speculative; CLIP embeddings from Phase 7 make B2 (semantic search)
+   much closer — best explored once the more foundational items above are in
+   place and there's a clearer sense of what users actually ask for next.
+8. **B4, E** — low-effort items that can slot into whichever phase has spare
    capacity; no need to schedule them on their own.

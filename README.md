@@ -180,11 +180,23 @@ review/filter on a timeline → export.
 - **CSV/JSON event log export** — download the included event list as a structured
   spreadsheet or machine-readable JSON (respects the current label filter; second
   click produces a new timestamped file, not an overwrite)
+- **Enhanced AI Analysis (Phase 7)** — Florence-2-base replaces BLIP for task-driven
+  frame captions, object detection, and region descriptions; CLIP ViT-B/32 indexes
+  frames as semantic embeddings (`.clip.npy` sidecars) for future natural-language
+  search; optional Claude Haiku LLM executive summary via `ANTHROPIC_API_KEY`
+- **Report format choice** — a pre-generation modal lets you pick Markdown, PDF, or
+  both; choice is remembered across sessions
+- **Real-time 4-stage report progress** — live SSE bars for Thumbnails → AI Analysis
+  → Writing → PDF so you can see exactly where generation is
+- **Scene Breakdown with annotated thumbnails** — bounding boxes, confidence bars, and
+  Florence-2 region captions per event in the HTML preview
+- **SVG Activity Timeline** — visual event density strip at the top of every report
 - Light/dark theme toggle, remembered across restarts
 - In-app Stop control (graceful backend shutdown) and New Project control (abandon
   the current job and start over without restarting the app), both reachable from
   every page
-- Live per-label detection chart + events/min counter while processing
+- Live per-label detection chart + events/min counter while processing; log panel
+  with timestamps, severity colours, Show/Hide toggle, and Copy button
 - In-app preview player and in-app debug log (see above) — no external tools needed
 - Proactive capability checks: the Object Detection button disables itself with an
   install hint if `ultralytics` isn't present, instead of failing after you start a job
