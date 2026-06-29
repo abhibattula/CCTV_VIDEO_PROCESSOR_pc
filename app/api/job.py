@@ -11,7 +11,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Optional
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
 from pydantic import BaseModel
 
@@ -21,6 +21,8 @@ from app.utils.ffprobe import probe
 from app.utils.time_utils import seconds_to_clock
 from app.core.log_buffer import log_buffer
 from app.core import thumbnail_gen
+from app.core.frame_analyzer import FrameAnalyzer
+from app.core.llm_synthesizer import LLMSynthesizer
 
 router = APIRouter()
 
@@ -350,194 +352,321 @@ async def intel_report_html():
 
 
 @router.post("/job/intel-report/export")
-async def intel_report_export():
+async def intel_report_export(request: Request):
+    """Export intelligence report. Accepts optional JSON body: {"formats": ["md", "pdf"]}."""
+    import json as _json
+
+    # ------------------------------------------------------------------
+    # 1. Parse optional formats body (backwards-compat: missing → both)
+    # ------------------------------------------------------------------
+    try:
+        body = await request.json()
+        formats: list = body.get("formats", ["md", "pdf"])
+    except Exception:
+        formats = ["md", "pdf"]
+
+    VALID_FORMATS = {"md", "pdf"}
+    if not formats or not all(f in VALID_FORMATS for f in formats):
+        raise HTTPException(
+            status_code=400,
+            detail="formats must be a non-empty list containing only 'md' and/or 'pdf'",
+        )
+
+    # ------------------------------------------------------------------
+    # 2. Session guards
+    # ------------------------------------------------------------------
     snap = session.snapshot()
     job_id = snap.get("job_id")
     source_path = snap.get("source_path")
 
-    # Guard 1: no active job
     if not job_id or not source_path:
         raise HTTPException(status_code=400, detail="No active job")
 
-    # Guard 2: detection in progress
     if snap.get("status") == "detecting":
         raise HTTPException(status_code=400, detail="Detection is still in progress")
 
-    # Guard 3: no included events
     included = [ev for ev in snap["events"] if ev.get("included", True)]
     if not included:
-        raise HTTPException(status_code=400, detail="No events to report — no events are currently included")
+        raise HTTPException(
+            status_code=400,
+            detail="No events to report — no events are currently included",
+        )
+
+    # ------------------------------------------------------------------
+    # 3. Normalise events — support both T006 (zone_label/peak_motion_score)
+    #    and T007 (label/confidence/thumbnail_path) event formats.
+    # ------------------------------------------------------------------
+    for ev in included:
+        if "end_s" not in ev:
+            ev["end_s"] = ev.get("start_s", 0.0) + ev.get("duration_s", 0.0)
+        if "peak_motion_score" not in ev:
+            ev["peak_motion_score"] = float(ev.get("confidence", 0.0))
+        if "zone_label" not in ev:
+            ev["zone_label"] = ev.get("label")          # None → MOG2 motion
+        if "start_clock" not in ev:
+            ev["start_clock"] = seconds_to_clock(float(ev.get("start_s", 0.0)))
+        if "end_clock" not in ev:
+            ev["end_clock"] = seconds_to_clock(float(ev.get("end_s", 0.0)))
 
     job_dir = _job_dir(job_id)
-
-    try:
-        thumbnail_gen.run(job_id=job_id, source_path=source_path, events=included, logger=_make_log_fn(job_id))
-    except OSError as exc:
-        raise HTTPException(status_code=400, detail=f"Could not access a required file: {exc}")
-
     source_info = snap.get("source_info") or {}
     settings = snap.get("settings") or {}
+    duration_s = float(source_info.get("duration_s", 0) or 0)
 
-    from app.core.frame_describer import FrameDescriber
-    descriptions = {}
-    for ev in included:
-        thumb = job_dir / "thumbnails" / f"{ev['event_index']}.jpg"
-        descriptions[ev["event_index"]] = FrameDescriber.describe(thumb) if thumb.exists() else ""
+    florence_available = FrameAnalyzer.is_available()
+    md_path_str: Optional[str] = None
+    pdf_path_str: Optional[str] = None
+    llm_used = False
+    llm_notice = ""
 
-    from app.core.narrative_synthesizer import (
-        executive_summary, activity_stats, object_inventory, timeline_entries
-    )
+    try:
+        total_events = len(included)
 
-    summary = executive_summary(included, source_info, settings)
-    stats = activity_stats(included, source_info)
-    inventory = object_inventory(included)
-    timeline = timeline_entries(included, descriptions)
-
-    # Key moments: top 3 by peak_motion_score desc, tiebreak by event_index asc
-    key_moments_raw = sorted(
-        included,
-        key=lambda ev: (-ev.get("peak_motion_score", 0), ev.get("event_index", 0))
-    )[:3]
-
-    # Duration format
-    duration_s = source_info.get("duration_s", 0) or 0
-    source_name = Path(source_path).stem
-    generated_at = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-
-    # Build JSON appendix records
-    import json
-    events_records = []
-    for ev in included:
-        idx = ev.get("event_index")
-        rec = {
-            "event_index": idx,
-            "start_s": ev.get("start_s"),
-            "end_s": ev.get("end_s"),
-            "start_clock": ev.get("start_clock") or seconds_to_clock(ev.get("start_s", 0)),
-            "end_clock": ev.get("end_clock") or seconds_to_clock(ev.get("end_s", 0)),
-            "peak_motion_score": ev.get("peak_motion_score"),
-            "zone_label": ev.get("zone_label"),
-            "included": ev.get("included", True),
-        }
-        desc = descriptions.get(idx, "")
-        if desc:  # omit description key entirely if empty
-            rec["description"] = desc
-        events_records.append(rec)
-
-    # Build Markdown string (NOT via HTML template — plain text with Markdown tables)
-    lines = []
-    lines.append(f"# Video Intelligence Report: {source_name}")
-    lines.append(f"")
-    lines.append(f"**Generated:** {generated_at}  ")
-    lines.append(f"**Detection Mode:** {stats['detection_mode']}  ")
-    lines.append(f"**Duration:** {seconds_to_clock(duration_s)}  ")
-    lines.append(f"**Source:** {source_path}  ")
-    lines.append(f"")
-
-    lines.append(f"## Executive Summary")
-    lines.append(f"")
-    lines.append(summary)
-    lines.append(f"")
-
-    lines.append(f"## Activity Statistics")
-    lines.append(f"")
-    lines.append(f"| Metric | Value |")
-    lines.append(f"|--------|-------|")
-    lines.append(f"| Events | {stats['event_count']} |")
-    lines.append(f"| Active Duration | {stats['active_s']:.1f}s |")
-    lines.append(f"| Active % | {stats['active_pct']:.1f}% |")
-    lines.append(f"| Busiest Period | {stats['busiest_period']} |")
-    lines.append(f"| Avg Confidence | {stats['avg_confidence']:.1%} |")
-    lines.append(f"| Detection Mode | {stats['detection_mode']} |")
-    lines.append(f"")
-
-    if inventory:
-        lines.append(f"## Object Inventory")
-        lines.append(f"")
-        lines.append(f"| Class | Count | First Seen | Last Seen |")
-        lines.append(f"|-------|-------|------------|-----------|")
-        for item in inventory:
-            lines.append(f"| {item['label']} | {item['count']} | {item['first_clock']} | {item['last_clock']} |")
-        lines.append(f"")
-
-    lines.append(f"## Chronological Timeline")
-    lines.append(f"")
-    lines.append(f"| # | Start | End | Duration | Activity | Confidence | Description |")
-    lines.append(f"|---|-------|-----|----------|----------|------------|-------------|")
-    for entry in timeline:
-        desc_cell = entry['description'].replace('|', '\\|') if entry['description'] else 'N/A'
-        lines.append(
-            f"| {entry['event_num']} | {entry['start_clock']} | {entry['end_clock']} "
-            f"| {entry['duration_s']:.1f}s | {entry['label']} | {entry['confidence_pct']}% "
-            f"| {desc_cell} |"
+        # ── Stage: thumbnails ────────────────────────────────────────
+        session.update(
+            report_stage="thumbnails",
+            report_stage_current=0,
+            report_stage_total=total_events,
         )
-    lines.append(f"")
+        for n, ev in enumerate(included):
+            session.update(report_stage_current=n)
 
-    lines.append(f"## Key Moments")
-    lines.append(f"")
-    for km in key_moments_raw:
-        idx = km.get("event_index", 0)
-        start_clock = km.get("start_clock") or seconds_to_clock(km.get("start_s", 0))
-        end_clock = km.get("end_clock") or seconds_to_clock(km.get("end_s", 0))
-        label = km.get("zone_label") or "motion"
-        conf = round(km.get("peak_motion_score", 0) * 100)
-        thumb_path = job_dir / "thumbnails" / f"{idx}.jpg"
-        desc = descriptions.get(idx, "")
+        # Generate thumbnails via ffmpeg (best-effort; silent on failure)
+        try:
+            thumbnail_gen.run(
+                job_id=job_id,
+                source_path=source_path,
+                events=included,
+                logger=_make_log_fn(job_id),
+            )
+        except Exception:
+            pass  # Thumbnails are optional; continue without them
 
-        lines.append(f"### Event {idx + 1} — {label} ({conf}%)")
-        lines.append(f"**Time:** {start_clock}–{end_clock}  ")
-        if thumb_path.exists():
-            lines.append(f"**Thumbnail:** `{thumb_path}`  ")
-        if desc:
-            lines.append(f"**Description:** {desc}  ")
-        lines.append(f"")
+        # ── Stage: ai_analysis ──────────────────────────────────────
+        session.update(
+            report_stage="ai_analysis",
+            report_stage_current=0,
+            report_stage_total=total_events,
+        )
+        for n, ev in enumerate(included):
+            ts = ev.get("start_clock", seconds_to_clock(float(ev.get("start_s", 0))))
+            session.update(report_stage_current=n, report_stage_timestamp=ts)
 
-    lines.append(f"## Activity Heatmap")
-    lines.append(f"")
-    heatmap_path = job_dir / "heatmap.png"
-    if heatmap_path.exists():
-        lines.append(f"Heatmap: `{heatmap_path}`")
-    else:
-        lines.append(f"Heatmap not available for this run.")
-    lines.append(f"")
+            # Use thumbnail_path from event (T007) or job_dir thumbnail (T006)
+            tp = ev.get("thumbnail_path")
+            thumb = Path(tp) if tp else (
+                job_dir / "thumbnails" / f"{ev['event_index']}.jpg"
+            )
+            analysis = (
+                FrameAnalyzer.analyze(thumb)
+                if thumb.exists()
+                else {
+                    "caption": "",
+                    "object_caption": "",
+                    "detections": [],
+                    "clip_embedding_path": None,
+                }
+            )
+            ev["caption"] = analysis.get("caption", "")
+            ev["object_caption"] = analysis.get("object_caption", "")
+            ev["detections"] = analysis.get("detections", [])
 
-    lines.append(f"## Detection Configuration")
-    lines.append(f"")
-    lines.append(f"| Setting | Value |")
-    lines.append(f"|---------|-------|")
-    for k, v in settings.items():
-        lines.append(f"| {k} | {v} |")
-    lines.append(f"")
+        # ── Executive summary via LLMSynthesizer (falls back gracefully) ──
+        from app.core.narrative_synthesizer import (
+            NarrativeSynthesizer,
+            executive_summary as _exec_summary_fn,
+            activity_stats,
+            object_inventory,
+            timeline_entries,
+        )
 
-    lines.append(f"## Data Appendix (JSON)")
-    lines.append(f"")
-    lines.append(f"```json")
-    lines.append(json.dumps(events_records, indent=2))
-    lines.append(f"```")
-    lines.append(f"")
+        if LLMSynthesizer.is_available():
+            try:
+                narrative_obj = NarrativeSynthesizer()
+                synth_obj = LLMSynthesizer()
+                exec_summary_text, llm_used, llm_notice = synth_obj.synthesize(
+                    included, duration_s, narrative_obj
+                )
+            except Exception:
+                exec_summary_text = _exec_summary_fn(included, source_info, settings)
+                llm_used = False
+                llm_notice = "Executive summary: rule-based synthesis — LLM API unavailable"
+        else:
+            exec_summary_text = _exec_summary_fn(included, source_info, settings)
+            llm_used = False
+            llm_notice = "Executive summary: rule-based synthesis — LLM API unavailable"
 
-    md_text = "\n".join(lines)
+        # Stats / inventory / timeline
+        stats = activity_stats(included, source_info)
+        inventory = object_inventory(included)
+        descriptions = {ev.get("event_index", 0): ev.get("caption", "") for ev in included}
+        timeline = timeline_entries(included, descriptions)
 
-    # Enforce UTF-8 + 100KB: FINAL ASSERTION only (not a truncation pass)
-    # descriptions are already ≤200 chars from timeline_entries() in T003
-    assert len(md_text.encode("utf-8")) < 100 * 1024, (
-        "Markdown file exceeds 100KB — reduce description cap in narrative_synthesizer.timeline_entries()"
-    )
+        # ── Stage: markdown ──────────────────────────────────────────
+        if "md" in formats:
+            session.update(report_stage="markdown", report_stage_current=0, report_stage_total=0)
 
-    # Output dir
-    output_dir = Path(snap.get("output_dir") or (Path.home() / "Desktop"))
-    output_dir.mkdir(parents=True, exist_ok=True)
+            source_name = Path(source_path).stem
+            generated_at = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    source_stem = Path(source_path).stem
-    out_path = output_dir / f"{source_stem}_intelligence_{timestamp}.md"
-    out_path.write_text(md_text, encoding="utf-8")
+            # Build JSON appendix records
+            events_records = []
+            for ev in included:
+                idx = ev.get("event_index")
+                rec = {
+                    "event_index": idx,
+                    "start_s": ev.get("start_s"),
+                    "end_s": ev.get("end_s"),
+                    "start_clock": ev.get("start_clock") or seconds_to_clock(ev.get("start_s", 0)),
+                    "end_clock": ev.get("end_clock") or seconds_to_clock(ev.get("end_s", 0)),
+                    "peak_motion_score": ev.get("peak_motion_score"),
+                    "zone_label": ev.get("zone_label"),
+                    "included": ev.get("included", True),
+                }
+                cap = ev.get("caption", "")
+                if cap:
+                    rec["caption"] = cap
+                events_records.append(rec)
 
-    moondream_available = FrameDescriber.is_available()
+            # Build Markdown string
+            lines = []
+            lines.append(f"# Video Intelligence Report: {source_name}")
+            lines.append(f"")
+            lines.append(f"**Generated:** {generated_at}  ")
+            lines.append(f"**Detection Mode:** {stats['detection_mode']}  ")
+            lines.append(f"**Duration:** {seconds_to_clock(duration_s)}  ")
+            lines.append(f"**Source:** {source_path}  ")
+            lines.append(f"")
+
+            lines.append(f"## Executive Summary")
+            lines.append(f"")
+            lines.append(exec_summary_text)
+            lines.append(f"")
+
+            lines.append(f"## Activity Statistics")
+            lines.append(f"")
+            lines.append(f"| Metric | Value |")
+            lines.append(f"|--------|-------|")
+            lines.append(f"| Events | {stats['event_count']} |")
+            lines.append(f"| Active Duration | {stats['active_s']:.1f}s |")
+            lines.append(f"| Active % | {stats['active_pct']:.1f}% |")
+            lines.append(f"| Busiest Period | {stats['busiest_period']} |")
+            lines.append(f"| Avg Confidence | {stats['avg_confidence']:.1%} |")
+            lines.append(f"| Detection Mode | {stats['detection_mode']} |")
+            lines.append(f"")
+
+            if inventory:
+                lines.append(f"## Object Inventory")
+                lines.append(f"")
+                lines.append(f"| Class | Count | First Seen | Last Seen |")
+                lines.append(f"|-------|-------|------------|-----------|")
+                for item in inventory:
+                    lines.append(
+                        f"| {item['label']} | {item['count']} | {item['first_clock']} | {item['last_clock']} |"
+                    )
+                lines.append(f"")
+
+            lines.append(f"## Chronological Timeline")
+            lines.append(f"")
+            lines.append(f"| # | Start | End | Duration | Activity | Confidence | Description |")
+            lines.append(f"|---|-------|-----|----------|----------|------------|-------------|")
+            for entry in timeline:
+                desc_cell = (
+                    entry["description"].replace("|", "\\|")
+                    if entry["description"] and entry["description"] != "N/A"
+                    else "N/A"
+                )
+                lines.append(
+                    f"| {entry['event_num']} | {entry['start_clock']} | {entry['end_clock']} "
+                    f"| {entry['duration_s']:.1f}s | {entry['label']} | {entry['confidence_pct']}% "
+                    f"| {desc_cell} |"
+                )
+            lines.append(f"")
+
+            # Key moments
+            key_moments_raw = sorted(
+                included,
+                key=lambda e: (-e.get("peak_motion_score", 0), e.get("event_index", 0)),
+            )[:3]
+            lines.append(f"## Key Moments")
+            lines.append(f"")
+            for km in key_moments_raw:
+                idx = km.get("event_index", 0)
+                start_clock = km.get("start_clock") or seconds_to_clock(km.get("start_s", 0))
+                end_clock = km.get("end_clock") or seconds_to_clock(km.get("end_s", 0))
+                label = km.get("zone_label") or "motion"
+                conf = round(km.get("peak_motion_score", 0) * 100)
+                tp = km.get("thumbnail_path")
+                thumb_path = Path(tp) if tp else (job_dir / "thumbnails" / f"{idx}.jpg")
+                desc = km.get("caption", "")
+
+                lines.append(f"### Event {idx + 1} — {label} ({conf}%)")
+                lines.append(f"**Time:** {start_clock}–{end_clock}  ")
+                if thumb_path.exists():
+                    lines.append(f"**Thumbnail:** `{thumb_path}`  ")
+                if desc:
+                    lines.append(f"**Description:** {desc}  ")
+                lines.append(f"")
+
+            lines.append(f"## Activity Heatmap")
+            lines.append(f"")
+            heatmap_path = job_dir / "heatmap.png"
+            if heatmap_path.exists():
+                lines.append(f"Heatmap: `{heatmap_path}`")
+            else:
+                lines.append(f"Heatmap not available for this run.")
+            lines.append(f"")
+
+            lines.append(f"## Detection Configuration")
+            lines.append(f"")
+            lines.append(f"| Setting | Value |")
+            lines.append(f"|---------|-------|")
+            for k, v in settings.items():
+                lines.append(f"| {k} | {v} |")
+            lines.append(f"")
+
+            lines.append(f"## Data Appendix (JSON)")
+            lines.append(f"")
+            lines.append(f"```json")
+            lines.append(_json.dumps(events_records, indent=2))
+            lines.append(f"```")
+            lines.append(f"")
+
+            md_text = "\n".join(lines)
+
+            # Enforce UTF-8 + 100KB guard
+            assert len(md_text.encode("utf-8")) < 100 * 1024, (
+                "Markdown file exceeds 100KB — reduce description cap in "
+                "narrative_synthesizer.timeline_entries()"
+            )
+
+            output_dir = Path(snap.get("output_dir") or (Path.home() / "Desktop"))
+            output_dir.mkdir(parents=True, exist_ok=True)
+
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            source_stem = Path(source_path).stem
+            out_path = output_dir / f"{source_stem}_intelligence_{timestamp}.md"
+            out_path.write_text(md_text, encoding="utf-8")
+            md_path_str = str(out_path)
+
+        # ── Stage: pdf (Qt bridge — fire-and-forget via main_window.py) ──
+        if "pdf" in formats:
+            session.update(report_stage="pdf", report_stage_current=0, report_stage_total=0)
+            # pdf_path_str remains None here; the Qt bridge (main_window.py) writes
+            # the PDF asynchronously and sets pdf_path in the session when done.
+
+    finally:
+        # Store paths BEFORE signalling done (H1 ordering guarantee)
+        session.update(md_path=md_path_str, pdf_path=pdf_path_str)
+        session.update(report_done_pending=True)   # MUST come BEFORE clearing report_stage
+        session.update(report_stage="")
 
     return JSONResponse({
-        "md_path": str(out_path),
-        "moondream_available": moondream_available,
+        "md_path": md_path_str,
+        "pdf_path": pdf_path_str,
+        "florence_available": florence_available,
+        "llm_used": llm_used,
+        "llm_notice": llm_notice,
     })
 
 

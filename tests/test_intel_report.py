@@ -183,7 +183,7 @@ def test_intel_report_export_writes_md_file(client, tmp_path, monkeypatch):
     resp = client.post("/api/job/intel-report/export")
     assert resp.status_code == 200
     data = resp.json()
-    assert "md_path" in data and "moondream_available" in data
+    assert "md_path" in data and "florence_available" in data
     assert Path(data["md_path"]).exists()
 
 
