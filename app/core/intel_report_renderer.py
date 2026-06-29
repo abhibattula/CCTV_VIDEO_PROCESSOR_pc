@@ -19,12 +19,6 @@ _env = jinja2.Environment(
 )
 
 
-def _fmt_ts(seconds: float) -> str:
-    """Format seconds as HH:MM:SS clock string."""
-    s = int(seconds)
-    return f"{s // 3600:02d}:{(s % 3600) // 60:02d}:{s % 60:02d}"
-
-
 class IntelReportRenderer:
     """Stateless renderer for the intelligence report HTML template."""
 
