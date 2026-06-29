@@ -139,7 +139,10 @@ async def create_job(req: CreateJobRequest):
 
 @router.get("/job")
 async def get_job():
-    return JSONResponse(session.snapshot())
+    snap = session.snapshot()
+    snap["florence_available"] = FrameAnalyzer.is_available()
+    snap["llm_available"] = LLMSynthesizer.is_available()
+    return JSONResponse(snap)
 
 
 @router.get("/job/preview-frame")
