@@ -180,8 +180,10 @@ review/filter on a timeline → export.
 - **CSV/JSON event log export** — download the included event list as a structured
   spreadsheet or machine-readable JSON (respects the current label filter; second
   click produces a new timestamped file, not an overwrite)
-- **Quick Report PDF** — instant motion-only PDF with one click, no AI wait; fires the
-  same Incident Report flow; side-by-side with the Intelligence Report button
+- **Quick Report PDF** — instant motion-only PDF with pre-validation (checks for completed
+  job and included events before firing); truthful status feedback ("✅ Saved: …" or
+  "❌ PDF save failed"); saved to the real Desktop even when OneDrive Desktop Folder
+  Backup is enabled; side-by-side with the Intelligence Report button
 - **Florence-2 AI Analysis** — task-driven frame captions, object detection, and region
   descriptions; 90 s hard timeout per task (64 max tokens) so the report always
   completes; CLIP ViT-B/32 indexes frames as semantic embeddings (`.clip.npy` sidecars)

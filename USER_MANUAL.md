@@ -248,7 +248,9 @@ Or configure manually:
 | **720p / 480p** | Re-encode and downscale (480p = smallest file) |
 | **Burn-in timestamp & label** | Stamps each clip with a semi-transparent overlay reading `HH:MM:SS • Label` in the bottom-left corner, via FFmpeg's `drawtext` filter |
 | **Label Scope** | Restrict export to one label (e.g. only "Person" events), or "All labels" |
-| **Output Folder** | Click Browse… to choose where files are saved. Default: Desktop |
+| **Output Folder** | Click Browse… to choose where files are saved. Default: Desktop (OneDrive Desktop if enabled) |
+
+> **Output folder persists across videos** — if you set a custom output folder and then load a different video, the folder you chose is remembered for the rest of the session. You don't need to re-select it each time.
 
 ### Reports & Data Export
 
@@ -268,10 +270,10 @@ The Export page offers two report paths side-by-side in the **Video Intelligence
 
 | Button | What it does | When to use it |
 |--------|-------------|----------------|
-| **Quick Report (PDF)** | Instant motion-only PDF — same content as the existing Incident Report. Opens a save dialog within seconds. No AI wait. | You want a fast PDF right now |
+| **Quick Report (PDF)** | Instant motion-only PDF — same content as the existing Incident Report. Saved automatically to your output folder. No AI wait. | You want a fast PDF right now |
 | **Generate Intelligence Report…** | Full AI-enhanced report: Florence-2 captions, SVG timeline, Scene Breakdown. Takes 5–20 min on CPU. | You want AI scene descriptions |
 
-Both buttons are disabled when there are no included events. Use the Timeline page to include at least one event first.
+**Quick Report pre-validation:** Before generating, the button checks that detection has completed and at least one event is included. If not, an inline error message explains what's needed (e.g., "No included events — include at least one on the Timeline page."). The button shows "Generating…" while printing and then "✅ Saved: filename.pdf" on success or "❌ PDF save failed" if the file could not be written.
 
 **Choosing your Intelligence Report format**
 
