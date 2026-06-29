@@ -147,20 +147,41 @@ export function mount(container, params) {
     if (files.length > 0) loadFile(files[0].path || files[0].name);
   });
 
-  // Browse button
+  // T017: abort token — increment on each Browse click to cancel stale poll chains
+  let _browseToken = 0;
+
+  // T020: show inline error near Browse button
+  function showLoadError(msg) {
+    let errEl = container.querySelector("#browse-error");
+    if (!errEl) {
+      errEl = document.createElement("div");
+      errEl.id = "browse-error";
+      errEl.style.cssText = "color:#e55;margin-top:6px;font-size:0.875rem;";
+      container.querySelector("#drop-zone").appendChild(errEl);
+    }
+    errEl.textContent = msg;
+    setTimeout(() => { if (errEl.parentNode) errEl.textContent = ""; }, 5000);
+  }
+
+  // T018: Browse button increments token and passes it to poll chain
   container.querySelector("#browse-btn").addEventListener("click", () => {
+    const token = ++_browseToken;
     window.dispatchEvent(new CustomEvent("cctv:browse"));
-    pollPendingPath();
+    pollPendingPath(token, 0);
   });
 
-  function pollPendingPath(attempts = 0) {
+  // T019: poll accepts (token, attempts); bails if token is stale
+  function pollPendingPath(token, attempts) {
+    if (token !== _browseToken) return;
     if (attempts > 60) return;
     fetch("/api/shell/pending-path")
       .then(r => r.json())
       .then(data => {
+        if (token !== _browseToken) return;
         if (data.path) loadFile(data.path);
-        else setTimeout(() => pollPendingPath(attempts + 1), 200);
-      });
+        else setTimeout(() => pollPendingPath(token, attempts + 1), 200);
+      })
+      .catch(err => showLoadError("Browse failed — backend unreachable. Try again."));
   }
 
   // FR-017: check existing job before loading new file
@@ -335,6 +356,10 @@ export function mount(container, params) {
       alert(err.detail || "Failed to start detection");
     }
   });
+
+  // T016a: consume any pending path posted by Qt drag-drop before this page loaded
+  // (Qt calls _post_path then navigates to home; without this the path is never read)
+  pollPendingPath(++_browseToken, 0);
 }
 
 function formatDur(s) {

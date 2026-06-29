@@ -853,17 +853,63 @@ export function mount(container, params) {
     }
   }
 
-  // "Quick Report (PDF)" button → fire motion-only PDF immediately
-  container.querySelector("#quick-report-btn").addEventListener("click", () => {
+  // "Quick Report (PDF)" button → pre-validate, fire PDF, poll _cctvPdfResult for real status
+  container.querySelector("#quick-report-btn").addEventListener("click", async () => {
     const btn = container.querySelector("#quick-report-btn");
     const statusEl = container.querySelector("#intel-report-status");
     btn.disabled = true;
-    statusEl.textContent = "Generating Quick Report PDF…";
-    window.dispatchEvent(new CustomEvent("cctv:save-report-pdf"));
-    setTimeout(() => {
-      statusEl.textContent = "Quick Report saved to your output folder.";
+
+    let job;
+    try {
+      job = await fetch("/api/job").then(r => r.json());
+    } catch (_err) {
+      statusEl.textContent = "No active job — run detection first.";
       btn.disabled = false;
-    }, 3000);
+      return;
+    }
+    if (!job.job_id) {
+      statusEl.textContent = "No active job — run detection first.";
+      btn.disabled = false;
+      return;
+    }
+    if (job.status === "detecting" || job.status === "exporting") {
+      statusEl.textContent = "Detection in progress — wait for it to finish.";
+      btn.disabled = false;
+      return;
+    }
+    const includedEvents = (job.events || []).filter(e => e.included);
+    if (includedEvents.length === 0) {
+      statusEl.textContent = "No included events — include at least one on the Timeline page.";
+      btn.disabled = false;
+      return;
+    }
+
+    statusEl.textContent = "Generating…";
+    window._cctvPdfResult = null;
+    window.dispatchEvent(new CustomEvent("cctv:save-report-pdf"));
+
+    let elapsed = 0;
+    const maxWait = 120000;
+    const pollInterval = 500;
+    const poll = setInterval(() => {
+      elapsed += pollInterval;
+      const result = window._cctvPdfResult;
+      if (result !== null) {
+        clearInterval(poll);
+        window._cctvPdfResult = null;
+        if (result.success) {
+          const fname = result.path ? result.path.split(/[\\/]/).pop() : "report.pdf";
+          statusEl.textContent = "✅ Saved: " + fname;
+        } else {
+          statusEl.textContent = "❌ PDF save failed — check that detection is complete and events are included.";
+        }
+        btn.disabled = false;
+      } else if (elapsed >= maxWait) {
+        clearInterval(poll);
+        statusEl.textContent = "❌ PDF save timed out — check output folder permissions.";
+        btn.disabled = false;
+      }
+    }, pollInterval);
   });
 
   // "Generate Intelligence Report…" button → show format modal
