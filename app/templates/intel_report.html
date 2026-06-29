@@ -571,11 +571,10 @@
       {% for entry in scene_breakdown %}
       <div class="scene-card">
         <div class="scene-header">
-          <span class="rank">#{{ entry.rank }}</span>
-          <span class="timestamp">{{ entry.timestamp }}</span>
-          <span class="confidence">{{ (entry.confidence * 100)|int }}%</span>
+          <span class="rank">#{{ loop.index }}</span>
+          <span class="timestamp">{{ entry.start_clock }} &ndash; {{ entry.end_clock }}</span>
         </div>
-        <img src="data:image/jpeg;base64,{{ entry.thumbnail_b64 }}" alt="Event thumbnail" class="scene-thumb">
+        <img src="data:image/jpeg;base64,{{ entry.annotated_thumb_b64 }}" alt="Event thumbnail" class="scene-thumb">
         {% if entry.caption %}
         <p class="scene-caption">{{ entry.caption }}</p>
         {% endif %}

@@ -309,6 +309,6 @@ def test_build_scene_breakdown_length(tmp_path):
     result_3 = renderer._build_scene_breakdown(events_3)
     assert len(result_3) == 3
 
-    required_keys = {"rank", "caption", "object_caption", "detections", "thumbnail_b64"}
+    required_keys = {"event_index", "start_clock", "end_clock", "caption", "object_caption", "detections", "annotated_thumb_b64"}
     for entry in result_3:
         assert required_keys.issubset(set(entry.keys()))

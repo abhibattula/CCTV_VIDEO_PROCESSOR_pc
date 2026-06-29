@@ -37,11 +37,11 @@ class IntelReportRenderer:
         DEFAULT_MOG2 = "#6b7280"
         OTHER_YOLO = "#8b5cf6"
 
+        total_duration_s = duration_s if duration_s > 0 else 1
+
         ticks = []
         for event in events:
-            if duration_s <= 0:
-                continue
-            x = int(event.get("start_s", 0) / duration_s * 800)
+            x = int(event.get("start_s", 0) / total_duration_s * 800)
             confidence = event.get("confidence", 0.5)
             h = max(8, int(confidence * 32))
             y = 20 - h // 2
@@ -54,8 +54,10 @@ class IntelReportRenderer:
                 fill = COLOURS["vehicle"]
             else:
                 fill = OTHER_YOLO
+            event_duration_s = event.get("end_s", 0) - event.get("start_s", 0)
+            width = max(2, int(event_duration_s / total_duration_s * 800))
             ticks.append(
-                f'<rect x="{x}" y="{y}" width="4" height="{h}" rx="2" fill="{fill}"/>'
+                f'<rect x="{x}" y="{y}" width="{width}" height="{h}" rx="2" fill="{fill}"/>'
             )
 
         ticks_svg = "\n  ".join(ticks)
@@ -121,19 +123,18 @@ class IntelReportRenderer:
         top = sorted_events[:5]
 
         result = []
-        for rank, event in enumerate(top, start=1):
+        for i, event in enumerate(top):
             thumb_path = event.get("thumbnail_path") or event.get("thumb_path")
             detections = event.get("detections", [])
-            thumbnail_b64 = self._annotate_thumbnail(thumb_path, detections)
+            annotated_thumb_b64 = self._annotate_thumbnail(thumb_path, detections)
             result.append({
-                "rank": rank,
-                "timestamp": _fmt_ts(event.get("start_s", 0)),
-                "confidence": event.get("confidence", 0),
+                "event_index": event.get("event_index", i),
+                "start_clock": event.get("start_clock", ""),
+                "end_clock": event.get("end_clock", ""),
                 "caption": event.get("caption", ""),
                 "object_caption": event.get("object_caption", ""),
                 "detections": detections,
-                "thumbnail_b64": thumbnail_b64,
-                "thumbnail_b64_original": thumbnail_b64,
+                "annotated_thumb_b64": annotated_thumb_b64,
             })
         return result
 
