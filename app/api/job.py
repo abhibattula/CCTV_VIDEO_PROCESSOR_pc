@@ -293,9 +293,14 @@ async def intel_report_html():
         thumb = job_dir / "thumbnails" / f"{ev['event_index']}.jpg"
         if thumb.exists():
             analysis = FrameAnalyzer.analyze(thumb)
-            descriptions[ev["event_index"]] = analysis.get("caption", "")
+            ev["caption"] = analysis.get("caption", "")
+            ev["object_caption"] = analysis.get("object_caption", "")
+            ev["detections"] = analysis.get("detections", [])
         else:
-            descriptions[ev["event_index"]] = ""
+            ev["caption"] = ""
+            ev["object_caption"] = ""
+            ev["detections"] = []
+        descriptions[ev["event_index"]] = ev["caption"]
 
     from app.core.narrative_synthesizer import (
         NarrativeSynthesizer, executive_summary, activity_stats, object_inventory, timeline_entries
@@ -690,9 +695,15 @@ async def intel_report_export(request: Request):
 
         # ── Stage: pdf (Qt bridge — fire-and-forget via main_window.py) ──
         if "pdf" in formats:
+            _snap = session.snapshot()
+            _out_dir = _snap.get("output_dir") or str(Path.home() / "Desktop")
+            pdf_path_str = str(
+                Path(_out_dir) /
+                f"incident_report_{datetime.now().strftime('%Y%m%d_%H%M%S')}.pdf"
+            )
             session.update(report_stage="pdf", report_stage_current=0, report_stage_total=0)
-            # pdf_path_str remains None here; the Qt bridge (main_window.py) writes
-            # the PDF asynchronously and sets pdf_path in the session when done.
+            # Actual rendering triggered by export.js dispatching cctv:generate-intel-report
+            # after report_done arrives; main_window.py picks it up within ~200ms.
 
     finally:
         # Store paths BEFORE signalling done (H1 ordering guarantee)

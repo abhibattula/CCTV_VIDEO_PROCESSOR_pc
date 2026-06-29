@@ -762,11 +762,20 @@ export function mount(container, params) {
         // Mark all stages done
         STAGES.forEach(s => updateStageRow(s, "done"));
 
+        const mdPath  = data.md_path  || null;
+        const pdfPath = data.pdf_path || null;
+
+        // Trigger Qt bridge to render PDF asynchronously (main_window.py picks
+        // up the event within ~200ms and calls _generate_intel_report_pdf)
+        if (pdfPath && formats.includes("pdf")) {
+          window.dispatchEvent(new CustomEvent("cctv:generate-intel-report", {
+            detail: { pdf_path: pdfPath },
+          }));
+        }
+
         // Show success card
         progressEl.classList.add("hidden");
         doneEl.classList.remove("hidden");
-        const mdPath  = data.md_path  || null;
-        const pdfPath = data.pdf_path || null;
         container.querySelector("#intel-report-done-md").textContent =
           mdPath  ? "Markdown: " + mdPath  : "";
         container.querySelector("#intel-report-done-pdf").textContent =
