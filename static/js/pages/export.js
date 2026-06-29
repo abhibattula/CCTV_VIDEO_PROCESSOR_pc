@@ -191,7 +191,7 @@ export function mount(container, params) {
         <p class="muted" style="font-size:12px;margin:6px 0 10px">
           Natural language report describing what happened in the video — executive summary,
           timeline, object inventory, and PDF. Saved to your output folder.<br>
-          <span style="margin-top:4px;display:inline-block">Tip: install <code>transformers</code> (<code>pip install transformers accelerate</code>) to add AI visual descriptions to the timeline. First use downloads the model (~900 MB, one-time, fully offline).</span>
+          <span style="margin-top:4px;display:inline-block">Tip: install <code>transformers</code> (<code>pip install transformers</code>) to enable Florence-2 AI analysis. First use downloads the model (~230 MB, one-time, fully offline).</span>
         </p>
 
         <!-- AI readiness badges — populated by loadAiBadges() -->
@@ -819,7 +819,7 @@ export function mount(container, params) {
 
       // Check if florence was unavailable and append a tip
       if (!data.florence_available) {
-        _llmNotice = [_llmNotice, "Run 'pip install transformers accelerate' to enable AI visual descriptions."]
+        _llmNotice = [_llmNotice, "Run 'pip install transformers' to enable Florence-2 AI analysis."]
           .filter(Boolean).join(" ");
       }
 

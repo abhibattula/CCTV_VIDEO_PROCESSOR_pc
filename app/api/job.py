@@ -306,7 +306,7 @@ async def intel_report_html():
         NarrativeSynthesizer, executive_summary, activity_stats, object_inventory, timeline_entries
     )
 
-    # Executive summary — use LLMSynthesizer when available, else rule-based
+    # Executive summary — use LLMSynthesizer when available, else enriched rule-based
     llm_notice = ""
     if LLMSynthesizer.is_available():
         try:
@@ -316,10 +316,10 @@ async def intel_report_html():
             )
             summary = exec_summary_text
         except Exception:
-            summary = executive_summary(included, source_info, settings)
+            summary = NarrativeSynthesizer().executive_summary(included)
             llm_notice = "Executive summary: rule-based synthesis — LLM API unavailable"
     else:
-        summary = executive_summary(included, source_info, settings)
+        summary = NarrativeSynthesizer().executive_summary(included)
         llm_notice = "Executive summary: rule-based synthesis — LLM API unavailable"
 
     stats = activity_stats(included, source_info)
@@ -532,11 +532,11 @@ async def intel_report_export(request: Request):
                     included, duration_s, narrative_obj
                 )
             except Exception:
-                exec_summary_text = _exec_summary_fn(included, source_info, settings)
+                exec_summary_text = NarrativeSynthesizer().executive_summary(included, duration_s)
                 llm_used = False
                 llm_notice = "Executive summary: rule-based synthesis — LLM API unavailable"
         else:
-            exec_summary_text = _exec_summary_fn(included, source_info, settings)
+            exec_summary_text = NarrativeSynthesizer().executive_summary(included, duration_s)
             llm_used = False
             llm_notice = "Executive summary: rule-based synthesis — LLM API unavailable"
 
