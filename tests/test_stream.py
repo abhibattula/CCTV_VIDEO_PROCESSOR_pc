@@ -106,3 +106,38 @@ def test_sse_generator_handles_client_disconnect():
         # If athrow() returned a value (generator yielded again), that is also acceptable
 
     asyncio.run(_run())
+
+
+# ── Phase 10 tests (T013) ─────────────────────────────────────────────────────
+
+import asyncio as _asyncio
+import app.api.stream as _stream_mod
+from app.api.stream import _event_generator as _gen
+
+
+def test_sse_idle_safety_exits_after_max_polls(monkeypatch):
+    """Generator exits cleanly after _MAX_IDLE_POLLS × POLL_INTERVAL_S with no activity."""
+    monkeypatch.setattr(_stream_mod, "POLL_INTERVAL_S", 0.001)
+    monkeypatch.setattr(_stream_mod, "_MAX_IDLE_POLLS", 3)
+
+    async def collect():
+        chunks = []
+        async for chunk in _gen("test-job"):
+            chunks.append(chunk)
+        return chunks
+
+    chunks = _asyncio.run(collect())
+    assert len(chunks) > 0
+    assert any("keepalive" in c for c in chunks)
+
+
+def test_sse_handles_generator_exit(monkeypatch):
+    """Breaking out of the generator early must not raise any exception."""
+    monkeypatch.setattr(_stream_mod, "POLL_INTERVAL_S", 0.001)
+    monkeypatch.setattr(_stream_mod, "_MAX_IDLE_POLLS", 3)
+
+    async def run():
+        async for _ in _gen("test-job"):
+            break  # simulate immediate client disconnect
+
+    _asyncio.run(run())  # must not raise
