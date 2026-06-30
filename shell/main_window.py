@@ -21,21 +21,7 @@ from PyQt6.QtWebEngineWidgets import QWebEngineView
 from PyQt6.QtWebEngineCore import QWebEnginePage
 
 from app.config import BACKEND_HOST, BACKEND_PORT
-
-
-def _get_desktop_path() -> str:
-    """Return the real Desktop path, handling OneDrive Desktop Folder Backup on Windows 11."""
-    if sys.platform == "win32":
-        try:
-            import ctypes
-            import ctypes.wintypes
-            buf = ctypes.create_unicode_buffer(ctypes.wintypes.MAX_PATH)
-            ctypes.windll.shell32.SHGetFolderPathW(0, 0, 0, 0, buf)
-            if buf.value:
-                return buf.value
-        except Exception:
-            pass
-    return str(Path.home() / "Desktop")
+from app.utils.platform import get_desktop_path
 
 
 class MainWindow(QMainWindow):
@@ -72,6 +58,7 @@ class MainWindow(QMainWindow):
         self._bridge_timer.start(200)
 
         self._tray: QSystemTrayIcon | None = None
+        self._tray_available: bool = QSystemTrayIcon.isSystemTrayAvailable()
 
     # ── Backend readiness ─────────────────────────────────────────────────────
 
@@ -185,9 +172,9 @@ class MainWindow(QMainWindow):
     def _get_output_dir(self):
         try:
             job = requests.get(f"{self._base_url}/api/job", timeout=2).json()
-            return job.get("output_dir") or _get_desktop_path()
+            return job.get("output_dir") or get_desktop_path()
         except Exception:
-            return _get_desktop_path()
+            return get_desktop_path()
 
     def _generate_pdf_report(self):
         import json as _json
@@ -307,7 +294,7 @@ class MainWindow(QMainWindow):
         except Exception:
             pass
         tray = self._try_get_tray()
-        if active_job and tray and tray.isVisible():
+        if active_job and self._tray_available and tray and tray.isVisible():
             self.hide()
             event.ignore()
         else:

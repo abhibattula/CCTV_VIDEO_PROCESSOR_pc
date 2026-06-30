@@ -4,11 +4,22 @@ from __future__ import annotations
 import contextlib
 import io
 import logging
+import re
 import threading
 import warnings
 from pathlib import Path
 
 logger = logging.getLogger(__name__)
+
+# ── Caption sanitiser ─────────────────────────────────────────────────────────
+# Florence-2's post_process_generation leaks raw model tokens in transformers 5.x.
+# This strips: </s> <s> <pad> <loc_NNN> <TASK_TOKEN> (e.g. <MORE_DETAILED_CAPTION>)
+_SPECIAL_TOKEN_RE = re.compile(r'</s>|<s>|<pad>|<loc_\d+>|</?[A-Z_]+>')
+
+
+def _clean_caption(text: str) -> str:
+    """Strip Florence-2 special tokens from a caption string."""
+    return _SPECIAL_TOKEN_RE.sub('', text or '').strip()
 
 
 def _run_in_daemon(fn, timeout: float):
@@ -50,6 +61,11 @@ class FrameAnalyzer:
         """Return True if Florence-2 transformers library is installed AND model weights cached."""
         if cls._availability_cache is not None:
             return cls._availability_cache
+        # Fast path: device has <5 GB RAM — AI disabled regardless of weights
+        from app.config import AI_FEATURES_ENABLED
+        if not AI_FEATURES_ENABLED:
+            cls._availability_cache = False
+            return False
         try:
             from transformers import AutoModelForCausalLM  # noqa: F401
         except Exception:
@@ -137,28 +153,27 @@ class FrameAnalyzer:
                     attn_implementation="eager",
                 )
 
+        # AutoProcessor (CLIPImageProcessor inside Florence-2) handles aspect-ratio
+        # normalisation internally — do NOT pad to square here.
         image = Image.open(image_path).convert("RGB")
-        # Florence-2's DaViT vision encoder requires square feature maps
-        if image.width != image.height:
-            side = max(image.width, image.height)
-            sq = Image.new("RGB", (side, side), (0, 0, 0))
-            sq.paste(image, ((side - image.width) // 2, (side - image.height) // 2))
-            image = sq
         processor = cls._processor
         model = cls._model
 
         def _run_task(task: str):
-            inputs = processor(
-                text=task, images=image, return_tensors="pt", truncation=False
-            ).to("cpu")
-            # use_cache=False: avoids EncoderDecoderCache format incompatibility in
-            # transformers 5.x — the custom Florence-2 model (trust_remote_code) was
-            # written for 4.x tuple-style past_key_values and cannot handle the new
-            # EncoderDecoderCache object that transformers 5.x passes during generate().
-            # max_new_tokens=64, num_beams=1: halves worst-case CPU inference to ~180s/task.
-            ids = model.generate(**inputs, max_new_tokens=64, num_beams=1, use_cache=False)
-            raw = processor.batch_decode(ids, skip_special_tokens=False)[0]
-            return processor.post_process_generation(raw, task=task, image_size=image.size)
+            with warnings.catch_warnings():
+                warnings.simplefilter("ignore", UserWarning)
+                warnings.simplefilter("ignore", DeprecationWarning)
+                inputs = processor(
+                    text=task, images=image, return_tensors="pt", truncation=False
+                ).to("cpu")
+                # use_cache=False: avoids EncoderDecoderCache format incompatibility in
+                # transformers 5.x — the custom Florence-2 model (trust_remote_code) was
+                # written for 4.x tuple-style past_key_values.
+                # max_new_tokens=100: prevents mid-token truncation (was 64); chosen over
+                # 150 to stay within the 90s task timeout at ~1 tok/s worst-case.
+                ids = model.generate(**inputs, max_new_tokens=100, num_beams=1, use_cache=False)
+                raw = processor.batch_decode(ids, skip_special_tokens=False)[0]
+                return processor.post_process_generation(raw, task=task, image_size=image.size)
 
         # Timeout per task. _run_in_daemon uses a daemon thread so join(timeout) truly
         # returns without blocking (unlike ThreadPoolExecutor.__exit__ which calls
@@ -171,7 +186,7 @@ class FrameAnalyzer:
         if err is not None:
             logger.warning("Florence-2 caption error for %s: %s", image_path, err)
         elif parsed is not None:
-            caption = parsed.get("<MORE_DETAILED_CAPTION>", "") or ""
+            caption = _clean_caption(parsed.get("<MORE_DETAILED_CAPTION>", "") or "")
 
         # Task 2: object detection
         detections: list = []
@@ -183,7 +198,7 @@ class FrameAnalyzer:
             labels = od_data.get("labels", []) or []
             bboxes = od_data.get("bboxes", []) or []
             detections = [
-                {"label": lbl, "bbox": list(bb)}
+                {"label": _clean_caption(lbl), "bbox": list(bb)}
                 for lbl, bb in zip(labels, bboxes)
             ]
 
@@ -201,19 +216,22 @@ class FrameAnalyzer:
                 ).to("cpu")
 
                 def _region_task():
-                    ids = model.generate(
-                        **crop_inputs, max_new_tokens=64, num_beams=1, use_cache=False
-                    )
-                    raw = processor.batch_decode(ids, skip_special_tokens=False)[0]
-                    return processor.post_process_generation(
-                        raw, task="<MORE_DETAILED_CAPTION>", image_size=crop.size
-                    )
+                    with warnings.catch_warnings():
+                        warnings.simplefilter("ignore", UserWarning)
+                        warnings.simplefilter("ignore", DeprecationWarning)
+                        ids = model.generate(
+                            **crop_inputs, max_new_tokens=100, num_beams=1, use_cache=False
+                        )
+                        raw = processor.batch_decode(ids, skip_special_tokens=False)[0]
+                        return processor.post_process_generation(
+                            raw, task="<MORE_DETAILED_CAPTION>", image_size=crop.size
+                        )
 
                 rc_parsed, err = _run_in_daemon(_region_task, _TASK_TIMEOUT)
                 if err is not None:
                     logger.warning("Florence-2 region_caption error for %s: %s", image_path, err)
                 elif rc_parsed is not None:
-                    object_caption = rc_parsed.get("<MORE_DETAILED_CAPTION>", "") or ""
+                    object_caption = _clean_caption(rc_parsed.get("<MORE_DETAILED_CAPTION>", "") or "")
             except Exception as exc:
                 logger.warning("Florence-2 region_caption setup error for %s: %s", image_path, exc)
 

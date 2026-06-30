@@ -167,41 +167,57 @@ export function mount(container) {
     setTimeout(() => window.go("/timeline"), 1200);
   }
 
-  // ── SSE stream (T038) ──────────────────────────────────────────────────────
+  // ── SSE stream with auto-reconnect ────────────────────────────────────────
 
-  try {
-    evtSource = new EventSource("/api/stream");
-    evtSource.onmessage = async (e) => {
-      const msg = JSON.parse(e.data);
+  let _sseRetries = 0;
+  const _SSE_MAX_RETRIES = 5;
+  const _SSE_BACKOFF_MS  = 3000;
 
-      // event_count delta detection — fetch events when count grows
-      if (typeof msg.event_count === "number") {
-        await onNewEvents(msg.event_count);
-      }
+  function connectSSE() {
+    if (evtSource) { evtSource.close(); evtSource = null; }
+    try {
+      evtSource = new EventSource("/api/stream");
+      evtSource.onmessage = async (e) => {
+        _sseRetries = 0;  // reset on successful message
+        const msg = JSON.parse(e.data);
 
-      if (msg.type === "keepalive") {
+        // event_count delta detection — fetch events when count grows
+        if (typeof msg.event_count === "number") {
+          await onNewEvents(msg.event_count);
+        }
+
+        if (msg.type === "keepalive") {
+          updateStats(msg.progress || 0, msg.event_count || 0, msg.status || "—");
+          return;
+        }
+        if (msg.type === "event") {
+          addLogEntry("EVENT", msg.line || "");
+        } else if (msg.line) {
+          const sev = msg.status === "error" ? "ERROR" : "INFO";
+          addLogEntry(sev, msg.line);
+        }
         updateStats(msg.progress || 0, msg.event_count || 0, msg.status || "—");
-        return;
-      }
-      if (msg.type === "event") {
-        addLogEntry("EVENT", msg.line || "");
-      } else if (msg.line) {
-        const sev = msg.status === "error" ? "ERROR" : "INFO";
-        addLogEntry(sev, msg.line);
-      }
-      updateStats(msg.progress || 0, msg.event_count || 0, msg.status || "—");
-      if (msg.type === "done" || msg.status === "completed" || msg.status === "cancelled") {
-        onDone(msg.status || "done");
-      }
-    };
-    evtSource.onerror = () => {
-      if (evtSource) { evtSource.close(); evtSource = null; }
-      addLogEntry("WARN", "SSE connection lost — switching to polling");
+        if (msg.type === "done" || msg.status === "completed" || msg.status === "cancelled") {
+          onDone(msg.status || "done");
+        }
+      };
+      evtSource.onerror = () => {
+        if (evtSource) { evtSource.close(); evtSource = null; }
+        if (_sseRetries < _SSE_MAX_RETRIES) {
+          _sseRetries++;
+          addLogEntry("WARN", `SSE disconnected — reconnecting (${_sseRetries}/${_SSE_MAX_RETRIES})…`);
+          setTimeout(connectSSE, _SSE_BACKOFF_MS);
+        } else {
+          addLogEntry("WARN", "SSE unavailable after retries — switching to polling");
+          startPolling();
+        }
+      };
+    } catch {
       startPolling();
-    };
-  } catch {
-    startPolling();
+    }
   }
+
+  connectSSE();
 
   function startPolling() {
     pollTimer = setInterval(async () => {

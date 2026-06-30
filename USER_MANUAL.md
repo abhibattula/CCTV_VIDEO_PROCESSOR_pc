@@ -48,7 +48,8 @@ See "Stopping the Application" and "Starting a New Project" further down for det
 ## Requirements
 
 - **Python 3.11+** (tested on 3.12)
-- **Windows 10/11** (macOS/Linux work but file-dialog integration is Windows-optimised)
+- **Windows 10/11, macOS, or Linux** — fully cross-platform; file-dialog integration
+  is native on each OS
 - FFmpeg is bundled automatically via `imageio-ffmpeg` — no manual install needed
 
 ---
@@ -72,7 +73,17 @@ pip install -r requirements.txt
 ```
 pip install ultralytics
 ```
-This downloads a ~6 MB YOLOv8 model on first use and enables the "Object Detection" mode on the home page. Without it, that mode button is disabled with a tooltip explaining why — MOG2 motion detection still works fully.
+This downloads a ~6 MB YOLOv8 model on first use and enables the "Object Detection"
+mode on the home page. Without it, that mode button is disabled with a tooltip
+explaining why — MOG2 motion detection still works fully.
+
+**Linux desktop only** — install OpenCV's system library first:
+```
+sudo apt install libgl1-mesa-glx libglib2.0-0
+```
+
+**Raspberry Pi** — see [`RASPBERRY_PI_SETUP.md`](RASPBERRY_PI_SETUP.md). The AI
+Analysis feature (Florence-2) is automatically disabled on devices with ≤ 4 GB RAM.
 
 ---
 

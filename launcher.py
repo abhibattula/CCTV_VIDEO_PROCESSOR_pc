@@ -108,9 +108,8 @@ def main():
     qt_app = QApplication(sys.argv)
     qt_app.setQuitOnLastWindowClosed(False)
 
-    # Handle Ctrl+C on Windows: Qt intercepts SIGINT unless we install a handler.
-    # The dummy 200ms timer keeps Python's signal-delivery machinery alive inside
-    # the Qt event loop so the SIGINT handler actually fires.
+    # Handle Ctrl+C — Qt blocks Python SIGINT on all platforms without this dummy timer.
+    # The 200ms tick keeps Python's signal-delivery machinery alive inside the Qt event loop.
     signal.signal(signal.SIGINT, lambda *_: qt_app.quit())
     _sig_timer = QTimer()
     _sig_timer.timeout.connect(lambda: None)
