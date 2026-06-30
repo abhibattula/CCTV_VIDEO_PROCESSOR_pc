@@ -141,12 +141,12 @@ def test_export_with_label_filter(client, monkeypatch, tmp_path):
 # ── Phase 9 TDD tests (B6: _get_desktop_path; B2: poll caching) ─────────────
 
 def test_get_desktop_path_returns_nonempty_string():
-    """_get_desktop_path() MUST return a non-empty string.
-    Written before implementation — MUST FAIL with ImportError until B6 implemented."""
-    from app.api.job import _get_desktop_path
-    result = _get_desktop_path()
+    """get_desktop_path() MUST return a non-empty string.
+    Consolidated to app.utils.platform in Phase 11 (removed local duplicate)."""
+    from app.utils.platform import get_desktop_path
+    result = get_desktop_path()
     assert isinstance(result, str), f"Expected str, got {type(result)}"
-    assert len(result) > 0, "_get_desktop_path() returned empty string"
+    assert len(result) > 0, "get_desktop_path() returned empty string"
 
 
 def test_get_job_does_not_recall_is_available_after_cache(client, monkeypatch):

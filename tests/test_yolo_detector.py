@@ -8,6 +8,7 @@ import threading
 import types
 import tempfile
 from pathlib import Path
+from unittest.mock import MagicMock
 
 import pytest
 
@@ -252,3 +253,53 @@ def test_run_writes_heatmap_png():
             assert img.size > 0, "heatmap.png must not be empty"
     finally:
         watchdog.cancel()
+
+
+# ---------------------------------------------------------------------------
+# Phase 11 — prewarm() sets _model_ready and caches model
+# ---------------------------------------------------------------------------
+
+def test_yolo_prewarm_sets_event(monkeypatch):
+    """prewarm() must set _model_ready within 5 seconds (model load mocked)."""
+    import importlib
+    import app.core.yolo_detector as yd
+    importlib.reload(yd)
+
+    fake_ultralytics = types.ModuleType("ultralytics")
+    fake_ultralytics.YOLO = MagicMock(return_value=MagicMock())
+    monkeypatch.setitem(sys.modules, "ultralytics", fake_ultralytics)
+
+    yd._model_ready.clear()
+    yd._cached_yolo_model = None
+
+    yd.prewarm()
+
+    assert yd._model_ready.wait(timeout=5), "_model_ready was not set within 5s by prewarm()"
+
+
+def test_yolo_prewarm_noop_when_ultralytics_absent(monkeypatch):
+    """prewarm() must not raise if ultralytics is absent — still sets _model_ready."""
+    import importlib
+    import app.core.yolo_detector as yd
+    importlib.reload(yd)
+
+    monkeypatch.setitem(sys.modules, "ultralytics", None)
+
+    yd._model_ready.clear()
+    yd._cached_yolo_model = None
+
+    yd.prewarm()
+
+    assert yd._model_ready.wait(timeout=5), "_model_ready must be set even without ultralytics"
+    assert yd._cached_yolo_model is None
+
+
+# ---------------------------------------------------------------------------
+# Phase 11 — YOLO_FRAME_SKIP config constant is accessible
+# ---------------------------------------------------------------------------
+
+def test_yolo_frame_skip_config_accessible():
+    """YOLO_FRAME_SKIP must be defined in app.config and be a positive integer."""
+    from app.config import YOLO_FRAME_SKIP
+    assert isinstance(YOLO_FRAME_SKIP, int)
+    assert YOLO_FRAME_SKIP > 0

@@ -84,7 +84,9 @@ def mw_module():
 
 
 def test_get_desktop_path_returns_nonempty_string(mw_module):
-    result = mw_module._get_desktop_path()
+    # Phase 11: _get_desktop_path() consolidated into app.utils.platform.get_desktop_path()
+    from app.utils.platform import get_desktop_path
+    result = get_desktop_path()
     assert isinstance(result, str) and len(result) > 0
 
 

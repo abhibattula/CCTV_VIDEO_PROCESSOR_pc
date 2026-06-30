@@ -38,11 +38,78 @@ The app detects whether this is installed at runtime. If it isn't, the "Object
 Detection" mode button is greyed out with an install hint instead of failing after
 you click Start.
 
-Requires **Python 3.11+**. Tested on Windows 10/11; the detection/export engines are
-platform-agnostic (see [`RASPBERRY_PI_SETUP.md`](RASPBERRY_PI_SETUP.md) for the
-Raspberry Pi port notes).
+Requires **Python 3.11+**. See the platform-specific notes below.
 
 For a full click-by-click walkthrough of the UI, see [`USER_MANUAL.md`](USER_MANUAL.md).
+
+---
+
+## Platform Installation
+
+### Windows (10/11)
+
+Works out of the box following the Quick Start above. OneDrive Desktop Folder Backup
+is handled automatically — exported files always land on your real Desktop.
+
+### macOS (Intel + Apple Silicon)
+
+```bash
+python -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
+python launcher.py
+```
+
+`imageio-ffmpeg` bundles a universal binary for both Intel and M-series Macs.
+No additional system dependencies required.
+
+> **Note:** If you see a Gatekeeper warning on first launch, right-click the app
+> and choose Open, or run `xattr -d com.apple.quarantine launcher.py`.
+
+### Linux (Desktop — Ubuntu 22.04+, Debian 12+)
+
+```bash
+# System dependencies (OpenCV headless + Qt WebEngine)
+sudo apt install libgl1-mesa-glx libglib2.0-0
+
+# Wayland: if Qt WebEngine has display issues, force XCB
+export QT_QPA_PLATFORM=xcb
+
+# Then follow standard Quick Start
+python -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
+python launcher.py
+```
+
+> **Wayland note:** Pure Wayland sessions (e.g. GNOME 45+ without XWayland) may show
+> a blank WebEngine window. Set `QT_QPA_PLATFORM=xcb` to use XWayland instead.
+> The system tray icon is automatically skipped when the desktop environment doesn't
+> support it (e.g. minimal tiling WMs).
+
+### Linux (Headless / Server — backend only)
+
+The FastAPI backend runs without a display or PyQt6:
+
+```bash
+pip install -r requirements.txt
+# Skip PyQt6 / PyQt6-WebEngine if headless
+uvicorn app.main:app --host 0.0.0.0 --port 5151
+```
+
+Then open `http://<server-ip>:5151/` in any browser.
+
+### Raspberry Pi (2 GB / 4 GB)
+
+See [`RASPBERRY_PI_SETUP.md`](RASPBERRY_PI_SETUP.md) for full install instructions.
+
+Key differences from the desktop version:
+- **AI Analysis (Florence-2) is automatically disabled** on devices with ≤ 4 GB RAM
+  (the AI gate checks total RAM at startup — no manual config required)
+- **YOLO frame skip** is 2× more aggressive on Pi (1-in-6 frames vs 1-in-3 on PC)
+  to keep CPU load manageable
+- Batch size and detection resolution are automatically tuned for 2 GB and 4 GB Pi models
+- Headless mode works; Qt desktop mode requires `libgl1-mesa-glx` and a display
 
 ---
 
@@ -272,8 +339,8 @@ CCTV VIDEO PROCESSOR PC/
 python -m pytest tests/ -v
 ```
 
-Expected: **≥ 193 passed, ≤ 2 skipped** (the skips are pre-existing video-dependent
-cases; all new Phase 10 tests run without a real video file, GPU, or display).
+Expected: **≥ 205 passed, ≤ 2 skipped** (the skips are pre-existing video-dependent
+cases; all Phase 11 tests run without a real video file, GPU, or display server).
 
 The backend follows test-first development — every engine (`detection_engine`,
 `yolo_detector`, `export_engine`) is covered in isolation via its callback interface,

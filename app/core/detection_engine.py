@@ -284,6 +284,7 @@ def run(
 
     frame_idx   = 0
     frames_done = 0
+    _last_progress_at = time.monotonic()
 
     # ── Initial warmup ────────────────────────────────────────────────────────
     for _ in range(INITIAL_WARMUP):
@@ -384,10 +385,12 @@ def run(
             frame_idx   += 1
             frames_done += 1
 
-            # ── Progress callback every BATCH_SIZE frames ─────────────────────
-            if frame_idx % config.BATCH_SIZE == 0:
+            # ── Progress callback: every BATCH_SIZE frames OR every 2 seconds ──
+            _now = time.monotonic()
+            if frame_idx % config.BATCH_SIZE == 0 or _now - _last_progress_at >= 2.0:
                 progress = min(frame_idx / max(total_frames, 1), 0.99)
                 on_progress(progress)
+                _last_progress_at = _now
 
                 if cancel_event.is_set():
                     break
