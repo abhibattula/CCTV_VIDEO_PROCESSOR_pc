@@ -153,9 +153,11 @@ class FrameAnalyzer:
                     attn_implementation="eager",
                 )
 
-        # AutoProcessor (CLIPImageProcessor inside Florence-2) handles aspect-ratio
-        # normalisation internally — do NOT pad to square here.
-        image = Image.open(image_path).convert("RGB")
+        # CLIPImageProcessor's do_resize is broken in transformers 5.x — it passes raw
+        # dimensions unchanged.  Resize to 768×768 (model's preprocessor_config size)
+        # before the processor so the ViT produces a perfect-square token grid (24×24=576).
+        # Resize (not pad) avoids black-border garbage in the caption.
+        image = Image.open(image_path).convert("RGB").resize((768, 768), Image.BILINEAR)
         processor = cls._processor
         model = cls._model
 
