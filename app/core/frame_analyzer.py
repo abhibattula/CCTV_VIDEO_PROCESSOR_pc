@@ -135,27 +135,50 @@ class FrameAnalyzer:
 
             # trust_remote_code=True required: the HF Hub model config is incomplete
             # (image_token not registered in tokenizer_config.json). Authorized 2026-06-29.
-            # Redirect stdout + suppress FutureWarnings so Florence-2's MISSING-keys
-            # weight table and transformers attention-mask warnings don't clutter the terminal.
-            with contextlib.redirect_stdout(io.StringIO()), \
-                 warnings.catch_warnings():
-                warnings.filterwarnings("ignore", category=FutureWarning, module="transformers")
-                cls._processor = AutoProcessor.from_pretrained(
-                    "microsoft/Florence-2-base", trust_remote_code=True
-                )
-                # 3. attn_implementation="eager" bypasses SDPA detection (_supports_sdpa missing
-                #    from custom class). torch_dtype → dtype in transformers 5.x.
-                cls._model = AutoModelForCausalLM.from_pretrained(
-                    "microsoft/Florence-2-base",
-                    dtype=torch.float32,
-                    device_map="cpu",
-                    trust_remote_code=True,
-                    attn_implementation="eager",
-                )
+            # Suppress transformers logging (MISSING-keys, attention-mask warnings) that
+            # goes to stderr via Python logging — redirect_stdout alone cannot catch these.
+            import logging as _pylog
+            _hf_logger = _pylog.getLogger("transformers")
+            _orig_hf_level = _hf_logger.level
+            _hf_logger.setLevel(_pylog.ERROR)
+            try:
+                with contextlib.redirect_stdout(io.StringIO()), \
+                     warnings.catch_warnings():
+                    warnings.filterwarnings("ignore", category=FutureWarning, module="transformers")
+                    cls._processor = AutoProcessor.from_pretrained(
+                        "microsoft/Florence-2-base", trust_remote_code=True
+                    )
+                    # 3. attn_implementation="eager" bypasses SDPA detection (_supports_sdpa
+                    #    missing from custom class). torch_dtype → dtype in transformers 5.x.
+                    cls._model = AutoModelForCausalLM.from_pretrained(
+                        "microsoft/Florence-2-base",
+                        dtype=torch.float32,
+                        device_map="cpu",
+                        trust_remote_code=True,
+                        attn_implementation="eager",
+                    )
+            finally:
+                _hf_logger.setLevel(_orig_hf_level)
+            # 4. transformers 5.x doesn't propagate tie_weights() for trust_remote_code
+            #    BART-based models: encoder.embed_tokens / decoder.embed_tokens / lm_head
+            #    are randomly initialised instead of sharing language_model.model.shared
+            #    (the trained embedding matrix from the checkpoint).  Without this the
+            #    decoder outputs random token-soup — garbage captions.
+            try:
+                lm = cls._model.language_model
+                shared_emb = lm.model.shared
+                lm.model.encoder.embed_tokens = shared_emb
+                lm.model.decoder.embed_tokens = shared_emb
+                if hasattr(lm, "lm_head") and getattr(lm.config, "tie_word_embeddings", True):
+                    lm.lm_head.weight = shared_emb.weight
+            except AttributeError:
+                pass  # Different model structure or already tied — no-op
 
-        # AutoProcessor (CLIPImageProcessor inside Florence-2) handles aspect-ratio
-        # normalisation internally — do NOT pad to square here.
-        image = Image.open(image_path).convert("RGB")
+        # CLIPImageProcessor's do_resize is broken in transformers 5.x — it passes raw
+        # dimensions unchanged.  Resize to 768×768 (model's preprocessor_config size)
+        # before the processor so the ViT produces a perfect-square token grid (24×24=576).
+        # Resize (not pad) avoids black-border garbage in the caption.
+        image = Image.open(image_path).convert("RGB").resize((768, 768), Image.BILINEAR)
         processor = cls._processor
         model = cls._model
 
