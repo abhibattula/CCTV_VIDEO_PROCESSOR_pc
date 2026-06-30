@@ -521,8 +521,16 @@ async def intel_report_export(request: Request):
             thumb = Path(tp) if tp else (
                 job_dir / "thumbnails" / f"{ev['event_index']}.jpg"
             )
+            # Temporal multi-frame analysis: samples 3 points across the event so
+            # brief activity (person walking through, vehicle passing) is captured
+            # even when the midpoint thumbnail shows an empty scene.
             analysis = (
-                FrameAnalyzer.analyze(thumb)
+                FrameAnalyzer.analyze_event(
+                    thumbnail=thumb,
+                    source_path=source_path or "",
+                    start_s=float(ev.get("start_s", 0)),
+                    end_s=float(ev.get("end_s", 0)),
+                )
                 if thumb.exists()
                 else {
                     "caption": "",
