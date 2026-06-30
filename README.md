@@ -272,8 +272,8 @@ CCTV VIDEO PROCESSOR PC/
 python -m pytest tests/ -v
 ```
 
-Expected: **97 passed, 2 skipped** (the skips are `ffprobe`-specific cases that don't
-apply on Windows; FFmpeg itself is bundled and fully functional).
+Expected: **≥ 193 passed, ≤ 2 skipped** (the skips are pre-existing video-dependent
+cases; all new Phase 10 tests run without a real video file, GPU, or display).
 
 The backend follows test-first development — every engine (`detection_engine`,
 `yolo_detector`, `export_engine`) is covered in isolation via its callback interface,

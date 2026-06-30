@@ -17,7 +17,7 @@
 
 **Purpose**: Extend `tests/conftest.py` with shared fixtures needed by US1, US2, and US6 test files.
 
-- [ ] T001 Extend `tests/conftest.py` — add only `ready_session` fixture (the `client` fixture already exists in conftest.py — do NOT add `app_client`). The `ready_session` fixture: call `import app.session as session_module` then `session_module.reset()` then `session_module.update(status="ready", job_id="test-job-001", source_path="/fake/video.mp4", source_info={"fps": 25, "duration_s": 10, "width": 1920, "height": 1080})` and `yield`. The fixture must be function-scoped to isolate state between tests. Run `pytest tests/ -v --co -q` to confirm fixture is discoverable.
+- [x] T001 Extend `tests/conftest.py` — add only `ready_session` fixture (the `client` fixture already exists in conftest.py — do NOT add `app_client`). The `ready_session` fixture: call `import app.session as session_module` then `session_module.reset()` then `session_module.update(status="ready", job_id="test-job-001", source_path="/fake/video.mp4", source_info={"fps": 25, "duration_s": 10, "width": 1920, "height": 1080})` and `yield`. The fixture must be function-scoped to isolate state between tests. Run `pytest tests/ -v --co -q` to confirm fixture is discoverable.
 
 **Checkpoint**: `tests/conftest.py` importable with no errors; `pytest --fixtures` shows `ready_session`.
 
@@ -32,18 +32,18 @@
 **Data-model entities used**: TestSession (conftest `ready_session`), MockDetector, FakeDetector — see `specs/010-test-coverage-gaps/data-model.md`.
 **Research decisions**: Decision 1 (polling loop), Decision 4 (monkeypatch target = `app.core.detection_engine.run`).
 
-- [ ] T002 [US1] Create `tests/test_api_job_lifecycle.py` — class `TestStartJobStateMachine` with 4 tests:
+- [x] T002 [US1] Create `tests/test_api_job_lifecycle.py` — class `TestStartJobStateMachine` with 4 tests:
   (a) `test_reject_when_detecting`: set session status to "detecting" directly, POST /api/job/start → assert HTTP 400;
   (b) `test_reject_when_idle_no_job`: session in default idle state (no reset to ready), POST /api/job/start → assert HTTP 400;
   (c) `test_returns_detecting_status`: use `ready_session` + monkeypatch `app.core.detection_engine.run` to `lambda **kw: None`, POST /api/job/start → assert `response.json()["status"] == "detecting"` (key check, not exact dict match — `start_job` returns the full session snapshot);
   (d) `test_yolo_missing_returns_400`: use `ready_session` + monkeypatch `builtins.__import__` to raise ImportError for "ultralytics", POST /api/job/start with `{"mode": "yolo"}` → assert HTTP 400. Run `pytest tests/test_api_job_lifecycle.py::TestStartJobStateMachine -v` — all 4 must pass.
 
-- [ ] T003 [US1] Append class `TestStartJobThreadLifecycle` to `tests/test_api_job_lifecycle.py` with 3 tests using FakeDetector (sleeps 50ms, calls on_event twice — exact signature from `data-model.md §FakeDetector`):
+- [x] T003 [US1] Append class `TestStartJobThreadLifecycle` to `tests/test_api_job_lifecycle.py` with 3 tests using FakeDetector (sleeps 50ms, calls on_event twice — exact signature from `data-model.md §FakeDetector`):
   (a) `test_thread_completes_with_two_events`: monkeypatch `app.core.detection_engine.run` with `fake_detector`, POST /api/job/start, poll `session.snapshot()["status"]` with 50ms sleep up to 5s deadline, assert final status == "completed" and `event_count == 2`;
   (b) `test_thread_exception_sets_error_status`: monkeypatch `app.core.detection_engine.run` to `def raise_fn(**kw): raise RuntimeError("boom")`, POST /api/job/start, poll until status != "detecting" (5s deadline), assert status == "error" and `error_msg == "boom"`;
   (c) `test_cancel_stops_thread`: monkeypatch with slow_detector (sleeps 2s, checks cancel_event before emitting), POST /api/job/start, immediately POST /api/job/cancel, poll until status != "detecting" (5s deadline), assert status == "cancelled". Run `pytest tests/test_api_job_lifecycle.py::TestStartJobThreadLifecycle -v` — all 3 must pass.
 
-- [ ] T004 [US1] Append 3 standalone test functions to `tests/test_api_job_lifecycle.py`:
+- [x] T004 [US1] Append 3 standalone test functions to `tests/test_api_job_lifecycle.py`:
   (a) `test_cancel_job_sets_cancelled_status`: use `ready_session`, monkeypatch detection_engine, POST /api/job/start, POST /api/job/cancel → assert `response.json()["status"] == "cancelled"` (key check, not exact dict match);
   (b) `test_get_events_returns_empty_list`: use `ready_session`, GET /api/job/events → assert response is `[]`;
   (c) `test_get_events_after_detection`: use `ready_session` + FakeDetector, POST /api/job/start, poll to completed, GET /api/job/events → assert `len(events) == 2`. Run `pytest tests/test_api_job_lifecycle.py -v` — all 10 tests must pass. Commit: `test(010): add job lifecycle tests (US1) [P10]`.
@@ -60,12 +60,12 @@
 
 **Research decision used**: Decision 6 (session.output_path is used by open-folder, not output_dir).
 
-- [ ] T005 [US2] Create `tests/test_api_shell_bridge.py` with 3 tests:
+- [x] T005 [US2] Create `tests/test_api_shell_bridge.py` with 3 tests:
   (a) `test_set_filepath_stores_path`: POST /api/shell/filepath with `{"path": "/tmp/test.mp4"}` → assert HTTP 200, then `session.snapshot()["pending_path"] == "/tmp/test.mp4"`;
   (b) `test_get_pending_path_returns_and_clears`: set `session.update(pending_path="/tmp/test.mp4")`, GET /api/shell/pending-path → assert `{"path": "/tmp/test.mp4"}`, then call again → assert `{"path": null}`;
   (c) `test_get_pending_path_returns_null_when_empty`: GET /api/shell/pending-path with no pending path → assert `{"path": null}`. Run `pytest tests/test_api_shell_bridge.py -v`.
 
-- [ ] T006 [US2] Append 3 more tests to `tests/test_api_shell_bridge.py`:
+- [x] T006 [US2] Append 3 more tests to `tests/test_api_shell_bridge.py`:
   (a) `test_set_output_dir_updates_session`: POST /api/shell/set-output-dir with `{"output_dir": "/home/user/outputs"}` → assert response `{"ok": true, ...}` and `session.snapshot()["output_dir"] == "/home/user/outputs"`;
   (b) `test_open_folder_calls_platform_open`: monkeypatch `app.api.shell_bridge._open_folder` with `MagicMock()` (shell_bridge.py uses `from shell.platform_utils import open_folder as _open_folder` — patch the local binding, not the original), set `session.update(output_path="/home/user/outputs/video_export.mp4")`, POST /api/shell/open-folder → assert mock called with `"/home/user/outputs"` (parent dir) and response `{"ok": true}`;
   (c) `test_open_folder_returns_false_when_no_output_path`: POST /api/shell/open-folder with no output_path set → assert response `{"ok": false}` (NOT HTTP 400). Run `pytest tests/test_api_shell_bridge.py -v` — all 6 must pass. Commit: `test(010): add shell bridge tests (US2) [P10]`.
@@ -80,14 +80,14 @@
 
 **Independent Test**: `pytest tests/test_log_buffer.py tests/test_clip_indexer.py -v` passes all tests.
 
-- [ ] T007 [P] [US3] Create `tests/test_log_buffer.py` — 5 tests. Import `from app.core.log_buffer import LogBuffer` and create a fresh `LogBuffer()` per test (NOT the module-level singleton):
+- [x] T007 [P] [US3] Create `tests/test_log_buffer.py` — 5 tests. Import `from app.core.log_buffer import LogBuffer` and create a fresh `LogBuffer()` per test (NOT the module-level singleton):
   (a) `test_subscribe_replays_history`: append 3 lines, subscribe → queue has 3 items immediately;
   (b) `test_append_calls_call_soon_threadsafe`: subscribe to get queue, set `buf._loop = MagicMock()`, append one line → assert `buf._loop.call_soon_threadsafe.called` with `(queue.put_nowait, "line")` args;
   (c) `test_ring_buffer_cap`: monkeypatch `app.core.log_buffer.LOG_RING_SIZE = 3` (log_buffer.py does `from app.config import LOG_RING_SIZE` — patch the local binding in the log_buffer module, not app.config), create fresh `LogBuffer()`, append 4 lines, subscribe → queue has exactly 3 items (oldest dropped);
   (d) `test_reset_clears_only_target_job`: append to job_a and job_b, reset job_a, subscribe to job_b → still receives job_b's lines; subscribe to job_a → empty queue;
   (e) `test_close_sends_done_sentinel`: subscribe, set `buf._loop = MagicMock()`, call `buf.close(job_id)` → assert `call_soon_threadsafe` called with `(queue.put_nowait, "__DONE__")`. Run `pytest tests/test_log_buffer.py -v`.
 
-- [ ] T008 [P] [US3] Create `tests/test_clip_indexer.py` — 5 tests. Import `from app.core.clip_indexer import ClipIndexer`:
+- [x] T008 [P] [US3] Create `tests/test_clip_indexer.py` — 5 tests. Import `from app.core.clip_indexer import ClipIndexer`:
   (a) `test_is_available_returns_false_when_no_open_clip`: monkeypatch `ClipIndexer.is_available` to return `False`, call `is_available()` → assert `False`;
   (b) `test_embed_returns_none_when_unavailable`: monkeypatch `ClipIndexer.is_available` to return `False`, call `embed(Path("/fake/image.jpg"))` → assert `None` and no exception;
   (c) `test_embed_returns_none_on_do_embed_exception`: monkeypatch `ClipIndexer.is_available` to return `True`, monkeypatch `ClipIndexer._do_embed` to raise `RuntimeError("gpu error")`, call `embed(Path("/fake/image.jpg"))` → assert `None` and no exception;
@@ -106,7 +106,7 @@
 
 **Research decision used**: Decision 7 — expected values: `seconds_to_clock(0)=="00:00"`, `seconds_to_clock(90)=="01:30"`, `seconds_to_clock(3661)=="01:01:01"`.
 
-- [ ] T009 [US4] Append 10 new test functions to `tests/test_narrative_synthesizer.py` (APPEND only — do not overwrite existing 4 tests). Import `from app.core.narrative_synthesizer import seconds_to_clock, timeline_entries, NarrativeSynthesizer`. Note: `temporal_analysis` and `trend_direction` are instance methods — instantiate `ns = NarrativeSynthesizer()` before calling them:
+- [x] T009 [US4] Append 10 new test functions to `tests/test_narrative_synthesizer.py` (APPEND only — do not overwrite existing 4 tests). Import `from app.core.narrative_synthesizer import seconds_to_clock, timeline_entries, NarrativeSynthesizer`. Note: `temporal_analysis` and `trend_direction` are instance methods — instantiate `ns = NarrativeSynthesizer()` before calling them:
   (a) `test_seconds_to_clock_zero` → assert `"00:00"`;
   (b) `test_seconds_to_clock_90s` → assert `"01:30"`;
   (c) `test_seconds_to_clock_over_hour` → `seconds_to_clock(3661)` → assert `"01:01:01"`;
@@ -130,10 +130,10 @@
 
 **Data-model entity used**: QtStubRegistry — see `specs/010-test-coverage-gaps/data-model.md §QtStubRegistry` for exact stub structure.
 
-- [ ] T010 [US5] Create `tests/test_shell_logic.py` — define `_make_qt_stubs()` function using `unittest.mock.MagicMock` for all PyQt6 module stubs (follow `data-model.md §QtStubRegistry` but also add `"PyQt6"`, `"PyQt6.QtWebEngineCore"` with `QWebEnginePage` and `QWebEngineSettings` as MagicMock attributes, `"PyQt6.QtGui"` must also include `QDragEnterEvent` and `QDropEvent`, and `"PyQt6.QtWidgets"` must also include `QFileDialog`). Define `mw_module` pytest fixture that patches `sys.modules`, deletes `shell.main_window` from sys.modules, imports fresh `shell.main_window`, yields it, and restores originals in finally block (pattern in `data-model.md §QtStubRegistry`). Add test:
+- [x] T010 [US5] Create `tests/test_shell_logic.py` — define `_make_qt_stubs()` function using `unittest.mock.MagicMock` for all PyQt6 module stubs (follow `data-model.md §QtStubRegistry` but also add `"PyQt6"`, `"PyQt6.QtWebEngineCore"` with `QWebEnginePage` and `QWebEngineSettings` as MagicMock attributes, `"PyQt6.QtGui"` must also include `QDragEnterEvent` and `QDropEvent`, and `"PyQt6.QtWidgets"` must also include `QFileDialog`). Define `mw_module` pytest fixture that patches `sys.modules`, deletes `shell.main_window` from sys.modules, imports fresh `shell.main_window`, yields it, and restores originals in finally block (pattern in `data-model.md §QtStubRegistry`). Add test:
   `test_get_desktop_path_returns_nonempty_string`: using `mw_module`, call `mw._get_desktop_path()` (module-level function, NOT `mw.MainWindow._get_desktop_path()`) → assert result is a non-empty string. Run `pytest tests/test_shell_logic.py::test_get_desktop_path_returns_nonempty_string -v`.
 
-- [ ] T011 [US5] Append 4 more tests to `tests/test_shell_logic.py`:
+- [x] T011 [US5] Append 4 more tests to `tests/test_shell_logic.py`:
   (a) `test_close_event_hides_when_detecting`: in `mw_module` fixture context, patch `requests.get` to return a mock with `.json()` → `{"status": "detecting"}`, instantiate `MainWindow(mock_app)`, create a `QCloseEvent` mock, call `closeEvent(event)` → assert `event.ignore()` was called (or `QApplication.quit` was NOT called);
   (b) `test_close_event_quits_when_idle`: patch `requests.get` to return `{"status": "idle"}`, call `closeEvent(event)` → assert `QApplication.quit()` was called;
   (c) `test_close_event_quits_when_backend_raises`: patch `requests.get` to raise `ConnectionError("refused")`, call `closeEvent(event)` → assert `QApplication.quit()` was called (fail-safe: no backend = treat as idle);
@@ -149,18 +149,18 @@
 
 **Independent Test**: `pytest tests/test_api_system.py tests/test_stream.py tests/test_thumbnail_gen.py -v` passes all tests.
 
-- [ ] T012 [P] [US6] Create `tests/test_api_system.py` — 2 tests using `client` from conftest (the existing fixture — do NOT add `app_client`):
+- [x] T012 [P] [US6] Create `tests/test_api_system.py` — 2 tests using `client` from conftest (the existing fixture — do NOT add `app_client`):
   (a) `test_system_stats_has_correct_keys`: GET /api/system/stats → assert response JSON has exactly keys `cpu_pct`, `ram_pct`, `cpu_temp` (no `cpu_percent`, no `ram_percent`);
   (b) `test_system_capabilities_yolo_false_when_not_installed`: monkeypatch `builtins.__import__` to raise ImportError for "ultralytics", GET /api/system/capabilities → assert response `{"yolo_available": false}`. Run `pytest tests/test_api_system.py -v`.
 
-- [ ] T013 [P] [US6] Append 2 tests to `tests/test_stream.py` (APPEND only — preserve existing 4 tests):
+- [x] T013 [P] [US6] Append 2 tests to `tests/test_stream.py` (APPEND only — preserve existing 4 tests):
   (a) `test_sse_idle_safety_exits_after_max_polls`: `import app.api.stream as stream_mod`, monkeypatch `stream_mod.POLL_INTERVAL_S = 0.001` and `stream_mod._MAX_IDLE_POLLS = 3` (this makes the generator time out after 3×1ms instead of 10×500ms — no asyncio.wait_for mocking needed), then `asyncio.run(collect(_event_generator("test-job")))` where `collect` drains the async generator into a list. Assert the generator exits cleanly (no exception) and at least one emitted chunk contains `"keepalive"`;
   (b) `test_sse_handles_generator_exit`: wrap generator iteration in try/except GeneratorExit and verify no exception propagates. Run `pytest tests/test_stream.py -v`.
 
-- [ ] T014 [P] [US6] Append 1 test to `tests/test_thumbnail_gen.py` (APPEND only):
+- [x] T014 [P] [US6] Append 1 test to `tests/test_thumbnail_gen.py` (APPEND only):
   `test_thumbnail_gen_handles_ffmpeg_failure`: monkeypatch `subprocess.run` to raise `subprocess.CalledProcessError(1, "ffmpeg")`, call `thumbnail_gen.run(job_id="x", source_path="/fake.mp4", events=[...], logger=lambda m: None)` → assert function returns without raising. Run `pytest tests/test_thumbnail_gen.py -v`. After all three pass: Commit `test(010): add system API, SSE safety, thumbnail tests (US6) [P10]`.
 
-- [ ] T015 [US6] Add 9 CI mock-counterpart tests to address US6 AC6 (spec: "mock-paired variants of CI-skipped tests"). These tests use monkeypatching instead of real video/hardware and must have NO `@pytest.mark.skipif` guard:
+- [x] T015 [US6] Add 9 CI mock-counterpart tests to address US6 AC6 (spec: "mock-paired variants of CI-skipped tests"). These tests use monkeypatching instead of real video/hardware and must have NO `@pytest.mark.skipif` guard:
 
   **3 tests in `tests/test_api_job.py`** (APPEND after existing tests):
   (a) `test_create_job_valid_file_mocked`: monkeypatch `app.utils.ffprobe.probe` to return `{"fps": 25.0, "duration_s": 10.0, "width": 1920, "height": 1080}` and `pathlib.Path.is_file` to return `True`, POST /api/job/create with `{"source_path": "/fake/video.mp4"}` → assert HTTP 200 and `resp.json()["status"] == "ready"`;
@@ -187,15 +187,15 @@
 
 **Purpose**: Full suite validation, documentation updates, final commit.
 
-- [ ] T016 Run `pytest tests/ -v` and confirm: total test count ≥ 195, 0 failures, 0 errors, any skips are pre-existing video-dependent tests only. If count < 195, identify which story's tests are missing and add them. Expected new test count: 43 (T002–T014) + 1 T009(j) + 2 T011(c,d) + 9 T015 = 55 new tests; 140 + 55 = 195 total.
+- [x] T016 Run `pytest tests/ -v` and confirm: total test count ≥ 195, 0 failures, 0 errors, any skips are pre-existing video-dependent tests only. If count < 195, identify which story's tests are missing and add them. Expected new test count: 43 (T002–T014) + 1 T009(j) + 2 T011(c,d) + 9 T015 = 55 new tests; 140 + 55 = 195 total.
 
-- [ ] T017 [P] Update `README.md` — increment test count badge/mention from 140 to current count; add Phase 10 to the "Phases completed" section.
+- [x] T017 [P] Update `README.md` — increment test count badge/mention from 140 to current count; add Phase 10 to the "Phases completed" section.
 
-- [ ] T018 [P] Update `USER_MANUAL.md` — if any test-running instructions reference the old test count, update them.
+- [x] T018 [P] Update `USER_MANUAL.md` — if any test-running instructions reference the old test count, update them.
 
-- [ ] T019 Update `ROADMAP.md` — mark Phase 10 test coverage as completed; note next priority.
+- [x] T019 Update `ROADMAP.md` — mark Phase 10 test coverage as completed; note next priority.
 
-- [ ] T020 Final commit: `test(010): complete Phase 10 test coverage gaps — NNN tests [P10]` (replace NNN with actual count). Run `git log --oneline -5` to confirm all phase commits are present.
+- [x] T020 Final commit: `test(010): complete Phase 10 test coverage gaps — NNN tests [P10]` (replace NNN with actual count). Run `git log --oneline -5` to confirm all phase commits are present.
 
 ---
 

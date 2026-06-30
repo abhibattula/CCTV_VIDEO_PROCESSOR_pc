@@ -533,3 +533,63 @@ def test_thumbnail_stage_progress_after_run(client, tmp_path, monkeypatch):
         f"Thumbnail progress was {progress_at_run[0]} when run() was called; expected 0. "
         "Fix: remove the pre-thumbnail progress loop in app/api/job.py"
     )
+
+
+# ── Phase 10 T015 mock-counterpart tests (US6 AC6) ───────────────────────────
+
+def test_create_job_valid_file_mocked(client, monkeypatch):
+    """create_job with mocked probe and is_file → HTTP 200, status=ready."""
+    from pathlib import Path
+    import app.api.job as job_module
+    monkeypatch.setattr(Path, "is_file", lambda self: True)
+    monkeypatch.setattr(job_module, "probe", lambda p: {
+        "fps": 25.0, "duration_s": 10.0, "width": 1920, "height": 1080,
+        "codec": "h264", "has_audio": False, "audio_codec": "", "needs_reencode": False,
+    })
+    resp = client.post("/api/job/create", json={"source_path": "/fake/video.mp4"})
+    assert resp.status_code == 200
+    assert resp.json()["status"] == "ready"
+
+
+def test_preview_frame_extracts_and_caches_mocked(client, ready_session, monkeypatch, tmp_path):
+    """First GET generates frame; second GET serves from cache (subprocess called once)."""
+    from pathlib import Path
+    from unittest.mock import MagicMock
+    import app.api.job as job_module
+    monkeypatch.setattr(job_module, "JOBS_DIR", tmp_path)
+
+    call_count = [0]
+
+    def mock_run(cmd, **kw):
+        call_count[0] += 1
+        out = Path(cmd[-1])
+        out.parent.mkdir(parents=True, exist_ok=True)
+        out.write_bytes(b"\xff\xd8\xff\xe0\x00\x10JFIF\x00\x01\x01\x00\x00\x01\x00\x01\x00\x00\xff\xd9")
+        m = MagicMock()
+        m.returncode = 0
+        return m
+
+    monkeypatch.setattr(job_module.subprocess, "run", mock_run)
+
+    resp1 = client.get("/api/job/preview-frame")
+    assert resp1.status_code == 200
+    assert resp1.headers.get("content-type", "").startswith("image/jpeg")
+    assert call_count[0] == 1
+
+    resp2 = client.get("/api/job/preview-frame")
+    assert resp2.status_code == 200
+    assert call_count[0] == 1  # served from cache — subprocess not called again
+
+
+def test_create_job_cancels_inflight_detection_mocked(client, monkeypatch):
+    """create_job must set _cancel_event to interrupt any in-progress detection."""
+    from pathlib import Path
+    import app.api.job as job_module
+    monkeypatch.setattr(Path, "is_file", lambda self: True)
+    monkeypatch.setattr(job_module, "probe", lambda p: {
+        "fps": 25.0, "duration_s": 10.0, "width": 1920, "height": 1080,
+        "codec": "h264", "has_audio": False, "audio_codec": "", "needs_reencode": False,
+    })
+    job_module._cancel_event.clear()
+    client.post("/api/job/create", json={"source_path": "/fake/video.mp4"})
+    assert job_module._cancel_event.is_set()

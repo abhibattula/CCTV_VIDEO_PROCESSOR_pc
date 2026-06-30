@@ -439,7 +439,7 @@ If the app crashes during export, the next launch will automatically:
 python -m pytest tests/ -v
 ```
 
-Expected result: **97 passed, 2 skipped** (the 2 skips are for `ffprobe`-specific cases that don't apply on Windows — FFmpeg itself is bundled and everything works fine). There is no frontend test runner; frontend behaviour is verified by driving the real app directly.
+Expected result: **≥ 193 passed, ≤ 2 skipped** (the skips are pre-existing video-dependent cases; all Phase 10 tests run without a real video, GPU, or display). There is no frontend test runner; frontend behaviour is verified by driving the real app directly.
 
 ---
 
@@ -496,12 +496,22 @@ CCTV VIDEO PROCESSOR PC/
 │           ├── timeline.js  ← Event cards, filtering, multi-select, preview
 │           └── export.js    ← Presets, output type, quality, burn-in, folder
 │
-└── tests/                   ← pytest test suite (backend only)
+└── tests/                   ← pytest test suite (195 tests, backend only)
+    ├── conftest.py
     ├── test_session.py
     ├── test_ffprobe.py
     ├── test_api_job.py
+    ├── test_api_job_lifecycle.py
+    ├── test_api_shell_bridge.py
+    ├── test_api_system.py
+    ├── test_clip_indexer.py
     ├── test_detection_engine.py
     ├── test_export_engine.py
+    ├── test_log_buffer.py
+    ├── test_narrative_synthesizer.py
+    ├── test_shell_logic.py
+    ├── test_stream.py
+    ├── test_thumbnail_gen.py
     └── test_yolo_detector.py
 ```
 

@@ -11,7 +11,10 @@ report format modal, 4-stage SSE progress, Scene Breakdown with annotated
 thumbnails, SVG activity timeline, log panel polish; Phase 9: Browse abort token,
 OneDrive Desktop path fix, output_dir persistence, Quick Report truthful
 feedback, Ctrl+C / Stop / close-window exit, Florence-2 terminal noise
-suppression, FrameAnalyzer availability cache). Nothing here is scheduled or committed — when one of these gets
+suppression, FrameAnalyzer availability cache; Phase 10: test coverage gaps —
+195 tests, CI mock-counterpart tests for all video-dependent paths, shell_bridge
++ system API + log buffer + clip indexer + narrative synthesizer + Qt shell logic
+coverage, all tests run without video/GPU/display). Nothing here is scheduled or committed — when one of these gets
 picked up, it should run through the project's normal speckit pipeline
 (`/speckit.specify` → `/speckit.clarify` → `/speckit.plan` → `/speckit.tasks` →
 `/speckit.analyze` → `/speckit.implement`) and get its own numbered spec under
@@ -221,18 +224,19 @@ is actually picked up:
 1. ~~**C (Professional Reporting)**~~ — **shipped in Phase 5**
 2. ~~**F (Video Intelligence Export)**~~ — **shipped in Phase 6**
 3. ~~**G (UI/UX Overhaul + Enhanced AI)**~~ — **shipped in Phase 7**
-4. **D (Settings + first-run polish)** — same low-risk, high-perceived-value
+4. ~~**Test Coverage (Phase 10)**~~ — **shipped; 195 tests, CI-safe**
+5. **D (Settings + first-run polish)** — same low-risk, high-perceived-value
    profile; natural to bundle 2-3 of these into one phase the way Phase 3
    bundled undo+presets+theme.
-5. **B1 (face/plate blur)** — contained, high-impact, standalone; doesn't
+6. **B1 (face/plate blur)** — contained, high-impact, standalone; doesn't
    touch the job/session architecture.
-6. **A (batch processing)** — deliberately last among the "foundational"
+7. **A (batch processing)** — deliberately last among the "foundational"
    items, because it deserves its own explicit conversation about the
    single-job-at-a-time tradeoff rather than being smuggled in as a side
    effect of something else.
-7. **B2/B3 (semantic search, object tracking)** — the most exciting and the
+8. **B2/B3 (semantic search, object tracking)** — the most exciting and the
    most speculative; CLIP embeddings from Phase 7 make B2 (semantic search)
    much closer — best explored once the more foundational items above are in
    place and there's a clearer sense of what users actually ask for next.
-8. **B4, E** — low-effort items that can slot into whichever phase has spare
+9. **B4, E** — low-effort items that can slot into whichever phase has spare
    capacity; no need to schedule them on their own.
