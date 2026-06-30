@@ -266,6 +266,111 @@ class FrameAnalyzer:
         }
 
     @classmethod
+    def _extract_video_frames(cls, source_path: str, timestamps: list) -> list:
+        """Extract PIL Images at given timestamps via ffmpeg. Returns as many as succeed."""
+        import shutil, subprocess, tempfile
+        from PIL import Image
+        from app.utils.ffmpeg_path import get_ffmpeg
+
+        images = []
+        tmpdir = Path(tempfile.mkdtemp(prefix="cctv_frames_"))
+        try:
+            for i, ts in enumerate(timestamps):
+                out = tmpdir / f"f{i}.jpg"
+                try:
+                    subprocess.run(
+                        [
+                            get_ffmpeg(), "-hide_banner", "-loglevel", "error",
+                            "-ss", str(max(0.0, float(ts))), "-i", source_path,
+                            "-frames:v", "1", "-q:v", "4", "-y", str(out),
+                        ],
+                        capture_output=True,
+                        timeout=15,
+                    )
+                    if out.exists() and out.stat().st_size > 0:
+                        img = Image.open(out).convert("RGB").resize((768, 768), Image.BILINEAR)
+                        images.append(img.copy())
+                except Exception:
+                    pass
+        finally:
+            shutil.rmtree(tmpdir, ignore_errors=True)
+        return images
+
+    @classmethod
+    def _run_caption_only(cls, image) -> str:
+        """Run <MORE_DETAILED_CAPTION> on a single PIL image. Model must already be loaded."""
+        processor = cls._processor
+        model = cls._model
+        if processor is None or model is None:
+            return ""
+
+        def _task():
+            with warnings.catch_warnings():
+                warnings.simplefilter("ignore", UserWarning)
+                warnings.simplefilter("ignore", DeprecationWarning)
+                inputs = processor(
+                    text="<MORE_DETAILED_CAPTION>", images=image,
+                    return_tensors="pt", truncation=False,
+                ).to("cpu")
+                ids = model.generate(**inputs, max_new_tokens=100, num_beams=1, use_cache=False)
+                raw = processor.batch_decode(ids, skip_special_tokens=False)[0]
+                return processor.post_process_generation(
+                    raw, task="<MORE_DETAILED_CAPTION>", image_size=image.size,
+                )
+
+        parsed, err = _run_in_daemon(_task, 90)
+        if err is not None:
+            logger.warning("Florence-2 extra-frame caption error: %s", err)
+            return ""
+        return _clean_caption((parsed or {}).get("<MORE_DETAILED_CAPTION>", "") or "")
+
+    @classmethod
+    def analyze_event(cls, thumbnail: Path, source_path: str, start_s: float, end_s: float) -> dict:
+        """Temporal event analysis — samples 3 frames across the event window.
+
+        A single midpoint thumbnail misses brief transient activity (e.g. a person
+        walking through for 2 s inside an 18 s event).  This method:
+          1. Runs full analysis (caption + OD + region) on the midpoint thumbnail.
+          2. Extracts frames at 15% and 85% of event duration from the source video.
+          3. Runs caption-only Florence-2 on those two extra frames.
+          4. Returns the longest caption from the three (proxy for most descriptive).
+
+        Falls back to thumbnail-only if video extraction fails.
+        """
+        # Full analysis on the midpoint thumbnail: loads the model once, gets OD + region.
+        base_result = cls.analyze(thumbnail)
+
+        # Extra frames only make sense when the model is loaded and source is available.
+        if not cls._model or not source_path:
+            return base_result
+
+        duration = max(float(end_s) - float(start_s), 1.0)
+        extra_ts = [
+            float(start_s) + duration * 0.15,
+            float(start_s) + duration * 0.85,
+        ]
+
+        try:
+            extra_images = cls._extract_video_frames(source_path, extra_ts)
+        except Exception as exc:
+            logger.warning("Florence-2 temporal frame extraction failed: %s", exc)
+            return base_result
+
+        if not extra_images:
+            return base_result
+
+        # Collect captions from all three perspectives and pick the most descriptive.
+        captions = [base_result.get("caption", "")]
+        for img in extra_images:
+            cap = cls._run_caption_only(img)
+            if cap:
+                captions.append(cap)
+
+        best = max(captions, key=len) if captions else ""
+        base_result["caption"] = best
+        return base_result
+
+    @classmethod
     def _get_clip_embedding(cls, image_path: Path):
         """Call ClipIndexer.embed() if available; never raise."""
         try:
