@@ -87,6 +87,15 @@ def bulk_toggle_events(indices: list, include: bool) -> None:
             _state["events"][idx]["included"] = include
 
 
+def patch_event_field(event_index: int, **fields) -> None:
+    """Update arbitrary fields on the event with the given event_index. No-op if not found."""
+    with _lock:
+        for ev in _state["events"]:
+            if ev.get("event_index") == event_index:
+                ev.update(fields)
+                break
+
+
 # Initialise state on module import
 reset()
 

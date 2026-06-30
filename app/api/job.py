@@ -300,16 +300,21 @@ async def intel_report_html():
 
     descriptions = {}
     for ev in included:
-        thumb = job_dir / "thumbnails" / f"{ev['event_index']}.jpg"
-        if thumb.exists():
-            analysis = FrameAnalyzer.analyze(thumb)
-            ev["caption"] = analysis.get("caption", "")
-            ev["object_caption"] = analysis.get("object_caption", "")
-            ev["detections"] = analysis.get("detections", [])
-        else:
-            ev["caption"] = ""
-            ev["object_caption"] = ""
-            ev["detections"] = []
+        # Reuse captions already cached in the session by a prior export run so
+        # that Qt doesn't trigger a second full Florence-2 pass when loading this
+        # page for PDF printing — that second pass blocked the event loop for
+        # 5-15 min per event and caused the PDF to never appear.
+        if not ev.get("caption"):
+            thumb = job_dir / "thumbnails" / f"{ev['event_index']}.jpg"
+            if thumb.exists():
+                analysis = FrameAnalyzer.analyze(thumb)
+                ev["caption"] = analysis.get("caption", "")
+                ev["object_caption"] = analysis.get("object_caption", "")
+                ev["detections"] = analysis.get("detections", [])
+            else:
+                ev["caption"] = ""
+                ev["object_caption"] = ""
+                ev["detections"] = []
         descriptions[ev["event_index"]] = ev["caption"]
 
     from app.core.narrative_synthesizer import (
@@ -529,6 +534,14 @@ async def intel_report_export(request: Request):
             ev["caption"] = analysis.get("caption", "")
             ev["object_caption"] = analysis.get("object_caption", "")
             ev["detections"] = analysis.get("detections", [])
+            # Cache results back into the live session so intel-report.html
+            # (loaded by Qt for PDF printing) can skip re-running Florence-2.
+            session.patch_event_field(
+                ev["event_index"],
+                caption=ev["caption"],
+                object_caption=ev["object_caption"],
+                detections=ev["detections"],
+            )
 
         # ── Executive summary via LLMSynthesizer (falls back gracefully) ──
         from app.core.narrative_synthesizer import (
