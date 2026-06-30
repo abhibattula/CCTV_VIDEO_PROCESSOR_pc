@@ -76,3 +76,16 @@ def test_run_is_idempotent_skips_existing_thumbnails(tmp_path, monkeypatch):
     thumbnail_gen.run(job_id, TEST_VIDEO, events, logs.append)
 
     assert call_count["n"] == 0
+
+
+# ── Phase 10 addition (T014) ─────────────────────────────────────────────────
+
+def test_thumbnail_gen_handles_ffmpeg_failure(tmp_path, monkeypatch):
+    """thumbnail_gen.run must return without raising even when ffmpeg fails."""
+    monkeypatch.setattr(thumbnail_gen, "JOBS_DIR", tmp_path)
+    monkeypatch.setattr(
+        _subprocess, "run",
+        lambda *a, **kw: (_ for _ in ()).throw(_subprocess.CalledProcessError(1, "ffmpeg")),
+    )
+    events = [{"event_index": 0, "start_s": 0.0, "end_s": 1.0}]
+    thumbnail_gen.run("x", "/fake.mp4", events, lambda m: None)  # must not raise

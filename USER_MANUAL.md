@@ -248,7 +248,9 @@ Or configure manually:
 | **720p / 480p** | Re-encode and downscale (480p = smallest file) |
 | **Burn-in timestamp & label** | Stamps each clip with a semi-transparent overlay reading `HH:MM:SS • Label` in the bottom-left corner, via FFmpeg's `drawtext` filter |
 | **Label Scope** | Restrict export to one label (e.g. only "Person" events), or "All labels" |
-| **Output Folder** | Click Browse… to choose where files are saved. Default: Desktop |
+| **Output Folder** | Click Browse… to choose where files are saved. Default: Desktop (OneDrive Desktop if enabled) |
+
+> **Output folder persists across videos** — if you set a custom output folder and then load a different video, the folder you chose is remembered for the rest of the session. You don't need to re-select it each time.
 
 ### Reports & Data Export
 
@@ -261,6 +263,74 @@ Below the manual export settings is a **Reports & Data Export** card with three 
 | **Event Log (JSON)** | Same as CSV but as structured JSON — an array of event objects. Useful for piping into other tools or scripts. |
 
 All three buttons use the **Output Folder** chosen above, or the Desktop if none was set. CSV and JSON export is available regardless of whether you have run a video export — it is a separate, repeatable operation and is not blocked by an in-progress video export.
+
+### Video Intelligence Report
+
+The Export page offers two report paths side-by-side in the **Video Intelligence Report** section:
+
+| Button | What it does | When to use it |
+|--------|-------------|----------------|
+| **Quick Report (PDF)** | Instant motion-only PDF — same content as the existing Incident Report. Saved automatically to your output folder. No AI wait. | You want a fast PDF right now |
+| **Generate Intelligence Report…** | Full AI-enhanced report: Florence-2 captions, SVG timeline, Scene Breakdown. Takes 5–20 min on CPU. | You want AI scene descriptions |
+
+**Quick Report pre-validation:** Before generating, the button checks that detection has completed and at least one event is included. If not, an inline error message explains what's needed (e.g., "No included events — include at least one on the Timeline page."). The button shows "Generating…" while printing and then "✅ Saved: filename.pdf" on success or "❌ PDF save failed" if the file could not be written.
+
+**Choosing your Intelligence Report format**
+
+When you click **Generate Intelligence Report**, a small modal appears before generation starts. Choose one of three options:
+
+| Option | Output |
+|--------|--------|
+| **Markdown only** | A `.md` file — fast, no extra dependencies |
+| **PDF only** | A self-contained `.pdf` file via Qt's Chromium print engine |
+| **Both** | Markdown and PDF together (default) |
+
+Your choice is remembered for the next run (stored in the browser's local storage). Click **Generate** to confirm, or **Cancel** to dismiss.
+
+**4-stage progress bars**
+
+Report generation runs in four stages, each shown as a labelled progress bar:
+
+1. **Thumbnails** — extracting poster frames for each event
+2. **AI Analysis** — Florence-2 runs object detection and scene captions on each thumbnail (this is the longest stage on CPU — see performance note below)
+3. **Writing** — NarrativeSynthesizer assembles the Markdown report; if `ANTHROPIC_API_KEY` is set, Claude Haiku writes the executive summary here
+4. **PDF** — Chromium renders the HTML preview to PDF (skipped in Markdown-only mode)
+
+Each bar fills as its stage completes.
+
+**CPU performance note**: Florence-2 runs entirely offline on your machine. Each event thumbnail runs up to 3 tasks with a 90-second hard timeout per task — so AI Analysis completes within 4.5 min per event in the worst case, and typically much faster on real CCTV frames (EOS fires in 20–45 s on real footage). For a 5-event run: worst case ≈ 23 min; typical ≈ 8–11 min. If Florence-2 is not installed, this stage is skipped and descriptions fall back to rule-based synthesis — report generation completes in under a minute. A GPU (NVIDIA CUDA) would reduce each task to under 5 seconds.
+
+**Installing Florence-2 (optional, offline)**
+
+Florence-2 is not included in the base install. To enable AI scene descriptions:
+
+```
+pip install torch torchvision einops transformers open-clip-torch
+```
+
+On first use the model weights (~230 MB) download from HuggingFace and are cached locally. All subsequent runs are fully offline.
+
+**AI Analysis badges**
+
+Before generating the report, the Export page shows AI readiness badges in the summary strip — **Florence-2 ready** (green) if the model weights are cached locally.
+
+**Scene Breakdown section**
+
+After the main chronological timeline, the report includes a **Scene Breakdown** section. Each entry shows an annotated thumbnail with bounding boxes drawn into the image, detected object label pills, and the Florence-2 region caption. This section is most useful for quickly spotting what objects were present in key moments without watching the clips.
+
+**Optional LLM executive summary**
+
+If you set the environment variable `ANTHROPIC_API_KEY` before launching the app, the report's executive summary is written by Claude Haiku via the Anthropic API instead of the built-in rule-based text. The Executive Summary section of the report carries a small italic notice indicating whether Claude Haiku or rule-based synthesis was used. If the API call fails (e.g. no network, invalid key), the app falls back to the rule-based summary silently — generation still completes normally. This is entirely optional; the app works fully offline without it.
+
+To set the key on Windows before launching:
+```
+set ANTHROPIC_API_KEY=sk-ant-...
+python launcher.py
+```
+
+**Log panel Show/Hide toggle**
+
+On the Processing page, the live detection log panel now has a **Show / Hide** toggle button in the panel header. Hide the log to give more screen space to the detection chart during a long run; click Show to bring it back. The panel also has a **Copy** button that copies the full log text to your clipboard — useful for pasting into a bug report.
 
 Click **Export Now**. A progress bar fills as FFmpeg processes the clips. When complete:
 - The output file path is displayed
@@ -369,7 +439,7 @@ If the app crashes during export, the next launch will automatically:
 python -m pytest tests/ -v
 ```
 
-Expected result: **97 passed, 2 skipped** (the 2 skips are for `ffprobe`-specific cases that don't apply on Windows — FFmpeg itself is bundled and everything works fine). There is no frontend test runner; frontend behaviour is verified by driving the real app directly.
+Expected result: **≥ 193 passed, ≤ 2 skipped** (the skips are pre-existing video-dependent cases; all Phase 10 tests run without a real video, GPU, or display). There is no frontend test runner; frontend behaviour is verified by driving the real app directly.
 
 ---
 
@@ -426,12 +496,22 @@ CCTV VIDEO PROCESSOR PC/
 │           ├── timeline.js  ← Event cards, filtering, multi-select, preview
 │           └── export.js    ← Presets, output type, quality, burn-in, folder
 │
-└── tests/                   ← pytest test suite (backend only)
+└── tests/                   ← pytest test suite (195 tests, backend only)
+    ├── conftest.py
     ├── test_session.py
     ├── test_ffprobe.py
     ├── test_api_job.py
+    ├── test_api_job_lifecycle.py
+    ├── test_api_shell_bridge.py
+    ├── test_api_system.py
+    ├── test_clip_indexer.py
     ├── test_detection_engine.py
     ├── test_export_engine.py
+    ├── test_log_buffer.py
+    ├── test_narrative_synthesizer.py
+    ├── test_shell_logic.py
+    ├── test_stream.py
+    ├── test_thumbnail_gen.py
     └── test_yolo_detector.py
 ```
 

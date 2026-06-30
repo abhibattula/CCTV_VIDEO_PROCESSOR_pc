@@ -138,6 +138,55 @@ def test_export_with_label_filter(client, monkeypatch, tmp_path):
     assert captured.get("label_filter") == ["Person"]
 
 
+# ── Phase 9 TDD tests (B6: _get_desktop_path; B2: poll caching) ─────────────
+
+def test_get_desktop_path_returns_nonempty_string():
+    """_get_desktop_path() MUST return a non-empty string.
+    Written before implementation — MUST FAIL with ImportError until B6 implemented."""
+    from app.api.job import _get_desktop_path
+    result = _get_desktop_path()
+    assert isinstance(result, str), f"Expected str, got {type(result)}"
+    assert len(result) > 0, "_get_desktop_path() returned empty string"
+
+
+def test_get_job_does_not_recall_is_available_after_cache(client, monkeypatch):
+    """GET /api/job must not re-run the filesystem check on the second poll.
+    Written before implementation — MUST FAIL until T022 cache + T023 removal done."""
+    from app.core.frame_analyzer import FrameAnalyzer
+
+    # Reset the cache so the first call actually runs
+    FrameAnalyzer._availability_cache = None
+
+    call_count = [0]
+    real_is_available = FrameAnalyzer.__dict__.get("is_available")
+
+    original = FrameAnalyzer.is_available.__func__ if hasattr(FrameAnalyzer.is_available, "__func__") else None
+
+    from pathlib import Path
+    original_exists = Path.exists
+
+    def counting_exists(self):
+        if "Florence" in str(self) or "huggingface" in str(self):
+            call_count[0] += 1
+        return original_exists(self)
+
+    monkeypatch.setattr(Path, "exists", counting_exists)
+    FrameAnalyzer._availability_cache = None
+
+    # First poll
+    client.get("/api/job")
+    first_count = call_count[0]
+
+    # Second poll — cache should prevent re-checking
+    client.get("/api/job")
+    second_count = call_count[0]
+
+    assert second_count == first_count, (
+        f"Filesystem stat called {second_count - first_count} extra time(s) on second poll — "
+        "implement _availability_cache in FrameAnalyzer.is_available()"
+    )
+
+
 # ── T001: preview-frame endpoint tests (TDD — written before T002 implementation) ──
 
 def test_preview_frame_no_active_job_returns_400(client):
@@ -446,3 +495,101 @@ def test_export_json_writes_expected_structure(client, tmp_path):
         assert ev["end_s"] == float(i + 1)
         assert ev["zone_label"] == ("Person" if i % 2 == 0 else "Car")
         assert ev["included"] is True
+
+
+# ── Phase 8 test (T007) ──────────────────────────────────────────────────────
+
+def test_thumbnail_stage_progress_after_run(client, tmp_path, monkeypatch):
+    """Thumbnail progress must not advance before thumbnail_gen.run() is called.
+    After the fix, report_stage_current == 0 when run() is invoked (no pre-run loop)."""
+    import app.session as session
+    session.reset()
+    session.update(
+        status="completed", job_id="test-job", source_path="/fake/video.mp4",
+        source_info={"duration_s": 60.0}, settings={"mode": "mog2"},
+        output_dir=str(tmp_path),
+    )
+    for i in range(2):
+        session.append_event({
+            "event_index": i, "start_s": float(i * 5), "end_s": float(i * 5 + 3),
+            "peak_motion_score": 0.6, "zone_label": None, "included": True,
+            "start_clock": f"00:00:0{i*5}", "end_clock": f"00:00:0{i*5+3}",
+        })
+
+    progress_at_run = []
+
+    def spy_run(*args, **kwargs):
+        snap = session.snapshot()
+        progress_at_run.append(snap.get("report_stage_current", -1))
+
+    monkeypatch.setattr("app.api.job.thumbnail_gen.run", spy_run)
+
+    resp = client.post("/api/job/intel-report/export")
+    assert resp.status_code == 200
+    assert progress_at_run, "thumbnail_gen.run() was never called"
+    # Before fix: progress_at_run[0] == 1 (loop ran ahead for 2 events, last index = 1)
+    # After fix:  progress_at_run[0] == 0 (initial state, no pre-run loop)
+    assert progress_at_run[0] == 0, (
+        f"Thumbnail progress was {progress_at_run[0]} when run() was called; expected 0. "
+        "Fix: remove the pre-thumbnail progress loop in app/api/job.py"
+    )
+
+
+# ── Phase 10 T015 mock-counterpart tests (US6 AC6) ───────────────────────────
+
+def test_create_job_valid_file_mocked(client, monkeypatch):
+    """create_job with mocked probe and is_file → HTTP 200, status=ready."""
+    from pathlib import Path
+    import app.api.job as job_module
+    monkeypatch.setattr(Path, "is_file", lambda self: True)
+    monkeypatch.setattr(job_module, "probe", lambda p: {
+        "fps": 25.0, "duration_s": 10.0, "width": 1920, "height": 1080,
+        "codec": "h264", "has_audio": False, "audio_codec": "", "needs_reencode": False,
+    })
+    resp = client.post("/api/job/create", json={"source_path": "/fake/video.mp4"})
+    assert resp.status_code == 200
+    assert resp.json()["status"] == "ready"
+
+
+def test_preview_frame_extracts_and_caches_mocked(client, ready_session, monkeypatch, tmp_path):
+    """First GET generates frame; second GET serves from cache (subprocess called once)."""
+    from pathlib import Path
+    from unittest.mock import MagicMock
+    import app.api.job as job_module
+    monkeypatch.setattr(job_module, "JOBS_DIR", tmp_path)
+
+    call_count = [0]
+
+    def mock_run(cmd, **kw):
+        call_count[0] += 1
+        out = Path(cmd[-1])
+        out.parent.mkdir(parents=True, exist_ok=True)
+        out.write_bytes(b"\xff\xd8\xff\xe0\x00\x10JFIF\x00\x01\x01\x00\x00\x01\x00\x01\x00\x00\xff\xd9")
+        m = MagicMock()
+        m.returncode = 0
+        return m
+
+    monkeypatch.setattr(job_module.subprocess, "run", mock_run)
+
+    resp1 = client.get("/api/job/preview-frame")
+    assert resp1.status_code == 200
+    assert resp1.headers.get("content-type", "").startswith("image/jpeg")
+    assert call_count[0] == 1
+
+    resp2 = client.get("/api/job/preview-frame")
+    assert resp2.status_code == 200
+    assert call_count[0] == 1  # served from cache — subprocess not called again
+
+
+def test_create_job_cancels_inflight_detection_mocked(client, monkeypatch):
+    """create_job must set _cancel_event to interrupt any in-progress detection."""
+    from pathlib import Path
+    import app.api.job as job_module
+    monkeypatch.setattr(Path, "is_file", lambda self: True)
+    monkeypatch.setattr(job_module, "probe", lambda p: {
+        "fps": 25.0, "duration_s": 10.0, "width": 1920, "height": 1080,
+        "codec": "h264", "has_audio": False, "audio_codec": "", "needs_reencode": False,
+    })
+    job_module._cancel_event.clear()
+    client.post("/api/job/create", json={"source_path": "/fake/video.mp4"})
+    assert job_module._cancel_event.is_set()

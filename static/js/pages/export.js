@@ -2,11 +2,113 @@
  * Export page — single-column, no right pane.
  * Phase 2: preset buttons, burn-in toggle, label scope selector.
  * FR-014: if ?quick=1 in URL, auto-start export with defaults on mount.
+ * Phase 7 (T009): report format modal, 4-stage SSE progress, AI readiness badges.
  */
 import { resetUiState } from "/static/js/session-state.js";
 
+// ── Report Format Modal — module-level constants & helpers ────────────────────
+
+const STORAGE_KEY = "intelReportFormat";
+
+const STAGES = ["thumbnails", "ai_analysis", "markdown", "pdf"];
+const STAGE_LABELS = {
+  thumbnails:  "Thumbnails",
+  ai_analysis: "AI Analysis",
+  markdown:    "Writing Report",
+  pdf:         "Generating PDF",
+};
+
+function loadFormatPrefs() {
+  try {
+    return JSON.parse(localStorage.getItem(STORAGE_KEY)) || { md: true, pdf: true };
+  } catch { return { md: true, pdf: true }; }
+}
+
+function saveFormatPrefs(md, pdf) {
+  localStorage.setItem(STORAGE_KEY, JSON.stringify({ md, pdf }));
+}
+
+// Callback holder for the "Generate →" button — set each time the modal opens.
+let _onGenerateCallback = null;
+
+/**
+ * Inject the format-chooser modal into <body> exactly once.
+ * Re-entrant: safe to call on every mount().
+ */
+function ensureFormatModal() {
+  if (document.getElementById("report-format-modal")) return;
+
+  const wrapper = document.createElement("div");
+  wrapper.innerHTML = `
+<div id="report-format-modal" class="modal-overlay hidden">
+  <div class="modal">
+    <h3 style="margin-bottom:12px;font-size:14px">Generate Intelligence Report</h3>
+    <div class="format-options" style="display:flex;flex-direction:column;gap:10px;margin-bottom:16px">
+      <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer">
+        <input type="checkbox" id="fmt-md" checked> Markdown (.md)
+      </label>
+      <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer">
+        <input type="checkbox" id="fmt-pdf" checked> PDF
+      </label>
+    </div>
+    <div class="actions">
+      <button class="btn" id="fmt-cancel">Cancel</button>
+      <button class="btn btn-primary" id="fmt-generate" disabled>Generate &#x2192;</button>
+    </div>
+  </div>
+</div>`;
+  document.body.appendChild(wrapper.firstElementChild);
+
+  // Checkbox validation — at least one must be checked
+  function _updateGenerateButton() {
+    const anyChecked =
+      document.getElementById("fmt-md").checked ||
+      document.getElementById("fmt-pdf").checked;
+    document.getElementById("fmt-generate").disabled = !anyChecked;
+  }
+  document.getElementById("fmt-md").addEventListener("change", _updateGenerateButton);
+  document.getElementById("fmt-pdf").addEventListener("change", _updateGenerateButton);
+
+  // Cancel button
+  document.getElementById("fmt-cancel").addEventListener("click", () => {
+    document.getElementById("report-format-modal").classList.add("hidden");
+    // Re-enable the trigger button (caller is responsible for disabling it)
+    const btn = document.querySelector("#intel-report-btn");
+    if (btn) btn.disabled = false;
+  });
+
+  // Generate button
+  document.getElementById("fmt-generate").addEventListener("click", () => {
+    const md  = document.getElementById("fmt-md").checked;
+    const pdf = document.getElementById("fmt-pdf").checked;
+    saveFormatPrefs(md, pdf);
+    document.getElementById("report-format-modal").classList.add("hidden");
+    const formats = [];
+    if (md)  formats.push("md");
+    if (pdf) formats.push("pdf");
+    if (_onGenerateCallback) _onGenerateCallback(formats);
+  });
+}
+
+/** Open the modal, pre-filled from localStorage, and call onGenerate(formats) when confirmed. */
+function openFormatModal(onGenerate) {
+  _onGenerateCallback = onGenerate;
+  const prefs = loadFormatPrefs();
+  const fmtMd  = document.getElementById("fmt-md");
+  const fmtPdf = document.getElementById("fmt-pdf");
+  fmtMd.checked  = prefs.md;
+  fmtPdf.checked = prefs.pdf;
+  // Sync the button state with restored prefs
+  document.getElementById("fmt-generate").disabled = !(prefs.md || prefs.pdf);
+  document.getElementById("report-format-modal").classList.remove("hidden");
+}
+
+
 export function mount(container, params) {
   const quick = params && params.get("quick") === "1";
+
+  // Inject modal once (persists across page navigations in the SPA)
+  ensureFormatModal();
 
   container.innerHTML = `
     <div class="export-layout">
@@ -83,16 +185,47 @@ export function mount(container, params) {
         <p class="muted" id="report-status-text" style="font-size:12px;margin-top:8px"></p>
       </div>
 
-      <!-- Video Intelligence Report (Phase 6) -->
+      <!-- Video Intelligence Report (Phase 6/7) -->
       <div class="card export-section" id="intel-report-section">
         <div class="section-label">Video Intelligence Report</div>
         <p class="muted" style="font-size:12px;margin:6px 0 10px">
           Natural language report describing what happened in the video — executive summary,
           timeline, object inventory, and PDF. Saved to your output folder.<br>
-          <span style="margin-top:4px;display:inline-block">Tip: install <code>transformers</code> (<code>pip install transformers accelerate</code>) to add AI visual descriptions to the timeline. First use downloads the model (~900 MB, one-time, fully offline).</span>
+          <span style="margin-top:4px;display:inline-block">Tip: install <code>transformers</code> (<code>pip install transformers</code>) to enable Florence-2 AI analysis. First use downloads the model (~230 MB, one-time, fully offline).</span>
         </p>
-        <button class="btn" id="intel-report-btn">Generate Intelligence Report (Markdown + PDF)</button>
+
+        <!-- AI readiness badges — populated by loadAiBadges() -->
+        <div id="ai-badges" style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px"></div>
+
+        <!-- Two report buttons side-by-side -->
+        <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-start">
+          <div style="display:flex;flex-direction:column;gap:4px">
+            <button class="btn" id="quick-report-btn">Quick Report (PDF)</button>
+            <span class="muted" style="font-size:11px;text-align:center">Instant &middot; rule-based synthesis</span>
+          </div>
+          <div style="display:flex;flex-direction:column;gap:4px">
+            <button class="btn" id="intel-report-btn">Generate Intelligence Report&#x2026;</button>
+            <span class="muted" style="font-size:11px;text-align:center">~5&ndash;20 min &middot; Florence-2</span>
+          </div>
+        </div>
         <p class="muted" id="intel-report-status" style="font-size:12px;margin-top:8px"></p>
+
+        <!-- 4-stage SSE progress (hidden until generation starts) -->
+        <div id="intel-report-progress" class="hidden" style="margin-top:12px">
+          <div style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.06em;color:var(--text-dim);margin-bottom:8px">Generation Progress</div>
+          <div id="stage-row-thumbnails"  class="stage-row"><span class="stage-row__icon" id="stage-icon-thumbnails">&#x23F3;</span><span class="stage-row__label">Thumbnails</span><span class="stage-row__progress" id="stage-prog-thumbnails"></span></div>
+          <div id="stage-row-ai_analysis" class="stage-row"><span class="stage-row__icon" id="stage-icon-ai_analysis">&#x23F3;</span><span class="stage-row__label">AI Analysis</span><span class="stage-row__progress" id="stage-prog-ai_analysis"></span></div>
+          <div id="stage-row-markdown"    class="stage-row"><span class="stage-row__icon" id="stage-icon-markdown">&#x23F3;</span><span class="stage-row__label">Writing Report</span><span class="stage-row__progress" id="stage-prog-markdown"></span></div>
+          <div id="stage-row-pdf"         class="stage-row"><span class="stage-row__icon" id="stage-icon-pdf">&#x23F3;</span><span class="stage-row__label">Generating PDF</span><span class="stage-row__progress" id="stage-prog-pdf"></span></div>
+        </div>
+
+        <!-- Success card (hidden until report_done SSE event) -->
+        <div id="intel-report-done" class="hidden" style="margin-top:12px;padding:12px 16px;border:1px solid var(--success);border-radius:var(--radius);background:rgba(62,207,142,0.07)">
+          <div style="font-weight:600;color:var(--success);margin-bottom:6px">&#x2705; Report Generated</div>
+          <p id="intel-report-done-md"     class="muted" style="font-size:12px;margin:2px 0;word-break:break-all"></p>
+          <p id="intel-report-done-pdf"    class="muted" style="font-size:12px;margin:2px 0;word-break:break-all"></p>
+          <p id="intel-report-done-notice" class="muted" style="font-size:11px;font-style:italic;margin:6px 0 0"></p>
+        </div>
       </div>
 
       <!-- Export action -->
@@ -372,7 +505,46 @@ export function mount(container, params) {
       securityBtn.style.cursor = "not-allowed";
     }
 
+    // Disable both report buttons when there are no included events
+    if (included.length === 0) {
+      const noEventsTitle = "No included events — include at least one on the Timeline page";
+      ["#quick-report-btn", "#intel-report-btn"].forEach(sel => {
+        const b = container.querySelector(sel);
+        if (b) { b.disabled = true; b.title = noEventsTitle; }
+      });
+    }
+
+    // AI readiness badges — read florence_available / llm_available from
+    // /api/job (Phase 7 extended the existing status snapshot). Gracefully
+    // degrade if fields are absent.
+    loadAiBadges();
+
     return job;
+  }
+
+  // ── AI Readiness Badges ──────────────────────────────────────────────────────
+
+  async function loadAiBadges() {
+    const badgeEl = container.querySelector("#ai-badges");
+    if (!badgeEl) return;
+    try {
+      const resp = await fetch("/api/job");
+      const status = resp.ok ? await resp.json() : {};
+
+      let html = "";
+      if (status.florence_available) {
+        html += '<span class="badge badge-green">Florence-2 ready</span>';
+      } else {
+        html += '<span class="badge badge-grey">AI analysis unavailable</span>';
+      }
+      if (status.llm_available) {
+        html += '<span class="badge badge-blue">LLM synthesis on</span>';
+      }
+      badgeEl.innerHTML = html;
+    } catch (_e) {
+      // Endpoint may not exist yet — show default state
+      badgeEl.innerHTML = '<span class="badge badge-grey">AI analysis unavailable</span>';
+    }
   }
 
   // ── Export ───────────────────────────────────────────────────────────────────
@@ -505,29 +677,250 @@ export function mount(container, params) {
 
   // ── Video Intelligence Report (T009) ────────────────────────────────────────
 
-  container.querySelector("#intel-report-btn").addEventListener("click", async () => {
-    const btn = container.querySelector("#intel-report-btn");
-    const status = container.querySelector("#intel-report-status");
-    btn.disabled = true;
-    status.textContent = "Generating…";
-    try {
-      const resp = await fetch("/api/job/intel-report/export", { method: "POST" });
-      const data = await resp.json();
-      if (!resp.ok) {
-        status.textContent = data.detail || "Generation failed.";
-      } else {
-        const pdfPath = data.md_path.replace(/\.md$/, ".pdf");
-        window.dispatchEvent(new CustomEvent("cctv:generate-intel-report", { detail: { pdf_path: pdfPath } }));
-        status.textContent = `Markdown saved to ${data.md_path}. PDF generating to same folder.`;
-        if (!data.moondream_available) {
-          status.textContent += " Run 'pip install transformers accelerate' to enable AI visual descriptions.";
-        }
+  /**
+   * Reset the 4-stage progress rows back to their initial pending state.
+   */
+  function resetStageRows() {
+    STAGES.forEach(stage => {
+      const icon = container.querySelector(`#stage-icon-${stage}`);
+      const prog = container.querySelector(`#stage-prog-${stage}`);
+      if (icon) icon.textContent = "⏳"; // ⏳
+      if (prog) prog.textContent = "";
+    });
+  }
+
+  /**
+   * Mark a stage row as active (Running…) or complete (✔).
+   * @param {string} stage - stage key
+   * @param {"active"|"done"} state
+   * @param {string} [progressText] - e.g. "3/12"
+   */
+  function updateStageRow(stage, state, progressText = "") {
+    const icon = container.querySelector(`#stage-icon-${stage}`);
+    const prog = container.querySelector(`#stage-prog-${stage}`);
+    if (!icon) return;
+    if (state === "done") {
+      icon.textContent = "✔"; // ✔
+      if (prog) prog.textContent = "Done";
+    } else {
+      icon.textContent = "▶"; // ▶
+      if (prog) prog.textContent = progressText || "Running…";
+    }
+  }
+
+  /**
+   * Open SSE stream and listen for report_stage / report_done events.
+   * Returns an EventSource that the caller should close on error.
+   * @param {function} onStage - called with (stageEvent)
+   * @param {function} onDone  - called with (doneEvent)
+   * @param {function} onError - called with no args
+   */
+  function openReportSse(onStage, onDone, onError) {
+    const es = new EventSource("/api/stream");
+    es.onmessage = (evt) => {
+      let data;
+      try { data = JSON.parse(evt.data); } catch { return; }
+      if (data.type === "report_stage") {
+        onStage(data);
+      } else if (data.type === "report_done") {
+        es.close();
+        onDone(data);
       }
+    };
+    es.onerror = () => {
+      es.close();
+      onError();
+    };
+    return es;
+  }
+
+  /**
+   * Post to intel-report/export with the chosen formats, listen to SSE for
+   * stage progress, and update the UI accordingly.
+   * @param {string[]} formats - e.g. ["md", "pdf"]
+   */
+  async function generateReport(formats) {
+    const btn       = container.querySelector("#intel-report-btn");
+    const statusEl  = container.querySelector("#intel-report-status");
+    const progressEl = container.querySelector("#intel-report-progress");
+    const doneEl    = container.querySelector("#intel-report-done");
+
+    btn.disabled = true;
+    statusEl.textContent = "";
+    doneEl.classList.add("hidden");
+    progressEl.classList.remove("hidden");
+    resetStageRows();
+
+    // Track which stages have been seen so we can mark earlier ones complete
+    const completedStages = new Set();
+    // Store llm_notice from POST response to show in done card
+    let _llmNotice = "";
+
+    // Open SSE before POSTing so we don't miss early stage events
+    let sseError = false;
+    const es = openReportSse(
+      // onStage
+      (data) => {
+        const currentIdx = STAGES.indexOf(data.stage);
+        // Mark all prior stages done
+        for (let i = 0; i < currentIdx; i++) {
+          const s = STAGES[i];
+          if (!completedStages.has(s)) {
+            completedStages.add(s);
+            updateStageRow(s, "done");
+          }
+        }
+        // Mark current stage active
+        const prog = (data.total > 0)
+          ? `${data.current}/${data.total}${data.ts ? " — " + data.ts : ""}`
+          : "Running…";
+        updateStageRow(data.stage, "active", prog);
+      },
+      // onDone
+      (data) => {
+        // Mark all stages done
+        STAGES.forEach(s => updateStageRow(s, "done"));
+
+        const mdPath  = data.md_path  || null;
+        const pdfPath = data.pdf_path || null;
+
+        // Trigger Qt bridge to render PDF asynchronously (main_window.py picks
+        // up the event within ~200ms and calls _generate_intel_report_pdf)
+        if (pdfPath && formats.includes("pdf")) {
+          window.dispatchEvent(new CustomEvent("cctv:generate-intel-report", {
+            detail: { pdf_path: pdfPath },
+          }));
+        }
+
+        // Show success card
+        progressEl.classList.add("hidden");
+        doneEl.classList.remove("hidden");
+        container.querySelector("#intel-report-done-md").textContent =
+          mdPath  ? "Markdown: " + mdPath  : "";
+        container.querySelector("#intel-report-done-pdf").textContent =
+          pdfPath ? "PDF: " + pdfPath : "";
+        container.querySelector("#intel-report-done-notice").textContent =
+          _llmNotice || "";
+
+        statusEl.textContent = "";
+        btn.disabled = false;
+      },
+      // onError
+      () => {
+        if (!sseError) {
+          sseError = true;
+          progressEl.classList.add("hidden");
+          statusEl.textContent = "SSE connection lost — check server logs.";
+          btn.disabled = false;
+        }
+      },
+    );
+
+    // POST the generate request
+    try {
+      const resp = await fetch("/api/job/intel-report/export", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ formats }),
+      });
+      const data = await resp.json();
+
+      if (!resp.ok) {
+        es.close();
+        progressEl.classList.add("hidden");
+        statusEl.textContent = data.detail || "Generation failed.";
+        btn.disabled = false;
+        return;
+      }
+
+      // Store LLM notice to display in done card once SSE fires report_done
+      _llmNotice = data.llm_notice || "";
+
+      // Check if florence was unavailable and append a tip
+      if (!data.florence_available) {
+        _llmNotice = [_llmNotice, "Run 'pip install transformers' to enable Florence-2 AI analysis."]
+          .filter(Boolean).join(" ");
+      }
+
+      // The report_done SSE event will close the ES and update the UI.
+      // If it never fires (edge case), the ES self-closes after ~5s idle.
+
     } catch (err) {
-      status.textContent = "Error: " + err.message;
-    } finally {
+      es.close();
+      progressEl.classList.add("hidden");
+      statusEl.textContent = "Error: " + err.message;
       btn.disabled = false;
     }
+  }
+
+  // "Quick Report (PDF)" button → pre-validate, fire PDF, poll _cctvPdfResult for real status
+  container.querySelector("#quick-report-btn").addEventListener("click", async () => {
+    const btn = container.querySelector("#quick-report-btn");
+    const statusEl = container.querySelector("#intel-report-status");
+    btn.disabled = true;
+
+    let job;
+    try {
+      job = await fetch("/api/job").then(r => r.json());
+    } catch (_err) {
+      statusEl.textContent = "No active job — run detection first.";
+      btn.disabled = false;
+      return;
+    }
+    if (!job.job_id) {
+      statusEl.textContent = "No active job — run detection first.";
+      btn.disabled = false;
+      return;
+    }
+    if (job.status === "detecting" || job.status === "exporting") {
+      statusEl.textContent = "Detection in progress — wait for it to finish.";
+      btn.disabled = false;
+      return;
+    }
+    const includedEvents = (job.events || []).filter(e => e.included);
+    if (includedEvents.length === 0) {
+      statusEl.textContent = "No included events — include at least one on the Timeline page.";
+      btn.disabled = false;
+      return;
+    }
+
+    statusEl.textContent = "Generating…";
+    window._cctvPdfResult = null;
+    window.dispatchEvent(new CustomEvent("cctv:save-report-pdf"));
+
+    let elapsed = 0;
+    const maxWait = 120000;
+    const pollInterval = 500;
+    const poll = setInterval(() => {
+      elapsed += pollInterval;
+      const result = window._cctvPdfResult;
+      if (result !== null) {
+        clearInterval(poll);
+        window._cctvPdfResult = null;
+        if (result.success) {
+          const fname = result.path ? result.path.split(/[\\/]/).pop() : "report.pdf";
+          statusEl.textContent = "✅ Saved: " + fname;
+        } else {
+          statusEl.textContent = "❌ PDF save failed — check that detection is complete and events are included.";
+        }
+        btn.disabled = false;
+      } else if (elapsed >= maxWait) {
+        clearInterval(poll);
+        statusEl.textContent = "❌ PDF save timed out — check output folder permissions.";
+        btn.disabled = false;
+      }
+    }, pollInterval);
+  });
+
+  // "Generate Intelligence Report…" button → show format modal
+  container.querySelector("#intel-report-btn").addEventListener("click", () => {
+    const btn = container.querySelector("#intel-report-btn");
+    btn.disabled = true;
+    openFormatModal((formats) => {
+      // Modal confirmed — start generation
+      generateReport(formats);
+    });
+    // If user cancels the modal, the cancel handler re-enables btn
   });
 
   loadSummary().then(() => {

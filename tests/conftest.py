@@ -29,3 +29,15 @@ async def async_client():
     app = create_app()
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
         yield ac
+
+
+@pytest.fixture
+def ready_session():
+    session_module.reset()
+    session_module.update(
+        status="ready",
+        job_id="test-job-001",
+        source_path="/fake/video.mp4",
+        source_info={"fps": 25, "duration_s": 10, "width": 1920, "height": 1080},
+    )
+    yield

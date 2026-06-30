@@ -104,3 +104,17 @@ def test_thread_safe_concurrent_updates():
     assert errors == [], f"Thread errors: {errors}"
     s = snapshot()
     assert len(s["events"]) == 50
+
+
+# ── Phase 9 TDD tests (B6: output_dir persists across reset) ────────────────
+
+def test_output_dir_persists_across_reset():
+    """output_dir set by user MUST survive session.reset() (new video load).
+    Written before implementation — MUST FAIL until _PERSISTENT dict added."""
+    reset()
+    update(output_dir="/custom/exports")
+    reset()  # simulates loading a new video
+    s = snapshot()
+    assert s.get("output_dir") == "/custom/exports", (
+        "output_dir was wiped by reset() — implement _PERSISTENT dict in app/session.py"
+    )

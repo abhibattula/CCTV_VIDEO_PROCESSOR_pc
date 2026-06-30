@@ -119,6 +119,12 @@
     color: var(--text);
   }
 
+  .llm-notice {
+    margin-top: 8px;
+    font-size: 12px;
+    color: var(--text-dim);
+  }
+
   /* ── Tables ─────────────────────────────────────────────────────── */
   table {
     width: 100%;
@@ -145,6 +151,114 @@
   }
 
   table tr:last-child td { border-bottom: none; }
+
+  /* ── Confidence bar ──────────────────────────────────────────────── */
+  .conf-bar-wrap { margin-top: 4px; }
+  .conf-bar {
+    height: 4px;
+    border-radius: 2px;
+  }
+
+  /* ── Activity Timeline ───────────────────────────────────────────── */
+  .activity-timeline {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: var(--gap);
+    margin-bottom: var(--gap);
+  }
+
+  .activity-timeline h3 {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text-dim);
+    margin-bottom: 8px;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+  }
+
+  /* ── Scene Breakdown ─────────────────────────────────────────────── */
+  .scene-breakdown > h2 {
+    font-size: 15px;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--text-dim);
+    border-bottom: 1px solid var(--border);
+    padding-bottom: 8px;
+    margin-bottom: var(--gap);
+  }
+
+  .scene-cards {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+    gap: var(--gap);
+  }
+
+  .scene-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    overflow: hidden;
+  }
+
+  .scene-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 12px;
+    background: var(--surface2);
+    border-bottom: 1px solid var(--border);
+  }
+
+  .scene-header .rank {
+    font-weight: 700;
+    font-size: 13px;
+    color: var(--accent);
+  }
+
+  .scene-header .timestamp {
+    font-size: 12px;
+    color: var(--text-dim);
+    font-family: "Cascadia Mono", Consolas, "SF Mono", monospace;
+    flex: 1;
+  }
+
+  .scene-header .confidence {
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--text-dim);
+    background: var(--border);
+    border-radius: 999px;
+    padding: 1px 6px;
+  }
+
+  .scene-thumb {
+    width: 100%;
+    aspect-ratio: 16 / 9;
+    object-fit: cover;
+    display: block;
+  }
+
+  .scene-caption {
+    padding: 8px 12px 2px;
+    font-size: 12px;
+    color: var(--text);
+    line-height: 1.5;
+  }
+
+  .scene-object-caption {
+    padding: 2px 12px 6px;
+    font-size: 11px;
+    color: var(--text-dim);
+    line-height: 1.5;
+  }
+
+  .detection-pills {
+    padding: 4px 12px 10px;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+  }
 
   /* ── Key Moments ─────────────────────────────────────────────────── */
   .key-moment-grid {
@@ -320,6 +434,9 @@
     <h2>Executive Summary</h2>
     <div class="summary-text">
       <p>{{ executive_summary }}</p>
+      {% if llm_notice %}
+      <p class="llm-notice"><em>{{ llm_notice }}</em></p>
+      {% endif %}
     </div>
   </section>
 
@@ -394,7 +511,19 @@
   {% endif %}
 
   <!-- ══════════════════════════════════════════════════════════════ -->
-  <!-- 5. CHRONOLOGICAL TIMELINE                                       -->
+  <!-- 5. ACTIVITY TIMELINE (SVG)                                      -->
+  <!-- ══════════════════════════════════════════════════════════════ -->
+  {% if svg_timeline %}
+  <section>
+    <div class="activity-timeline">
+      <h3>Activity Timeline</h3>
+      {{ svg_timeline|safe }}
+    </div>
+  </section>
+  {% endif %}
+
+  <!-- ══════════════════════════════════════════════════════════════ -->
+  <!-- 6. CHRONOLOGICAL TIMELINE                                       -->
   <!-- ══════════════════════════════════════════════════════════════ -->
   <section>
     <h2>Chronological Timeline</h2>
@@ -418,7 +547,13 @@
           <td>{{ entry.end_clock }}</td>
           <td>{{ "%.1f"|format(entry.duration_s) }}s</td>
           <td>{{ entry.label }}</td>
-          <td><span class="pill">{{ entry.confidence_pct }}%</span></td>
+          <td>
+            <span class="pill">{{ entry.confidence_pct }}%</span>
+            <div class="conf-bar-wrap">
+              <div class="conf-bar" style="width:{{ entry.confidence_pct }}%;
+                background: {% if entry.confidence_pct >= 80 %}#22c55e{% elif entry.confidence_pct >= 50 %}#f59e0b{% else %}#ef4444{% endif %};"></div>
+            </div>
+          </td>
           <td>{{ entry.description }}</td>
         </tr>
         {% endfor %}
@@ -427,7 +562,40 @@
   </section>
 
   <!-- ══════════════════════════════════════════════════════════════ -->
-  <!-- 6. KEY MOMENTS (top 3 by peak_motion_score)                    -->
+  <!-- 7. SCENE BREAKDOWN                                              -->
+  <!-- ══════════════════════════════════════════════════════════════ -->
+  {% if scene_breakdown %}
+  <section class="scene-breakdown">
+    <h2>Scene Breakdown</h2>
+    <div class="scene-cards">
+      {% for entry in scene_breakdown %}
+      <div class="scene-card">
+        <div class="scene-header">
+          <span class="rank">#{{ loop.index }}</span>
+          <span class="timestamp">{{ entry.start_clock }} &ndash; {{ entry.end_clock }}</span>
+        </div>
+        {% if entry.annotated_thumb_b64 %}<img src="data:image/jpeg;base64,{{ entry.annotated_thumb_b64 }}" alt="Event thumbnail" class="scene-thumb">{% endif %}
+        {% if entry.caption %}
+        <p class="scene-caption">{{ entry.caption }}</p>
+        {% endif %}
+        {% if entry.object_caption %}
+        <p class="scene-object-caption"><em>{{ entry.object_caption }}</em></p>
+        {% endif %}
+        {% if entry.detections %}
+        <div class="detection-pills">
+          {% for det in entry.detections %}
+          <span class="pill">{{ det.label }}</span>
+          {% endfor %}
+        </div>
+        {% endif %}
+      </div>
+      {% endfor %}
+    </div>
+  </section>
+  {% endif %}
+
+  <!-- ══════════════════════════════════════════════════════════════ -->
+  <!-- 8. KEY MOMENTS (top 3 by peak_motion_score)                    -->
   <!-- ══════════════════════════════════════════════════════════════ -->
   <section>
     <h2>Key Moments</h2>
@@ -453,7 +621,7 @@
   </section>
 
   <!-- ══════════════════════════════════════════════════════════════ -->
-  <!-- 7. ACTIVITY HEATMAP                                             -->
+  <!-- 9. ACTIVITY HEATMAP                                             -->
   <!-- ══════════════════════════════════════════════════════════════ -->
   <section>
     <h2>Activity Heatmap</h2>
@@ -467,7 +635,7 @@
   </section>
 
   <!-- ══════════════════════════════════════════════════════════════ -->
-  <!-- 8. DETECTION CONFIGURATION                                      -->
+  <!-- 10. DETECTION CONFIGURATION                                     -->
   <!-- ══════════════════════════════════════════════════════════════ -->
   <section>
     <h2>Detection Configuration</h2>
@@ -490,7 +658,7 @@
   </section>
 
   <!-- ══════════════════════════════════════════════════════════════ -->
-  <!-- 9. DATA APPENDIX (JSON)                                         -->
+  <!-- 11. DATA APPENDIX (JSON)                                        -->
   <!-- ══════════════════════════════════════════════════════════════ -->
   <section>
     <h2>Data Appendix (JSON)</h2>

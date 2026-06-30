@@ -180,11 +180,28 @@ review/filter on a timeline → export.
 - **CSV/JSON event log export** — download the included event list as a structured
   spreadsheet or machine-readable JSON (respects the current label filter; second
   click produces a new timestamped file, not an overwrite)
+- **Quick Report PDF** — instant motion-only PDF with pre-validation (checks for completed
+  job and included events before firing); truthful status feedback ("✅ Saved: …" or
+  "❌ PDF save failed"); saved to the real Desktop even when OneDrive Desktop Folder
+  Backup is enabled; side-by-side with the Intelligence Report button
+- **Florence-2 AI Analysis** — task-driven frame captions, object detection, and region
+  descriptions; 90 s hard timeout per task (64 max tokens) so the report always
+  completes; CLIP ViT-B/32 indexes frames as semantic embeddings (`.clip.npy` sidecars)
+  for future natural-language search
+- **Report format choice** — a pre-generation modal lets you pick Markdown, PDF, or
+  both; choice is remembered across sessions
+- **Real-time 4-stage report progress** — live SSE bars for Thumbnails → AI Analysis
+  → Writing → PDF; progress reflects actual work (thumbnail bar reaches 100% only after
+  files are written); SSE stream handles browser disconnect without terminal errors
+- **Scene Breakdown with annotated thumbnails** — bounding boxes, detected object label pills, and
+  Florence-2 region captions per event in the HTML preview (confidence bars appear in the event timeline table)
+- **SVG Activity Timeline** — visual event density strip at the top of every report
 - Light/dark theme toggle, remembered across restarts
 - In-app Stop control (graceful backend shutdown) and New Project control (abandon
   the current job and start over without restarting the app), both reachable from
   every page
-- Live per-label detection chart + events/min counter while processing
+- Live per-label detection chart + events/min counter while processing; log panel
+  with timestamps, severity colours, Show/Hide toggle, and Copy button
 - In-app preview player and in-app debug log (see above) — no external tools needed
 - Proactive capability checks: the Object Detection button disables itself with an
   install hint if `ultralytics` isn't present, instead of failing after you start a job
@@ -255,8 +272,8 @@ CCTV VIDEO PROCESSOR PC/
 python -m pytest tests/ -v
 ```
 
-Expected: **97 passed, 2 skipped** (the skips are `ffprobe`-specific cases that don't
-apply on Windows; FFmpeg itself is bundled and fully functional).
+Expected: **≥ 193 passed, ≤ 2 skipped** (the skips are pre-existing video-dependent
+cases; all new Phase 10 tests run without a real video file, GPU, or display).
 
 The backend follows test-first development — every engine (`detection_engine`,
 `yolo_detector`, `export_engine`) is covered in isolation via its callback interface,
