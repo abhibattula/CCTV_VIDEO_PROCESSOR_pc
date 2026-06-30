@@ -94,11 +94,13 @@ before importing `shell.main_window`. Allows testing pure-Python logic without a
 
 | sys.modules key | Stub contents |
 |-----------------|---------------|
-| `PyQt6.QtWidgets` | `QApplication`, `QMainWindow`, `QSystemTrayIcon`, `QMenu`, `QAction` — all `MagicMock()` |
+| `PyQt6` | top-level namespace — `MagicMock()` |
+| `PyQt6.QtWidgets` | `QApplication`, `QMainWindow`, `QSystemTrayIcon`, `QMenu`, `QAction`, `QFileDialog` — all `MagicMock()` |
 | `PyQt6.QtCore` | `QTimer` (with `singleShot` tracking), `QUrl`, `Qt` (namespace), `pyqtSignal` |
-| `PyQt6.QtWebEngineWidgets` | `QWebEngineView`, `QWebEngineSettings` — `MagicMock()` |
+| `PyQt6.QtWebEngineWidgets` | `QWebEngineView` — `MagicMock()` |
+| `PyQt6.QtWebEngineCore` | `QWebEnginePage`, `QWebEngineSettings` — `MagicMock()` (main_window.py imports these from QtWebEngineCore, not QtWebEngineWidgets) |
 | `PyQt6.QtWebChannel` | `QWebChannel` — `MagicMock()` |
-| `PyQt6.QtGui` | `QIcon`, `QCloseEvent` — `MagicMock()` |
+| `PyQt6.QtGui` | `QIcon`, `QCloseEvent`, `QDragEnterEvent`, `QDropEvent` — all `MagicMock()` |
 
 **Fixture pattern**:
 ```python
@@ -153,11 +155,11 @@ functions and assertion helpers.
 
 ```text
 conftest.py
-├── session_reset       → calls session.reset() (autouse for all job tests)
-├── app_client          → TestClient(app); depends on session_reset
-└── ready_session       → app_client + session.update(status="ready", ...)
+├── reset_session       → calls session.reset() (autouse for all tests)
+├── client              → TestClient(app); already exists — do NOT add app_client
+└── ready_session       → calls session.update(status="ready", ...) after reset
     ├── test_api_job_lifecycle.py  (US1)
-    └── test_api_shell_bridge.py  (US2 — needs app_client)
+    └── test_api_shell_bridge.py  (US2 — uses client + ready_session)
 
 test_log_buffer.py      → no conftest dependency; creates LogBuffer() directly
 test_clip_indexer.py    → no conftest dependency; monkeypatches ClipIndexer

@@ -17,9 +17,9 @@
 
 **Purpose**: Extend `tests/conftest.py` with shared fixtures needed by US1, US2, and US6 test files.
 
-- [ ] T001 Extend `tests/conftest.py` — add `app_client` fixture (TestClient for the FastAPI app imported from `app.main`) and `ready_session` fixture that calls `import app.session as session; session.reset(); session.update(status="ready", job_id="test-job-001", source_path="/fake/video.mp4", source_info={"fps": 25, "duration_s": 10, "width": 1920, "height": 1080})`. Both fixtures must be function-scoped to isolate state between tests. Run `pytest tests/ -v --co -q` to confirm fixtures are discoverable.
+- [ ] T001 Extend `tests/conftest.py` — add only `ready_session` fixture (the `client` fixture already exists in conftest.py — do NOT add `app_client`). The `ready_session` fixture: call `import app.session as session_module` then `session_module.reset()` then `session_module.update(status="ready", job_id="test-job-001", source_path="/fake/video.mp4", source_info={"fps": 25, "duration_s": 10, "width": 1920, "height": 1080})` and `yield`. The fixture must be function-scoped to isolate state between tests. Run `pytest tests/ -v --co -q` to confirm fixture is discoverable.
 
-**Checkpoint**: `tests/conftest.py` importable with no errors; `pytest --fixtures` shows `app_client` and `ready_session`.
+**Checkpoint**: `tests/conftest.py` importable with no errors; `pytest --fixtures` shows `ready_session`.
 
 ---
 
@@ -67,7 +67,7 @@
 
 - [ ] T006 [US2] Append 3 more tests to `tests/test_api_shell_bridge.py`:
   (a) `test_set_output_dir_updates_session`: POST /api/shell/set-output-dir with `{"output_dir": "/home/user/outputs"}` → assert response `{"ok": true, ...}` and `session.snapshot()["output_dir"] == "/home/user/outputs"`;
-  (b) `test_open_folder_calls_platform_open`: monkeypatch `shell.platform_utils.open_folder` with `MagicMock()`, set `session.update(output_path="/home/user/outputs/video_export.mp4")`, POST /api/shell/open-folder → assert mock called with `"/home/user/outputs"` (parent dir) and response `{"ok": true}`;
+  (b) `test_open_folder_calls_platform_open`: monkeypatch `app.api.shell_bridge._open_folder` with `MagicMock()` (shell_bridge.py uses `from shell.platform_utils import open_folder as _open_folder` — patch the local binding, not the original), set `session.update(output_path="/home/user/outputs/video_export.mp4")`, POST /api/shell/open-folder → assert mock called with `"/home/user/outputs"` (parent dir) and response `{"ok": true}`;
   (c) `test_open_folder_returns_false_when_no_output_path`: POST /api/shell/open-folder with no output_path set → assert response `{"ok": false}` (NOT HTTP 400). Run `pytest tests/test_api_shell_bridge.py -v` — all 6 must pass. Commit: `test(010): add shell bridge tests (US2) [P10]`.
 
 **Checkpoint**: 6 new tests, all passing. `pytest tests/test_api_shell_bridge.py -v` shows 6 PASSED.
@@ -83,7 +83,7 @@
 - [ ] T007 [P] [US3] Create `tests/test_log_buffer.py` — 5 tests. Import `from app.core.log_buffer import LogBuffer` and create a fresh `LogBuffer()` per test (NOT the module-level singleton):
   (a) `test_subscribe_replays_history`: append 3 lines, subscribe → queue has 3 items immediately;
   (b) `test_append_calls_call_soon_threadsafe`: subscribe to get queue, set `buf._loop = MagicMock()`, append one line → assert `buf._loop.call_soon_threadsafe.called` with `(queue.put_nowait, "line")` args;
-  (c) `test_ring_buffer_cap`: monkeypatch `app.config.LOG_RING_SIZE = 3`, create fresh `LogBuffer()`, append 4 lines, subscribe → queue has exactly 3 items (oldest dropped);
+  (c) `test_ring_buffer_cap`: monkeypatch `app.core.log_buffer.LOG_RING_SIZE = 3` (log_buffer.py does `from app.config import LOG_RING_SIZE` — patch the local binding in the log_buffer module, not app.config), create fresh `LogBuffer()`, append 4 lines, subscribe → queue has exactly 3 items (oldest dropped);
   (d) `test_reset_clears_only_target_job`: append to job_a and job_b, reset job_a, subscribe to job_b → still receives job_b's lines; subscribe to job_a → empty queue;
   (e) `test_close_sends_done_sentinel`: subscribe, set `buf._loop = MagicMock()`, call `buf.close(job_id)` → assert `call_soon_threadsafe` called with `(queue.put_nowait, "__DONE__")`. Run `pytest tests/test_log_buffer.py -v`.
 
@@ -130,14 +130,14 @@
 
 **Data-model entity used**: QtStubRegistry — see `specs/010-test-coverage-gaps/data-model.md §QtStubRegistry` for exact stub structure.
 
-- [ ] T010 [US5] Create `tests/test_shell_logic.py` — define `_make_qt_stubs()` function using `unittest.mock.MagicMock` for all PyQt6 module stubs, and `mw_module` pytest fixture that patches `sys.modules`, deletes `shell.main_window` from sys.modules, imports fresh `shell.main_window`, yields it, and restores originals in finally block (exact pattern in `data-model.md §QtStubRegistry`). Add test:
-  `test_get_desktop_path_returns_nonempty_string`: using `mw_module`, call `mw.MainWindow._get_desktop_path()` or the module-level `_get_desktop_path()` in shell.main_window → assert result is a non-empty string. Run `pytest tests/test_shell_logic.py::test_get_desktop_path_returns_nonempty_string -v`.
+- [ ] T010 [US5] Create `tests/test_shell_logic.py` — define `_make_qt_stubs()` function using `unittest.mock.MagicMock` for all PyQt6 module stubs (follow `data-model.md §QtStubRegistry` but also add `"PyQt6"`, `"PyQt6.QtWebEngineCore"` with `QWebEnginePage` and `QWebEngineSettings` as MagicMock attributes, `"PyQt6.QtGui"` must also include `QDragEnterEvent` and `QDropEvent`, and `"PyQt6.QtWidgets"` must also include `QFileDialog`). Define `mw_module` pytest fixture that patches `sys.modules`, deletes `shell.main_window` from sys.modules, imports fresh `shell.main_window`, yields it, and restores originals in finally block (pattern in `data-model.md §QtStubRegistry`). Add test:
+  `test_get_desktop_path_returns_nonempty_string`: using `mw_module`, call `mw._get_desktop_path()` (module-level function, NOT `mw.MainWindow._get_desktop_path()`) → assert result is a non-empty string. Run `pytest tests/test_shell_logic.py::test_get_desktop_path_returns_nonempty_string -v`.
 
 - [ ] T011 [US5] Append 4 more tests to `tests/test_shell_logic.py`:
   (a) `test_close_event_hides_when_detecting`: in `mw_module` fixture context, patch `requests.get` to return a mock with `.json()` → `{"status": "detecting"}`, instantiate `MainWindow(mock_app)`, create a `QCloseEvent` mock, call `closeEvent(event)` → assert `event.ignore()` was called (or `QApplication.quit` was NOT called);
   (b) `test_close_event_quits_when_idle`: patch `requests.get` to return `{"status": "idle"}`, call `closeEvent(event)` → assert `QApplication.quit()` was called;
   (c) `test_close_event_quits_when_backend_raises`: patch `requests.get` to raise `ConnectionError("refused")`, call `closeEvent(event)` → assert `QApplication.quit()` was called (fail-safe: no backend = treat as idle);
-  (d) `test_check_shutdown_schedules_qtimer`: patch `requests.get` to return `{"status": "stopped"}` (backend has stopped), call `mw.check_shutdown()` → assert `QTimer.singleShot` stub was called with 2000 as the first argument. Run `pytest tests/test_shell_logic.py -v` — all 5 must pass. Commit: `test(010): add Qt shell logic tests (US5) [P10]`.
+  (d) `test_check_shutdown_schedules_qtimer`: `check_shutdown` is an inner function inside `_handle_browse_flags`, not a public method. Test via `_handle_browse_flags()`: using `mw_module`, instantiate `mw_instance = mw.MainWindow(backend_port=9999)`, then configure `mw_instance._view.page().runJavaScript.side_effect` with a helper that calls the callback with `True` when the script contains `"_cctvShutdown"` and `"= false"` is NOT in the script (i.e., the flag-check call), and calls callback with `False` or `'{"flag": false, "path": ""}'` for all other script patterns. Call `mw_instance._handle_browse_flags()`. Then assert `sys.modules["PyQt6.QtCore"].QTimer.singleShot.call_args[0][0] == 2000`. Run `pytest tests/test_shell_logic.py -v` — all 5 must pass. Commit: `test(010): add Qt shell logic tests (US5) [P10]`.
 
 **Checkpoint**: 5 new tests, all passing without display or PyQt6 installation.
 
@@ -149,12 +149,12 @@
 
 **Independent Test**: `pytest tests/test_api_system.py tests/test_stream.py tests/test_thumbnail_gen.py -v` passes all tests.
 
-- [ ] T012 [P] [US6] Create `tests/test_api_system.py` — 2 tests using `app_client` from conftest:
+- [ ] T012 [P] [US6] Create `tests/test_api_system.py` — 2 tests using `client` from conftest (the existing fixture — do NOT add `app_client`):
   (a) `test_system_stats_has_correct_keys`: GET /api/system/stats → assert response JSON has exactly keys `cpu_pct`, `ram_pct`, `cpu_temp` (no `cpu_percent`, no `ram_percent`);
   (b) `test_system_capabilities_yolo_false_when_not_installed`: monkeypatch `builtins.__import__` to raise ImportError for "ultralytics", GET /api/system/capabilities → assert response `{"yolo_available": false}`. Run `pytest tests/test_api_system.py -v`.
 
 - [ ] T013 [P] [US6] Append 2 tests to `tests/test_stream.py` (APPEND only — preserve existing 4 tests):
-  (a) `test_sse_idle_safety_exits_after_max_polls`: create an `_event_generator("test-job")`, drive it through `_MAX_IDLE_POLLS` idle iterations (using `asyncio.run()` and mocking `asyncio.wait_for` to raise TimeoutError each iteration), confirm the generator StopAsyncIteration (exits cleanly);
+  (a) `test_sse_idle_safety_exits_after_max_polls`: `import app.api.stream as stream_mod`, monkeypatch `stream_mod.POLL_INTERVAL_S = 0.001` and `stream_mod._MAX_IDLE_POLLS = 3` (this makes the generator time out after 3×1ms instead of 10×500ms — no asyncio.wait_for mocking needed), then `asyncio.run(collect(_event_generator("test-job")))` where `collect` drains the async generator into a list. Assert the generator exits cleanly (no exception) and at least one emitted chunk contains `"keepalive"`;
   (b) `test_sse_handles_generator_exit`: wrap generator iteration in try/except GeneratorExit and verify no exception propagates. Run `pytest tests/test_stream.py -v`.
 
 - [ ] T014 [P] [US6] Append 1 test to `tests/test_thumbnail_gen.py` (APPEND only):
