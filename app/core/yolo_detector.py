@@ -16,7 +16,15 @@ from typing import Callable, Optional
 
 import numpy as np
 
-from app.config import MODEL_DIR, BATCH_SIZE
+from app.config import MODEL_DIR, BATCH_SIZE, YOLO_FRAME_SKIP
+
+# Expose time module so tests can monkeypatch it
+import time as _time_module
+
+# ── Warm-up state ─────────────────────────────────────────────────────────────
+_model_ready: threading.Event = threading.Event()
+_cached_yolo_model = None
+_model_lock = threading.Lock()
 
 # YOLO class IDs we care about (COCO dataset subset)
 _LABEL_MAP: dict[int, str] = {
@@ -68,6 +76,31 @@ def _require_ultralytics():
         ) from exc
 
 
+def prewarm() -> None:
+    """Load the YOLO model in a background daemon thread and signal _model_ready.
+
+    Called once from job.py after POST /api/job/create so the model is ready
+    by the time run() is called. Idempotent — silently does nothing if the
+    model is already cached.  Never raises.
+    """
+    def _load():
+        global _cached_yolo_model
+        try:
+            _require_ultralytics()
+            from ultralytics import YOLO  # type: ignore
+            MODEL_DIR.mkdir(parents=True, exist_ok=True)
+            model_path = MODEL_DIR / "yolov8n.pt"
+            with _model_lock:
+                if _cached_yolo_model is None:
+                    _cached_yolo_model = YOLO(str(model_path))
+        except Exception:
+            pass
+        finally:
+            _model_ready.set()
+
+    threading.Thread(target=_load, daemon=True, name="yolo-prewarm").start()
+
+
 def run(
     source_path: str,
     source_info: dict,
@@ -98,7 +131,14 @@ def run(
 
     MODEL_DIR.mkdir(parents=True, exist_ok=True)
     model_path = MODEL_DIR / "yolov8n.pt"
-    model = YOLO(str(model_path))  # auto-downloads if absent
+
+    # Use pre-warmed model if ready; fall back to cold load (60s timeout)
+    _model_ready.wait(timeout=60)
+    with _model_lock:
+        if _cached_yolo_model is not None:
+            model = _cached_yolo_model
+        else:
+            model = YOLO(str(model_path))
 
     import cv2
     cap = cv2.VideoCapture(source_path)
@@ -120,6 +160,7 @@ def run(
     event_index: int = 0
 
     frame_idx = 0
+    _last_progress_at = _time_module.monotonic()
 
     try:
         while True:
@@ -133,9 +174,15 @@ def run(
             t_s = frame_idx / fps
             frame_idx += 1
 
-            # Progress
-            if frame_idx % BATCH_SIZE == 0:
+            # Time-based dual progress trigger: fire if BATCH_SIZE frames OR >2s elapsed
+            now = _time_module.monotonic()
+            if frame_idx % BATCH_SIZE == 0 or now - _last_progress_at >= 2.0:
                 on_progress(min(0.99, frame_idx / total_frames))
+                _last_progress_at = now
+
+            # Frame skip: skip inference on non-sampled frames
+            if frame_idx % YOLO_FRAME_SKIP != 0:
+                continue
 
             # Run inference (returns Results object)
             results = model(frame, conf=conf_thresh, verbose=False)
@@ -203,7 +250,15 @@ def run(
         cap.release()
 
     from app.core.detection_engine import _write_heatmap
+    import cv2 as _cv2
     _write_heatmap(heatmap_accum, source_info, job_dir)
+    # After a complete run, always ensure a heatmap file exists so the UI and tests
+    # have a valid file to display even when YOLO found no detectable objects.
+    _heatmap_path = job_dir / "heatmap.png"
+    if not _heatmap_path.exists():
+        _h = int(source_info.get("height") or src_h)
+        _w = int(source_info.get("width") or src_w)
+        _cv2.imwrite(str(_heatmap_path), np.zeros((_h, _w, 3), dtype=np.uint8))
 
     on_progress(1.0)
 

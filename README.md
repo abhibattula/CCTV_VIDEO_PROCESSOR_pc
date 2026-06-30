@@ -38,11 +38,78 @@ The app detects whether this is installed at runtime. If it isn't, the "Object
 Detection" mode button is greyed out with an install hint instead of failing after
 you click Start.
 
-Requires **Python 3.11+**. Tested on Windows 10/11; the detection/export engines are
-platform-agnostic (see [`RASPBERRY_PI_SETUP.md`](RASPBERRY_PI_SETUP.md) for the
-Raspberry Pi port notes).
+Requires **Python 3.11+**. See the platform-specific notes below.
 
 For a full click-by-click walkthrough of the UI, see [`USER_MANUAL.md`](USER_MANUAL.md).
+
+---
+
+## Platform Installation
+
+### Windows (10/11)
+
+Works out of the box following the Quick Start above. OneDrive Desktop Folder Backup
+is handled automatically — exported files always land on your real Desktop.
+
+### macOS (Intel + Apple Silicon)
+
+```bash
+python -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
+python launcher.py
+```
+
+`imageio-ffmpeg` bundles a universal binary for both Intel and M-series Macs.
+No additional system dependencies required.
+
+> **Note:** If you see a Gatekeeper warning on first launch, right-click the app
+> and choose Open, or run `xattr -d com.apple.quarantine launcher.py`.
+
+### Linux (Desktop — Ubuntu 22.04+, Debian 12+)
+
+```bash
+# System dependencies (OpenCV headless + Qt WebEngine)
+sudo apt install libgl1-mesa-glx libglib2.0-0
+
+# Wayland: if Qt WebEngine has display issues, force XCB
+export QT_QPA_PLATFORM=xcb
+
+# Then follow standard Quick Start
+python -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
+python launcher.py
+```
+
+> **Wayland note:** Pure Wayland sessions (e.g. GNOME 45+ without XWayland) may show
+> a blank WebEngine window. Set `QT_QPA_PLATFORM=xcb` to use XWayland instead.
+> The system tray icon is automatically skipped when the desktop environment doesn't
+> support it (e.g. minimal tiling WMs).
+
+### Linux (Headless / Server — backend only)
+
+The FastAPI backend runs without a display or PyQt6:
+
+```bash
+pip install -r requirements.txt
+# Skip PyQt6 / PyQt6-WebEngine if headless
+uvicorn app.main:app --host 0.0.0.0 --port 5151
+```
+
+Then open `http://<server-ip>:5151/` in any browser.
+
+### Raspberry Pi (2 GB / 4 GB)
+
+See [`RASPBERRY_PI_SETUP.md`](RASPBERRY_PI_SETUP.md) for full install instructions.
+
+Key differences from the desktop version:
+- **AI Analysis (Florence-2) is automatically disabled** on devices with ≤ 4 GB RAM
+  (the AI gate checks total RAM at startup — no manual config required)
+- **YOLO frame skip** is 2× more aggressive on Pi (1-in-6 frames vs 1-in-3 on PC)
+  to keep CPU load manageable
+- Batch size and detection resolution are automatically tuned for 2 GB and 4 GB Pi models
+- Headless mode works; Qt desktop mode requires `libgl1-mesa-glx` and a display
 
 ---
 
@@ -180,11 +247,28 @@ review/filter on a timeline → export.
 - **CSV/JSON event log export** — download the included event list as a structured
   spreadsheet or machine-readable JSON (respects the current label filter; second
   click produces a new timestamped file, not an overwrite)
+- **Quick Report PDF** — instant motion-only PDF with pre-validation (checks for completed
+  job and included events before firing); truthful status feedback ("✅ Saved: …" or
+  "❌ PDF save failed"); saved to the real Desktop even when OneDrive Desktop Folder
+  Backup is enabled; side-by-side with the Intelligence Report button
+- **Florence-2 AI Analysis** — task-driven frame captions, object detection, and region
+  descriptions; 90 s hard timeout per task (64 max tokens) so the report always
+  completes; CLIP ViT-B/32 indexes frames as semantic embeddings (`.clip.npy` sidecars)
+  for future natural-language search
+- **Report format choice** — a pre-generation modal lets you pick Markdown, PDF, or
+  both; choice is remembered across sessions
+- **Real-time 4-stage report progress** — live SSE bars for Thumbnails → AI Analysis
+  → Writing → PDF; progress reflects actual work (thumbnail bar reaches 100% only after
+  files are written); SSE stream handles browser disconnect without terminal errors
+- **Scene Breakdown with annotated thumbnails** — bounding boxes, detected object label pills, and
+  Florence-2 region captions per event in the HTML preview (confidence bars appear in the event timeline table)
+- **SVG Activity Timeline** — visual event density strip at the top of every report
 - Light/dark theme toggle, remembered across restarts
 - In-app Stop control (graceful backend shutdown) and New Project control (abandon
   the current job and start over without restarting the app), both reachable from
   every page
-- Live per-label detection chart + events/min counter while processing
+- Live per-label detection chart + events/min counter while processing; log panel
+  with timestamps, severity colours, Show/Hide toggle, and Copy button
 - In-app preview player and in-app debug log (see above) — no external tools needed
 - Proactive capability checks: the Object Detection button disables itself with an
   install hint if `ultralytics` isn't present, instead of failing after you start a job
@@ -255,8 +339,8 @@ CCTV VIDEO PROCESSOR PC/
 python -m pytest tests/ -v
 ```
 
-Expected: **97 passed, 2 skipped** (the skips are `ffprobe`-specific cases that don't
-apply on Windows; FFmpeg itself is bundled and fully functional).
+Expected: **≥ 205 passed, ≤ 2 skipped** (the skips are pre-existing video-dependent
+cases; all Phase 11 tests run without a real video file, GPU, or display server).
 
 The backend follows test-first development — every engine (`detection_engine`,
 `yolo_detector`, `export_engine`) is covered in isolation via its callback interface,

@@ -11,6 +11,7 @@ Jinja2==3.1.6
 # Video processing
 opencv-python-headless==4.9.0.80
 numpy==1.26.4
+Pillow>=10.0.0
 
 # FFmpeg bundled binary
 imageio-ffmpeg==0.5.1
@@ -33,8 +34,10 @@ httpx==0.27.0
 # Optional — object detection mode (install separately)
 # ultralytics>=8.2.0
 
-# Optional — AI visual frame descriptions in intelligence reports (install separately)
-# pip install transformers accelerate
-# Model Salesforce/blip-image-captioning-base (~900 MB) downloads on first use to
-# ~/.cache/huggingface/ — fully offline after that, no API key required.
-# torch is already installed as a transitive dependency of ultralytics.
+# Optional AI features (Phase 7) — install separately:
+# torch>=2.0.0           — required by Florence-2 and CLIP
+# torchvision            — required by Florence-2 CLIPImageProcessor
+# einops                 — required by Florence-2 custom model (trust_remote_code)
+# transformers           — any version; frame_analyzer.py patches 5.x compat issues at load time
+# open-clip-torch        — CLIP ViT-B/32 semantic frame indexing (Phase 8 search)
+# anthropic              — Claude Haiku executive summary (set ANTHROPIC_API_KEY; offline mode skips)

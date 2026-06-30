@@ -7,9 +7,17 @@
 const MAX_ENTRIES = 500;
 let buffer = [];
 let onAppend = null; // set by buildUI() once the drawer exists (Task 2)
+let requestCount = 0;
 
-function push(type, text) {
-  buffer.push({ ts: new Date().toISOString(), type, text });
+function getTimestamp() {
+  const now = new Date();
+  const time = now.toTimeString().slice(0, 8); // HH:MM:SS
+  const ms = String(now.getMilliseconds()).padStart(3, "0");
+  return `${time}.${ms}`;
+}
+
+function push(type, text, meta = {}) {
+  buffer.push({ ts: getTimestamp(), type, text, ...meta });
   if (buffer.length > MAX_ENTRIES) buffer.shift();
   if (onAppend) onAppend();
 }
@@ -20,6 +28,7 @@ export function getDebugEntries() {
 
 export function clearDebugEntries() {
   buffer = [];
+  requestCount = 0;
   if (onAppend) onAppend();
 }
 
@@ -47,10 +56,12 @@ function installFetchPatch() {
     const url = typeof args[0] === "string" ? args[0] : (args[0] && args[0].url) || String(args[0]);
     const method = (args[1] && args[1].method) ? args[1].method.toUpperCase() : "GET";
     const start = performance.now();
+    requestCount++;
     push("fetch", `→ ${method} ${url}`);
     try {
       const resp = await originalFetch(...args);
-      push("fetch", `← ${resp.status} ${url} (${Math.round(performance.now() - start)}ms)`);
+      const duration = Math.round(performance.now() - start);
+      push("fetch", `← ${resp.status} ${resp.statusText}  ${url}  (${duration} ms)`, { httpStatus: resp.status });
       return resp;
     } catch (err) {
       push("fetch", `✗ ${url}: ${err.message}`);
@@ -76,12 +87,35 @@ function escapeHtml(s) {
   return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 }
 
+function updateCountBadge(count) {
+  const btn = document.getElementById("debug-toggle")
+    || document.querySelector("[data-debug-toggle]");
+  if (btn) {
+    let chip = btn.querySelector(".debug-count");
+    if (!chip) {
+      chip = document.createElement("span");
+      chip.className = "debug-count";
+      btn.appendChild(chip);
+    }
+    chip.textContent = count;
+  }
+}
+
 function renderRows() {
   if (countEl) countEl.textContent = `${buffer.length} entries`;
+  updateCountBadge(requestCount);
   if (!bodyEl) return;
-  bodyEl.innerHTML = buffer.map(e =>
-    `<div class="debug-drawer__row debug-drawer__row--${e.type}">[${e.ts.slice(11, 19)}] ${e.type.toUpperCase()}: ${escapeHtml(e.text)}</div>`
-  ).join("");
+  bodyEl.innerHTML = "";
+  buffer.forEach(e => {
+    const div = document.createElement("div");
+    div.className = `debug-drawer__row debug-drawer__row--${e.type}`;
+    div.textContent = `[${e.ts}] ${e.type.toUpperCase()}: ${e.text}`;
+    if (e.httpStatus >= 400) {
+      div.style.borderLeft = "3px solid #ef4444";
+      div.style.paddingLeft = "6px";
+    }
+    bodyEl.appendChild(div);
+  });
   bodyEl.scrollTop = bodyEl.scrollHeight;
 }
 
@@ -114,6 +148,7 @@ function buildUI() {
   if (!navBar) return; // no nav bar on this page — capture still active, just no UI
 
   const toggle = document.createElement("button");
+  toggle.id          = "debug-toggle";
   toggle.className   = "debug-toggle";
   toggle.textContent = "🐛 Debug";
   navBar.appendChild(toggle);

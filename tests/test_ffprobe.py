@@ -79,3 +79,56 @@ def test_probe_needs_reencode_is_bool():
 def test_probe_raises_on_nonexistent_file():
     with pytest.raises((ValueError, RuntimeError, Exception)):
         probe("/nonexistent/path/video.mp4")
+
+
+# ── Phase 10 T015 mock-counterpart tests (US6 AC6) ───────────────────────────
+
+import json as _json
+import subprocess as _subprocess
+import app.utils.ffprobe as _ffprobe_mod
+
+
+def _ffprobe_mock(avg_frame_rate="30/1", duration="5.0", width=1280, height=720):
+    data = {
+        "streams": [{"codec_type": "video", "codec_name": "h264",
+                     "width": width, "height": height,
+                     "avg_frame_rate": avg_frame_rate}],
+        "format": {"duration": duration},
+    }
+
+    def mock_run(cmd, **kw):
+        from unittest.mock import MagicMock
+        m = MagicMock()
+        m.returncode = 0
+        m.stdout = _json.dumps(data)
+        m.stderr = ""
+        return m
+
+    return mock_run
+
+
+def test_probe_returns_fps_from_mocked_output(monkeypatch):
+    monkeypatch.setattr(_ffprobe_mod, "get_ffprobe", lambda: "/usr/bin/ffprobe")
+    monkeypatch.setattr(_ffprobe_mod.subprocess, "run", _ffprobe_mock("30/1", "5.0"))
+    result = _ffprobe_mod.probe("/fake.mp4")
+    assert result["fps"] == pytest.approx(30.0)
+    assert result["duration_s"] == pytest.approx(5.0)
+
+
+def test_probe_raises_on_subprocess_error(monkeypatch):
+    monkeypatch.setattr(_ffprobe_mod, "get_ffprobe", lambda: "/usr/bin/ffprobe")
+    monkeypatch.setattr(
+        _ffprobe_mod.subprocess, "run",
+        lambda *a, **kw: (_ for _ in ()).throw(
+            _subprocess.CalledProcessError(1, "ffprobe")
+        ),
+    )
+    with pytest.raises(Exception):
+        _ffprobe_mod.probe("/fake.mp4")
+
+
+def test_probe_handles_fractional_fps_mocked(monkeypatch):
+    monkeypatch.setattr(_ffprobe_mod, "get_ffprobe", lambda: "/usr/bin/ffprobe")
+    monkeypatch.setattr(_ffprobe_mod.subprocess, "run", _ffprobe_mock("30000/1001", "5.0"))
+    result = _ffprobe_mod.probe("/fake.mp4")
+    assert result["fps"] == pytest.approx(29.97, rel=0.01)

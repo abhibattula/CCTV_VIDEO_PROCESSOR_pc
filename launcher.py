@@ -8,6 +8,7 @@ Fix 2: If port is already bound by a previous instance of this app, reuse it
        instead of crashing with Errno 10048.
 """
 import shutil
+import signal
 import socket
 import sys
 import threading
@@ -106,6 +107,13 @@ def main():
     # ── Qt application ────────────────────────────────────────────────────────
     qt_app = QApplication(sys.argv)
     qt_app.setQuitOnLastWindowClosed(False)
+
+    # Handle Ctrl+C — Qt blocks Python SIGINT on all platforms without this dummy timer.
+    # The 200ms tick keeps Python's signal-delivery machinery alive inside the Qt event loop.
+    signal.signal(signal.SIGINT, lambda *_: qt_app.quit())
+    _sig_timer = QTimer()
+    _sig_timer.timeout.connect(lambda: None)
+    _sig_timer.start(200)
 
     # Pass the resolved port so the window loads the right URL
     from shell.main_window import MainWindow

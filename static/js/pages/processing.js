@@ -1,9 +1,25 @@
 /**
  * Processing page — live progress via SSE, Cancel button.
  * Phase 2: label bar chart + events/min counter (T036-T039).
+ * Phase 7: timestamped severity-coloured log panel (T010).
  * SSE emits type:"log"/"keepalive"/"done" — no type:"event" exists.
  * Chart updates by detecting event_count delta, then fetching /api/job/events.
  */
+
+const SEVERITY_COLOURS = {
+  INFO:  "#9ca3af",  // grey
+  EVENT: "#3b82f6",  // blue
+  WARN:  "#f59e0b",  // amber
+  ERROR: "#ef4444",  // red
+};
+
+function escapeHtml(str) {
+  return String(str)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+}
 
 export function mount(container) {
   container.innerHTML = `
@@ -24,15 +40,23 @@ export function mount(container) {
         <div id="label-chart"></div>
         <p class="eventsmin-counter">Events/min: <span id="evmin">—</span></p>
       </div>
-      <div class="log-panel" id="log-panel"></div>
+      <div class="log-panel" id="log-panel" style="display:none">
+        <div class="log-header">
+          <span>Detection Log</span>
+          <button id="log-copy-btn">Copy</button>
+        </div>
+        <div id="log-entries"></div>
+      </div>
       <div class="processing-actions">
         <button class="btn btn-danger" id="cancel-btn">Cancel</button>
+        <button class="btn" id="log-toggle-btn">Show Logs</button>
         <span class="muted" id="action-hint">Detection in progress…</span>
       </div>
     </div>
   `;
 
   const logPanel     = container.querySelector("#log-panel");
+  const logEntries   = container.querySelector("#log-entries");
   const progressFill = container.querySelector("#progress-fill");
   let evtSource = null;
   let pollTimer = null;
@@ -43,6 +67,50 @@ export function mount(container) {
   let lastKnownCount = 0;
   let totalEvents    = 0;
   let chartStartTime = null;
+
+  // ── Log panel functions (T010) ─────────────────────────────────────────────
+
+  function toggleLogPanel() {
+    const btn = container.querySelector("#log-toggle-btn");
+    if (logPanel.style.display === "none") {
+      logPanel.style.display = "block";
+      btn.textContent = "Hide Logs";
+    } else {
+      logPanel.style.display = "none";
+      btn.textContent = "Show Logs";
+    }
+  }
+
+  function addLogEntry(severity, message) {
+    const ts = new Date().toTimeString().slice(0, 8);
+    const colour = SEVERITY_COLOURS[severity] || SEVERITY_COLOURS.INFO;
+    const entry = document.createElement("div");
+    entry.className = "log-entry";
+    entry.innerHTML = `<span class="log-ts">${ts}</span> `
+      + `<span class="log-sev" style="color:${colour}">[${severity}]</span> `
+      + `<span class="log-msg">${escapeHtml(message)}</span>`;
+    logEntries.appendChild(entry);
+    logPanel.scrollTop = logPanel.scrollHeight;
+  }
+
+  function addStageSeparator(stageName) {
+    const sep = document.createElement("div");
+    sep.className = "log-stage-sep";
+    sep.textContent = `── ${stageName} ──────────────────────────`;
+    logEntries.appendChild(sep);
+  }
+
+  container.querySelector("#log-toggle-btn").addEventListener("click", toggleLogPanel);
+
+  container.querySelector("#log-copy-btn").addEventListener("click", () => {
+    const entries = container.querySelectorAll(".log-entry");
+    const text = Array.from(entries).map(e => e.textContent).join("\n");
+    navigator.clipboard.writeText(text);
+  });
+
+  // ── Insert initial stage separator ────────────────────────────────────────
+
+  addStageSeparator("Starting detection");
 
   function updateStats(progress, eventCount, status) {
     container.querySelector("#stat-progress").textContent = Math.round(progress * 100) + "%";
@@ -55,14 +123,6 @@ export function mount(container) {
       const eta = (elapsed / progress) * (1 - progress);
       container.querySelector("#stat-eta").textContent = formatEta(eta);
     }
-  }
-
-  function appendLog(line, cls = "") {
-    const div = document.createElement("div");
-    div.className = "log-line" + (cls ? " " + cls : "");
-    div.textContent = line;
-    logPanel.appendChild(div);
-    logPanel.scrollTop = logPanel.scrollHeight;
   }
 
   // ── Chart rendering (T036/T038) ────────────────────────────────────────────
@@ -103,39 +163,61 @@ export function mount(container) {
     if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
     container.querySelector("#action-hint").textContent = "Complete!";
     container.querySelector("#cancel-btn").disabled = true;
-    appendLog(`[${status.toUpperCase()}] Navigation to timeline…`, "done");
+    addLogEntry(status === "error" ? "ERROR" : "INFO", `[${status.toUpperCase()}] Navigation to timeline…`);
     setTimeout(() => window.go("/timeline"), 1200);
   }
 
-  // ── SSE stream (T038) ──────────────────────────────────────────────────────
+  // ── SSE stream with auto-reconnect ────────────────────────────────────────
 
-  try {
-    evtSource = new EventSource("/api/stream");
-    evtSource.onmessage = async (e) => {
-      const msg = JSON.parse(e.data);
+  let _sseRetries = 0;
+  const _SSE_MAX_RETRIES = 5;
+  const _SSE_BACKOFF_MS  = 3000;
 
-      // event_count delta detection — fetch events when count grows
-      if (typeof msg.event_count === "number") {
-        await onNewEvents(msg.event_count);
-      }
+  function connectSSE() {
+    if (evtSource) { evtSource.close(); evtSource = null; }
+    try {
+      evtSource = new EventSource("/api/stream");
+      evtSource.onmessage = async (e) => {
+        _sseRetries = 0;  // reset on successful message
+        const msg = JSON.parse(e.data);
 
-      if (msg.type === "keepalive") {
+        // event_count delta detection — fetch events when count grows
+        if (typeof msg.event_count === "number") {
+          await onNewEvents(msg.event_count);
+        }
+
+        if (msg.type === "keepalive") {
+          updateStats(msg.progress || 0, msg.event_count || 0, msg.status || "—");
+          return;
+        }
+        if (msg.type === "event") {
+          addLogEntry("EVENT", msg.line || "");
+        } else if (msg.line) {
+          const sev = msg.status === "error" ? "ERROR" : "INFO";
+          addLogEntry(sev, msg.line);
+        }
         updateStats(msg.progress || 0, msg.event_count || 0, msg.status || "—");
-        return;
-      }
-      if (msg.line) appendLog(msg.line, msg.status === "error" ? "error" : "");
-      updateStats(msg.progress || 0, msg.event_count || 0, msg.status || "—");
-      if (msg.type === "done" || msg.status === "completed" || msg.status === "cancelled") {
-        onDone(msg.status || "done");
-      }
-    };
-    evtSource.onerror = () => {
-      if (evtSource) { evtSource.close(); evtSource = null; }
+        if (msg.type === "done" || msg.status === "completed" || msg.status === "cancelled") {
+          onDone(msg.status || "done");
+        }
+      };
+      evtSource.onerror = () => {
+        if (evtSource) { evtSource.close(); evtSource = null; }
+        if (_sseRetries < _SSE_MAX_RETRIES) {
+          _sseRetries++;
+          addLogEntry("WARN", `SSE disconnected — reconnecting (${_sseRetries}/${_SSE_MAX_RETRIES})…`);
+          setTimeout(connectSSE, _SSE_BACKOFF_MS);
+        } else {
+          addLogEntry("WARN", "SSE unavailable after retries — switching to polling");
+          startPolling();
+        }
+      };
+    } catch {
       startPolling();
-    };
-  } catch {
-    startPolling();
+    }
   }
+
+  connectSSE();
 
   function startPolling() {
     pollTimer = setInterval(async () => {
@@ -172,6 +254,7 @@ export function mount(container) {
   container.querySelector("#cancel-btn").addEventListener("click", async () => {
     await fetch("/api/job/cancel", { method: "POST" });
     container.querySelector("#action-hint").textContent = "Cancelling…";
+    addLogEntry("WARN", "Cancellation requested");
   });
 
   // ── Cleanup on page nav away ───────────────────────────────────────────────

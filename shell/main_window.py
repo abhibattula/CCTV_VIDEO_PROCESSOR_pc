@@ -7,6 +7,7 @@ Responsibilities:
 - Handle native OS file drag-and-drop with FR-017 safety check
 - Close-to-tray support
 """
+import sys
 import threading
 import time
 from pathlib import Path
@@ -20,6 +21,7 @@ from PyQt6.QtWebEngineWidgets import QWebEngineView
 from PyQt6.QtWebEngineCore import QWebEnginePage
 
 from app.config import BACKEND_HOST, BACKEND_PORT
+from app.utils.platform import get_desktop_path
 
 
 class MainWindow(QMainWindow):
@@ -56,6 +58,7 @@ class MainWindow(QMainWindow):
         self._bridge_timer.start(200)
 
         self._tray: QSystemTrayIcon | None = None
+        self._tray_available: bool = QSystemTrayIcon.isSystemTrayAvailable()
 
     # ── Backend readiness ─────────────────────────────────────────────────────
 
@@ -84,6 +87,7 @@ class MainWindow(QMainWindow):
         window._cctvBrowseFolder = false;
         window._cctvShutdown = false;
         window._cctvSaveReportPdf = false;
+        window._cctvPdfResult = null;
         window.addEventListener('cctv:browse', function() {
             window._cctvBrowse = true;
         });
@@ -134,6 +138,7 @@ class MainWindow(QMainWindow):
                 page.runJavaScript("window._cctvShutdown = false;")
                 if self._on_stop_backend:
                     self._on_stop_backend()
+                QTimer.singleShot(2000, QApplication.instance().quit)
 
         def check_save_report_pdf(val):
             if val:
@@ -167,11 +172,12 @@ class MainWindow(QMainWindow):
     def _get_output_dir(self):
         try:
             job = requests.get(f"{self._base_url}/api/job", timeout=2).json()
-            return job.get("output_dir") or str(Path.home() / "Desktop")
+            return job.get("output_dir") or get_desktop_path()
         except Exception:
-            return str(Path.home() / "Desktop")
+            return get_desktop_path()
 
     def _generate_pdf_report(self):
+        import json as _json
         output_dir = self._get_output_dir()
         pdf_path = str(Path(output_dir) / f"incident_report_{time.strftime('%Y%m%d_%H%M%S')}.pdf")
 
@@ -187,6 +193,8 @@ class MainWindow(QMainWindow):
                     self._pending_report_pages.remove(report_page)
                 except ValueError:
                     pass
+                result_js = "window._cctvPdfResult = " + _json.dumps({"success": False, "path": ""}) + ";"
+                self._view.page().runJavaScript(result_js)
 
         def on_pdf_finished(file_path, success):
             report_page.deleteLater()
@@ -194,6 +202,8 @@ class MainWindow(QMainWindow):
                 self._pending_report_pages.remove(report_page)
             except ValueError:
                 pass
+            result_js = "window._cctvPdfResult = " + _json.dumps({"success": bool(success), "path": str(file_path)}) + ";"
+            self._view.page().runJavaScript(result_js)
 
         report_page.loadFinished.connect(on_load_finished)
         report_page.pdfPrintingFinished.connect(on_pdf_finished)
@@ -201,6 +211,7 @@ class MainWindow(QMainWindow):
         self._pending_report_pages.append(report_page)
 
     def _generate_intel_report_pdf(self, pdf_path: str):
+        import json as _json
         report_page = QWebEnginePage(self._view.page().profile(), self)
         report_page.load(QUrl(f"{self._base_url}/api/job/intel-report.html"))
 
@@ -213,6 +224,8 @@ class MainWindow(QMainWindow):
                     self._pending_report_pages.remove(report_page)
                 except ValueError:
                     pass
+                result_js = "window._cctvPdfResult = " + _json.dumps({"success": False, "path": ""}) + ";"
+                self._view.page().runJavaScript(result_js)
 
         def on_pdf_finished(file_path, success):
             report_page.deleteLater()
@@ -220,6 +233,8 @@ class MainWindow(QMainWindow):
                 self._pending_report_pages.remove(report_page)
             except ValueError:
                 pass
+            result_js = "window._cctvPdfResult = " + _json.dumps({"success": bool(success), "path": str(file_path)}) + ";"
+            self._view.page().runJavaScript(result_js)
 
         report_page.loadFinished.connect(on_load_finished)
         report_page.pdfPrintingFinished.connect(on_pdf_finished)
@@ -272,12 +287,18 @@ class MainWindow(QMainWindow):
     # ── Close to tray ─────────────────────────────────────────────────────────
 
     def closeEvent(self, event: QCloseEvent):
+        active_job = False
+        try:
+            job = requests.get(f"{self._base_url}/api/job", timeout=1).json()
+            active_job = job.get("status") in ("detecting", "exporting")
+        except Exception:
+            pass
         tray = self._try_get_tray()
-        if tray and tray.isVisible():
+        if active_job and self._tray_available and tray and tray.isVisible():
             self.hide()
             event.ignore()
         else:
-            event.accept()
+            QApplication.instance().quit()
 
     def _try_get_tray(self) -> QSystemTrayIcon | None:
         if self._tray is None:
