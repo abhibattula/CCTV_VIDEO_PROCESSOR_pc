@@ -53,3 +53,74 @@ def test_trend_direction_rising():
     ]
     result = ns.trend_direction(events, duration_s=60.0)
     assert result == "rising"
+
+
+# Phase 10 additions — US4
+
+def test_seconds_to_clock_zero():
+    from app.core.narrative_synthesizer import seconds_to_clock
+    assert seconds_to_clock(0) == "00:00"
+
+
+def test_seconds_to_clock_90s():
+    from app.core.narrative_synthesizer import seconds_to_clock
+    assert seconds_to_clock(90) == "01:30"
+
+
+def test_seconds_to_clock_over_hour():
+    from app.core.narrative_synthesizer import seconds_to_clock
+    assert seconds_to_clock(3661) == "01:01:01"
+
+
+def test_seconds_to_clock_boundary_one_hour():
+    from app.core.narrative_synthesizer import seconds_to_clock
+    assert seconds_to_clock(3600) == "01:00:00"
+
+
+def test_timeline_entries_returns_correct_structure():
+    from app.core.narrative_synthesizer import timeline_entries
+    events = [{"start_s": 0.0, "end_s": 1.0, "zone_label": None,
+               "peak_motion_score": 0.8, "event_index": 0}]
+    result = timeline_entries(events, {})
+    assert len(result) == 1
+    entry = result[0]
+    for key in ("event_num", "start_clock", "end_clock", "duration_s",
+                "label", "confidence_pct", "description"):
+        assert key in entry
+
+
+def test_timeline_entries_empty_list():
+    from app.core.narrative_synthesizer import timeline_entries
+    assert timeline_entries([], {}) == []
+
+
+def test_timeline_entries_uses_description():
+    from app.core.narrative_synthesizer import timeline_entries
+    events = [{"start_s": 0.0, "end_s": 1.0, "zone_label": None,
+               "peak_motion_score": 0.5, "event_index": 0}]
+    result = timeline_entries(events, {0: "a person entered"})
+    assert result[0]["description"] == "a person entered"
+
+
+def test_timeline_entries_missing_description_defaults_to_na():
+    from app.core.narrative_synthesizer import timeline_entries
+    events = [{"start_s": 0.0, "end_s": 1.0, "zone_label": None,
+               "peak_motion_score": 0.5, "event_index": 0}]
+    result = timeline_entries(events, {})
+    assert result[0]["description"] == "N/A"
+
+
+def test_narrative_synthesizer_temporal_analysis():
+    from app.core.narrative_synthesizer import NarrativeSynthesizer
+    ns = NarrativeSynthesizer()
+    events = [{"start_s": s} for s in [1, 2, 10, 11, 20, 21]]
+    result = ns.temporal_analysis(events, 30)
+    assert set(result.keys()) == {"early", "middle", "late", "peak_third"}
+
+
+def test_narrative_synthesizer_trend_direction_rising():
+    from app.core.narrative_synthesizer import NarrativeSynthesizer
+    ns = NarrativeSynthesizer()
+    events = [{"start_s": 60}, {"start_s": 70}, {"start_s": 80}]
+    result = ns.trend_direction(events, 100)
+    assert result == "rising"
