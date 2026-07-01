@@ -15,7 +15,7 @@ WORKDIR /app
 # Copy project source (.dockerignore excludes dist/, .cache/, .git/, etc.)
 COPY . .
 
-# Make entrypoint executable
-RUN chmod +x build/docker/linux-entrypoint.sh
+# Make entrypoint executable (absolute path since WORKDIR is /app)
+RUN chmod +x /app/build/docker/linux-entrypoint.sh
 
-ENTRYPOINT ["build/docker/linux-entrypoint.sh"]
+ENTRYPOINT ["/app/build/docker/linux-entrypoint.sh"]

@@ -15,7 +15,7 @@ WORKDIR /app
 # Copy project source (.dockerignore excludes dist/, .cache/, .git/, etc.)
 COPY . .
 
-# Make entrypoint executable
-RUN chmod +x build/docker/pi-entrypoint.sh
+# Make entrypoint executable (absolute path since WORKDIR is /app)
+RUN chmod +x /app/build/docker/pi-entrypoint.sh
 
-ENTRYPOINT ["build/docker/pi-entrypoint.sh"]
+ENTRYPOINT ["/app/build/docker/pi-entrypoint.sh"]
