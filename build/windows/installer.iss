@@ -31,7 +31,7 @@ AllowNoIcons=yes
 ; Do NOT touch user data directories
 ; (UninstallDisplayIcon references only the install dir, never APPDATA)
 OutputDir=..\..\dist
-OutputBaseFilename=CCTV-Video-Processor-{#AppVersion}-windows-x64-setup
+OutputBaseFilename=CCTV-Processor-{#AppVersion}-win64-setup
 Compression=lzma2
 SolidCompression=yes
 WizardStyle=modern

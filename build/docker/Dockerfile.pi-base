@@ -1,6 +1,14 @@
 # Raspberry Pi ARM64 base image — bakes all Python deps once via QEMU emulation.
 # Subsequent source-only rebuilds use Dockerfile.pi (inherits FROM this).
 #
+# Base image choice: python:3.12-slim-bookworm (Debian 12) instead of
+# Ubuntu 22.04 + deadsnakes, because:
+#  - deadsnakes PPA publishes amd64 binaries ONLY — python3.12 is not
+#    installable on arm64 from that PPA
+#  - Debian 12 Bookworm uses glibc 2.36, the SAME version as Raspberry Pi OS
+#    Bookworm — PyInstaller output is binary-compatible with the target OS
+#  - Python 3.12 + pip come prebuilt for arm64; no PPA, no get-pip.py
+#
 # Build (from project root — requires QEMU binfmt registered):
 #   docker run --privileged --rm tonistiigi/binfmt --install arm64
 #   docker build --platform linux/arm64 -f build/docker/Dockerfile.pi-base -t cctv-pi-base:latest .
@@ -8,40 +16,21 @@
 # First build: ~60-90 min (QEMU ARM64 emulation + torch aarch64 wheels).
 # Rebuild only when requirements change.
 
-FROM arm64v8/ubuntu:22.04
-
-ARG PYTHON_VERSION=3.12
+FROM python:3.12-slim-bookworm
 
 ENV DEBIAN_FRONTEND=noninteractive
 
-# Base system packages + Python 3.12 via deadsnakes PPA
-# Note: python3-pip installs pip for system python 3.10; bootstrap pip for 3.12
+# System packages:
+#  - dpkg-dev: dpkg-deb for .deb packaging (create_deb.sh)
+#  - binutils: objdump/objcopy required by PyInstaller on Linux
+#  - libgl1 (NOT libgl1-mesa-glx — that transitional package was removed in
+#    Debian Bookworm) + Qt/xcb libs required by PyInstaller PyQt6 analysis
 RUN apt-get update && apt-get install -y \
-        software-properties-common \
         curl \
         ca-certificates \
-    && add-apt-repository ppa:deadsnakes/ppa -y \
-    && apt-get update && apt-get install -y \
-        python${PYTHON_VERSION} \
-        python${PYTHON_VERSION}-venv \
-        python${PYTHON_VERSION}-dev \
-        python${PYTHON_VERSION}-distutils \
+        binutils \
         dpkg-dev \
-        dpkg \
-    && rm -rf /var/lib/apt/lists/*
-
-# Make python3.12 the default python/python3
-RUN update-alternatives --install /usr/bin/python3 python3 /usr/bin/python${PYTHON_VERSION} 1 \
-    && update-alternatives --install /usr/bin/python  python  /usr/bin/python${PYTHON_VERSION} 1
-
-# Bootstrap pip for python 3.12 (deadsnakes does not bundle pip)
-RUN curl -sSL https://bootstrap.pypa.io/get-pip.py -o /tmp/get-pip.py \
-    && python /tmp/get-pip.py \
-    && rm /tmp/get-pip.py
-
-# System Qt/OpenGL libs required by PyInstaller analysis of PyQt6 modules (ARM64)
-RUN apt-get update && apt-get install -y \
-        libgl1-mesa-glx \
+        libgl1 \
         libglib2.0-0 \
         libxcb-xinerama0 \
         libxcb-icccm4 \

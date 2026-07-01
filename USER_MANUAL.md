@@ -60,7 +60,7 @@ If you don't want to install Python, download the pre-built installer for your p
 
 | Platform | Installer file |
 |----------|---------------|
-| Windows 10/11 x64 | `CCTV-Video-Processor-*-windows-x64-setup.exe` |
+| Windows 10/11 x64 | `CCTV-Processor-*-win64-setup.exe` |
 | macOS Apple Silicon | `CCTV-Video-Processor-*-macos-arm64.dmg` |
 | macOS Intel | `CCTV-Video-Processor-*-macos-intel.dmg` |
 | Linux x86_64 | `CCTV-Video-Processor-*-linux-x86_64.AppImage` |

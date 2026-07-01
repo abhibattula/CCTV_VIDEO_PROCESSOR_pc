@@ -63,6 +63,14 @@ a = Analysis(
         "notebook",
         "jupyter",
         "PIL.ImageTk",
+        # onnx/onnxruntime are YOLO export-only deps — never imported at
+        # inference time. Excluding them shrinks the bundle and matches the
+        # Windows spec (where onnx.reference also crashes PyInstaller).
+        "onnx",
+        "onnx.reference",
+        "onnxruntime",
+        "onnxslim",
+        "onnxslim.third_party._sympy",
     ],
     noarchive=False,
     optimize=0,

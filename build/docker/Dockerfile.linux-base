@@ -14,18 +14,20 @@ ARG PYTHON_VERSION=3.12
 ENV DEBIAN_FRONTEND=noninteractive
 
 # Base system packages + Python 3.12 via deadsnakes PPA
-# Note: python3-pip installs pip for the system python 3.10; we bootstrap pip
-# for python 3.12 separately using ensurepip + get-pip.py
+# Notes:
+#  - python3.12-distutils does NOT exist (distutils was removed in 3.12);
+#    pip is bootstrapped below via get-pip.py which does not need it.
+#  - binutils provides objdump/objcopy, required by PyInstaller on Linux.
 RUN apt-get update && apt-get install -y \
         software-properties-common \
         curl \
         ca-certificates \
+        binutils \
     && add-apt-repository ppa:deadsnakes/ppa -y \
     && apt-get update && apt-get install -y \
         python${PYTHON_VERSION} \
         python${PYTHON_VERSION}-venv \
         python${PYTHON_VERSION}-dev \
-        python${PYTHON_VERSION}-distutils \
     && rm -rf /var/lib/apt/lists/*
 
 # Make python3.12 the default python/python3
@@ -75,8 +77,10 @@ RUN pip install \
         Pillow \
         opencv-python-headless
 
-# Pre-install appimageTool so build doesn't require network access per-run
+# Pre-install appimagetool so build doesn't require network access per-run.
+# NOTE: GitHub release asset URLs are case-sensitive — the asset is
+# "appimagetool-x86_64.AppImage" (lowercase t).
 RUN curl -fsSL \
-        "https://github.com/AppImage/AppImageKit/releases/download/continuous/appimageTool-x86_64.AppImage" \
-        -o /usr/local/bin/appimageTool \
-    && chmod +x /usr/local/bin/appimageTool
+        "https://github.com/AppImage/AppImageKit/releases/download/continuous/appimagetool-x86_64.AppImage" \
+        -o /usr/local/bin/appimagetool \
+    && chmod +x /usr/local/bin/appimagetool

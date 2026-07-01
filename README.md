@@ -37,7 +37,7 @@ Pre-built installers are available on the [GitHub Releases](https://github.com/a
 
 | Platform | Download | Notes |
 |----------|----------|-------|
-| Windows 10/11 x64 | `*-windows-x64-setup.exe` | Inno Setup installer |
+| Windows 10/11 x64 | `*-win64-setup.exe` | Inno Setup installer |
 | macOS Apple Silicon | `*-macos-arm64.dmg` | Ad-hoc signed; right-click → Open on first launch |
 | macOS Intel | `*-macos-intel.dmg` | Ad-hoc signed; right-click → Open on first launch |
 | Linux x86_64 | `*-linux-x86_64.AppImage` | `chmod +x`, then run |

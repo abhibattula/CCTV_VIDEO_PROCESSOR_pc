@@ -18,10 +18,10 @@ echo "[build] Running PyInstaller..."
 python -m PyInstaller build/cctv_processor_linux.spec \
     --distpath /app/dist --workpath /tmp/work --noconfirm
 
-# Step 2: Pre-place appimageTool where create_appimage.sh expects it
+# Step 2: Pre-place appimagetool where create_appimage.sh expects it
 # (script checks for dist/appimagetool-x86_64.AppImage before downloading)
 mkdir -p /app/dist
-cp /usr/local/bin/appimageTool /app/dist/appimagetool-x86_64.AppImage
+cp /usr/local/bin/appimagetool /app/dist/appimagetool-x86_64.AppImage
 
 # Step 3: Package as AppImage (writes to /app/dist/CCTV-Video-Processor-{ver}-linux-x86_64.AppImage)
 # APPIMAGE_EXTRACT_AND_RUN=1 prevents appimageTool from trying to mount itself

@@ -40,14 +40,13 @@ jobs:
 
       - name: Build Inno Setup installer
         shell: cmd
-        run: |
-          curl -fsSL -o iscc.zip https://jrsoftware.org/download.php/is.exe
-          iscc /DAppVersion=${{ env.APP_VERSION }} build\windows\installer.iss
+        # Inno Setup 6 (ISCC) is preinstalled on GitHub windows-latest runners
+        run: iscc /DAppVersion=${{ env.APP_VERSION }} build\windows\installer.iss
 
       - uses: actions/upload-artifact@v4
         with:
           name: windows-installer
-          path: dist/CCTV-Video-Processor-*-windows-x64-setup.exe
+          path: dist/CCTV-Processor-*-win64-setup.exe
 
   # ── macOS ARM64 (Apple Silicon) ────────────────────────────────────────────
   build-macos-arm:
@@ -193,7 +192,7 @@ jobs:
 
             | Platform | File | Notes |
             |----------|------|-------|
-            | Windows 10/11 x64 | `*-windows-x64-setup.exe` | Inno Setup installer |
+            | Windows 10/11 x64 | `*-win64-setup.exe` | Inno Setup installer |
             | macOS Apple Silicon | `*-macos-arm64.dmg` | Ad-hoc signed, right-click → Open |
             | macOS Intel | `*-macos-intel.dmg` | Ad-hoc signed, right-click → Open |
             | Linux x86_64 | `*-linux-x86_64.AppImage` | chmod +x then run |

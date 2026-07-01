@@ -84,11 +84,13 @@ if (-not $SkipWindows) {
         if ($LASTEXITCODE -ne 0) { throw "PyInstaller failed" }
 
         # Inno Setup — try ISCC in PATH or standard install locations
+        # (winget installs per-user under LOCALAPPDATA\Programs)
         $ISCC = $null
         foreach ($candidate in @(
             "ISCC.exe",
             "C:\Program Files (x86)\Inno Setup 6\ISCC.exe",
-            "C:\Program Files\Inno Setup 6\ISCC.exe"
+            "C:\Program Files\Inno Setup 6\ISCC.exe",
+            "$env:LOCALAPPDATA\Programs\Inno Setup 6\ISCC.exe"
         )) {
             if (Get-Command $candidate -ErrorAction SilentlyContinue) {
                 $ISCC = $candidate; break
