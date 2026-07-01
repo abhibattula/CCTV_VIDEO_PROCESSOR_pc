@@ -45,8 +45,8 @@
 
 **Independent Test**: Run PyInstaller with the fixed spec; verify `dist/CCTV-Video-Processor/CCTV-Video-Processor.exe` exists and is > 10 MB. Then if Inno Setup installed, verify `dist/CCTV-Processor-1.0.0-win64-setup.exe` exists.
 
-- [ ] T006 [US1] Ensure `dist/` directory exists (`New-Item -ItemType Directory -Force dist`). Then run Windows PyInstaller build: `python -m PyInstaller build/cctv_processor_windows.spec --distpath dist --workpath build/work --noconfirm`. Confirm `dist/CCTV-Video-Processor/CCTV-Video-Processor.exe` exists and its file size exceeds 10 MB (`(Get-Item "dist/CCTV-Video-Processor/CCTV-Video-Processor.exe").Length -gt 10MB`).
-- [ ] T007 [US1] Check if Inno Setup is installed: `Get-Command iscc -ErrorAction SilentlyContinue`. If installed, run `iscc build/windows/installer.iss /DAppVersion=1.0.0` and confirm `dist/CCTV-Processor-1.0.0-win64-setup.exe` is produced. If not installed, print: "WARNING: Inno Setup not found — skipping .exe installer packaging. PyInstaller output is available at dist/CCTV-Video-Processor/."
+- [X] T006 [US1] Ensure `dist/` directory exists (`New-Item -ItemType Directory -Force dist`). Then run Windows PyInstaller build: `python -m PyInstaller build/cctv_processor_windows.spec --distpath dist --workpath build/work --noconfirm`. Confirm `dist/CCTV-Video-Processor/CCTV-Video-Processor.exe` exists and its file size exceeds 10 MB (`(Get-Item "dist/CCTV-Video-Processor/CCTV-Video-Processor.exe").Length -gt 10MB`).
+- [X] T007 [US1] Check if Inno Setup is installed: `Get-Command iscc -ErrorAction SilentlyContinue`. If installed, run `iscc build/windows/installer.iss /DAppVersion=1.0.0` and confirm `dist/CCTV-Processor-1.0.0-win64-setup.exe` is produced. If not installed, print: "WARNING: Inno Setup not found — skipping .exe installer packaging. PyInstaller output is available at dist/CCTV-Video-Processor/."
 
 **Checkpoint**: Windows platform proven — `dist/CCTV-Video-Processor/` exists (and optionally `dist/CCTV-Processor-1.0.0-win64-setup.exe`).
 
