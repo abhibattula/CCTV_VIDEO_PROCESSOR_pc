@@ -131,6 +131,77 @@ Key differences from the desktop version:
 
 ---
 
+## Building Installers (from Windows)
+
+All platform installers can be built from a single Windows 11 PC. The version number is read automatically from the `VERSION` file at the repository root.
+
+### Prerequisites
+
+| Tool | Required for | Install |
+|------|-------------|---------|
+| Python 3.12 + PyInstaller | Windows build | `pip install pyinstaller==6.21.0` |
+| Inno Setup 6 | Windows `.exe` | [jrsoftware.org/isdl.php](https://jrsoftware.org/isdl.php) |
+| Docker Desktop (Linux containers mode) | Linux + Pi builds | [docker.com/products/docker-desktop](https://www.docker.com/products/docker-desktop/) |
+
+### Build everything at once
+
+```powershell
+# From the project root
+./build/build_all.ps1
+```
+
+This builds Windows, Linux, and Pi in sequence; prints macOS instructions at the end.
+
+### Build individual platforms
+
+```powershell
+# Windows only (PyInstaller + Inno Setup)
+./build/build_all.ps1 -SkipLinux -SkipPi
+
+# Linux AppImage only (requires Docker Desktop)
+./build/docker/build_linux.ps1
+
+# Raspberry Pi .deb only (requires Docker Desktop + QEMU)
+./build/docker/build_pi.ps1
+```
+
+### macOS (via GitHub Actions)
+
+macOS binaries must be built on Apple hardware. Push a version tag to trigger the CI workflow, which uses free GitHub Actions macOS runners:
+
+```bash
+git tag v1.0.0 && git push origin v1.0.0
+```
+
+The Actions workflow (`.github/workflows/release.yml`) builds both Apple Silicon (ARM64) and Intel (x86_64) `.dmg` files and uploads them to the GitHub Release automatically.
+
+### Two-stage Docker images (fast rebuilds)
+
+The first Docker build bakes all Python dependencies (~45–90 min). Subsequent source-only rebuilds take ~5 min because they inherit the base layer:
+
+```powershell
+# First time or after requirements change — rebuild the base
+./build/docker/build_linux.ps1 -RebuildBase
+./build/docker/build_pi.ps1 -RebuildBase
+
+# Normal incremental build (source changes only — ~5 min)
+./build/docker/build_linux.ps1
+./build/docker/build_pi.ps1
+```
+
+### Artifacts
+
+All artifacts land in `dist/` with consistent naming:
+
+| Platform | File |
+|----------|------|
+| Windows | `dist/CCTV-Processor-{version}-win64-setup.exe` |
+| Linux | `dist/CCTV-Processor-{version}-linux-x86_64.AppImage` |
+| Raspberry Pi | `dist/CCTV-Processor-{version}-pi-arm64.deb` |
+| macOS | uploaded to GitHub Release by CI |
+
+---
+
 ## How It Works
 
 The app is two processes glued together by `launcher.py`:

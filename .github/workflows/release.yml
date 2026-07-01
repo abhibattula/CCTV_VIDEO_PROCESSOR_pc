@@ -21,6 +21,10 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Read version from VERSION file
+        shell: bash
+        run: echo "APP_VERSION=$(cat VERSION)" >> $GITHUB_ENV
+
       - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
@@ -52,6 +56,9 @@ jobs:
       APP_VERSION: ${{ github.ref_type == 'tag' && github.ref_name || inputs.version || 'dev' }}
     steps:
       - uses: actions/checkout@v4
+
+      - name: Read version from VERSION file
+        run: echo "APP_VERSION=$(cat VERSION)" >> $GITHUB_ENV
 
       - uses: actions/setup-python@v5
         with:
@@ -87,6 +94,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Read version from VERSION file
+        run: echo "APP_VERSION=$(cat VERSION)" >> $GITHUB_ENV
+
       - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
@@ -120,6 +130,9 @@ jobs:
       APP_VERSION: ${{ github.ref_type == 'tag' && github.ref_name || inputs.version || 'dev' }}
     steps:
       - uses: actions/checkout@v4
+
+      - name: Read version from VERSION file
+        run: echo "APP_VERSION=$(cat VERSION)" >> $GITHUB_ENV
 
       - uses: actions/setup-python@v5
         with:

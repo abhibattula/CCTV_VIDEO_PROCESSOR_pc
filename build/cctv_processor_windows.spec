@@ -70,6 +70,15 @@ a = Analysis(
         "notebook",
         "jupyter",
         "PIL.ImageTk",
+        # onnx/onnxruntime are YOLO export-only deps — not needed at inference time.
+        # Importing onnx.reference in PyInstaller's isolated subprocess causes a
+        # STATUS_ACCESS_VIOLATION (exit code 3221225477) on Windows, crashing the
+        # entire Analysis phase. Safe to exclude: the app never calls onnx APIs.
+        "onnx",
+        "onnx.reference",
+        "onnxruntime",
+        "onnxslim",
+        "onnxslim.third_party._sympy",
     ],
     noarchive=False,
     optimize=0,

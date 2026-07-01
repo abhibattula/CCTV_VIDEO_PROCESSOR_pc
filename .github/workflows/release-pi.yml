@@ -24,6 +24,9 @@ jobs:
         with:
           ref: ${{ github.event.inputs.version }}
 
+      - name: Read version from VERSION file
+        run: echo "APP_VERSION=$(cat VERSION)" >> $GITHUB_ENV
+
       - name: Build inside QEMU ARM64 (Raspberry Pi emulation)
         uses: uraimo/run-on-arch-action@v2
         with:

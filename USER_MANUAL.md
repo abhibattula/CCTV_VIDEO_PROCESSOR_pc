@@ -576,3 +576,79 @@ CCTV VIDEO PROCESSOR PC/
 | FastAPI | 0.111.0 |
 | OpenCV | 4.9.0 |
 | FFmpeg (bundled) | 7.1 (via imageio-ffmpeg 0.5.1) |
+
+---
+
+## Appendix: Building Installers from Windows
+
+All platform installers (Windows, Linux, Raspberry Pi, macOS) can be produced from a single Windows 11 PC.
+
+### Requirements
+
+| Tool | Used for | Notes |
+|------|----------|-------|
+| Python 3.12 | Windows build | Must be installed; same version as the app |
+| PyInstaller 6.21.0 | Windows build | `pip install pyinstaller==6.21.0` |
+| Inno Setup 6 | Windows `.exe` packaging | Download: jrsoftware.org/isdl.php |
+| Docker Desktop (Linux containers) | Linux + Pi builds | Download: docker.com/products/docker-desktop |
+| GitHub Actions (free) | macOS `.dmg` builds | Push a `v*.*.*` tag; no local action needed |
+
+The version number is read from the `VERSION` file in the project root automatically. To release version 1.2.0, change `VERSION` to `1.2.0` then run the build scripts.
+
+### Build all platforms at once
+
+Open PowerShell at the project root and run:
+
+```powershell
+./build/build_all.ps1
+```
+
+This runs Windows, Linux, and Pi builds in sequence and prints macOS tag-push instructions at the end. All artifacts land in `dist/`.
+
+### Build individual platforms
+
+```powershell
+# Windows only
+./build/build_all.ps1 -SkipLinux -SkipPi
+
+# Linux x86_64 AppImage only (Docker required)
+./build/docker/build_linux.ps1
+
+# Raspberry Pi ARM64 .deb only (Docker + QEMU required)
+./build/docker/build_pi.ps1
+
+# Rebuild Docker base images (only after requirements.txt changes)
+./build/docker/build_linux.ps1 -RebuildBase
+./build/docker/build_pi.ps1   -RebuildBase
+```
+
+### macOS
+
+macOS binaries cannot be built on non-Apple hardware. Push a version tag to trigger GitHub Actions:
+
+```bash
+git tag v1.0.0
+git push origin v1.0.0
+```
+
+The workflow at `.github/workflows/release.yml` builds Apple Silicon (ARM64) and Intel (x86_64) `.dmg` files and attaches them to the GitHub Release automatically.
+
+### Expected artifacts
+
+| Platform | File in `dist/` |
+|----------|----------------|
+| Windows 10/11 x64 | `CCTV-Processor-{version}-win64-setup.exe` |
+| Linux x86_64 | `CCTV-Processor-{version}-linux-x86_64.AppImage` |
+| Raspberry Pi 4/5 | `CCTV-Processor-{version}-pi-arm64.deb` |
+| macOS (CI only) | Uploaded to GitHub Release |
+
+### First Docker build timing
+
+The Docker base images bake all Python dependencies once:
+
+| Image | First build | Incremental (source only) |
+|-------|-------------|--------------------------|
+| `cctv-linux-base` | ~45–60 min | ~5 min |
+| `cctv-pi-base` (QEMU ARM64) | ~60–90 min | ~15–30 min |
+
+Subsequent builds that change only source files skip the base layer and are fast.

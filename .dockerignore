@@ -1,0 +1,43 @@
+# Docker build context exclusions
+# Prevents large/irrelevant directories from being sent to Docker daemon
+
+# Build outputs — not needed inside container
+dist/
+build/work/
+
+# Version control
+.git/
+.gitignore
+
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.egg-info/
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# Model/AI caches — very large, baked during pip install inside image
+.cache/
+models/
+
+# Test artifacts
+_verify_shots/
+.pytest_cache/
+*.log
+
+# OS junk
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+
+# Spec/planning docs (not needed at runtime)
+specs/
+"OLD RASPBERRI PI VERSION/"
