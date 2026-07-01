@@ -35,7 +35,7 @@ OutputBaseFilename=CCTV-Processor-{#AppVersion}-win64-setup
 Compression=lzma2
 SolidCompression=yes
 WizardStyle=modern
-ArchitecturesInstallIn64BitMode=x64
+ArchitecturesInstallIn64BitMode=x64compatible
 MinVersion=10.0.17763
 DisableProgramGroupPage=yes
 ; No changes to Windows Defender or shell extensions needed
