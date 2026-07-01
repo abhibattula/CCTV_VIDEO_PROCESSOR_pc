@@ -12,9 +12,11 @@ thumbnails, SVG activity timeline, log panel polish; Phase 9: Browse abort token
 OneDrive Desktop path fix, output_dir persistence, Quick Report truthful
 feedback, Ctrl+C / Stop / close-window exit, Florence-2 terminal noise
 suppression, FrameAnalyzer availability cache; Phase 10: test coverage gaps —
-195 tests, CI mock-counterpart tests for all video-dependent paths, shell_bridge
-+ system API + log buffer + clip indexer + narrative synthesizer + Qt shell logic
-coverage, all tests run without video/GPU/display). Nothing here is scheduled or committed — when one of these gets
+195 tests; Phase 11: Florence-2 garbage token fix, YOLO prewarm, cross-platform
+path fixes; Phase 12: PyInstaller distributable — Windows .exe, macOS .dmg,
+Linux .AppImage, Pi .deb; first-run AI model download wizard; GitHub Actions
+CI/CD; HF_HOME env var chain; CLIP disk-presence check; macOS tray Trigger fix;
+~220 tests total). Nothing here is scheduled or committed — when one of these gets
 picked up, it should run through the project's normal speckit pipeline
 (`/speckit.specify` → `/speckit.clarify` → `/speckit.plan` → `/speckit.tasks` →
 `/speckit.analyze` → `/speckit.implement`) and get its own numbered spec under

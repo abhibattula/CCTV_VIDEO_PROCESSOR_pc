@@ -1,0 +1,195 @@
+name: Build & Release
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version string (e.g. 1.0.0)'
+        required: true
+        default: 'dev'
+
+env:
+  APP_VERSION: ${{ github.ref_type == 'tag' && github.ref_name || inputs.version || 'dev' }}
+
+jobs:
+  # ── Windows x64 (.exe via Inno Setup) ─────────────────────────────────────
+  build-windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install CPU-only torch first (prevents CUDA download)
+        run: pip install torch --index-url https://download.pytorch.org/whl/cpu
+
+      - name: Install dependencies
+        run: pip install pyinstaller -r requirements.txt transformers open-clip-torch ultralytics huggingface_hub
+
+      - name: Build with PyInstaller
+        run: pyinstaller build/cctv_processor_windows.spec
+
+      - name: Build Inno Setup installer
+        shell: cmd
+        run: |
+          curl -fsSL -o iscc.zip https://jrsoftware.org/download.php/is.exe
+          iscc /DAppVersion=${{ env.APP_VERSION }} build\windows\installer.iss
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows-installer
+          path: dist/CCTV-Video-Processor-*-windows-x64-setup.exe
+
+  # ── macOS ARM64 (Apple Silicon) ────────────────────────────────────────────
+  build-macos-arm:
+    runs-on: macos-14
+    env:
+      APP_VERSION: ${{ github.ref_type == 'tag' && github.ref_name || inputs.version || 'dev' }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install CPU-only torch
+        run: pip install torch --index-url https://download.pytorch.org/whl/cpu
+
+      - name: Install dependencies
+        run: pip install pyinstaller -r requirements.txt transformers open-clip-torch ultralytics huggingface_hub
+
+      - name: Build with PyInstaller
+        run: pyinstaller build/cctv_processor_macos.spec
+
+      - name: Create DMG
+        run: bash build/macos/create_dmg.sh
+        env:
+          APP_VERSION: ${{ env.APP_VERSION }}
+
+      - name: Rename artifact
+        run: mv dist/CCTV-Video-Processor-*-macos.dmg dist/CCTV-Video-Processor-${{ env.APP_VERSION }}-macos-arm64.dmg || true
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: macos-arm-dmg
+          path: dist/CCTV-Video-Processor-*-macos-arm64.dmg
+
+  # ── macOS Intel ────────────────────────────────────────────────────────────
+  build-macos-intel:
+    runs-on: macos-13
+    env:
+      APP_VERSION: ${{ github.ref_type == 'tag' && github.ref_name || inputs.version || 'dev' }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install CPU-only torch
+        run: pip install torch --index-url https://download.pytorch.org/whl/cpu
+
+      - name: Install dependencies
+        run: pip install pyinstaller -r requirements.txt transformers open-clip-torch ultralytics huggingface_hub
+
+      - name: Build with PyInstaller
+        run: pyinstaller build/cctv_processor_macos.spec
+
+      - name: Create DMG
+        run: bash build/macos/create_dmg.sh
+        env:
+          APP_VERSION: ${{ env.APP_VERSION }}
+
+      - name: Rename artifact
+        run: mv dist/CCTV-Video-Processor-*-macos.dmg dist/CCTV-Video-Processor-${{ env.APP_VERSION }}-macos-intel.dmg || true
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: macos-intel-dmg
+          path: dist/CCTV-Video-Processor-*-macos-intel.dmg
+
+  # ── Linux x86_64 (.AppImage) ──────────────────────────────────────────────
+  build-linux:
+    runs-on: ubuntu-22.04
+    env:
+      APP_VERSION: ${{ github.ref_type == 'tag' && github.ref_name || inputs.version || 'dev' }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install system packages
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y libgl1 libglib2.0-0 libxcb-xinerama0 xvfb
+
+      - name: Install CPU-only torch
+        run: pip install torch --index-url https://download.pytorch.org/whl/cpu
+
+      - name: Install dependencies
+        run: pip install pyinstaller -r requirements.txt transformers open-clip-torch ultralytics huggingface_hub
+
+      - name: Build with PyInstaller (headless display)
+        run: |
+          Xvfb :99 &
+          DISPLAY=:99 pyinstaller build/cctv_processor_linux.spec
+
+      - name: Create AppImage
+        run: bash build/linux/create_appimage.sh
+        env:
+          APP_VERSION: ${{ env.APP_VERSION }}
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: linux-appimage
+          path: dist/CCTV-Video-Processor-*-linux-x86_64.AppImage
+
+  # ── Collect all artifacts → GitHub Release ─────────────────────────────────
+  release:
+    needs: [build-windows, build-macos-arm, build-macos-intel, build-linux]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: release-assets
+          merge-multiple: true
+
+      - name: List artifacts
+        run: ls -lh release-assets/
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          name: CCTV Video Processor ${{ github.ref_name }}
+          draft: false
+          prerelease: false
+          body: |
+            ## CCTV Video Processor ${{ github.ref_name }}
+
+            ### Downloads
+
+            | Platform | File | Notes |
+            |----------|------|-------|
+            | Windows 10/11 x64 | `*-windows-x64-setup.exe` | Inno Setup installer |
+            | macOS Apple Silicon | `*-macos-arm64.dmg` | Ad-hoc signed, right-click → Open |
+            | macOS Intel | `*-macos-intel.dmg` | Ad-hoc signed, right-click → Open |
+            | Linux x86_64 | `*-linux-x86_64.AppImage` | chmod +x then run |
+            | Raspberry Pi 4/5 | See [release-pi.yml](.github/workflows/release-pi.yml) | Manual dispatch |
+
+            ### First-run
+            The app downloads AI model weights (~1 GB) on first launch via the setup wizard.
+            An internet connection is required for the initial setup; the app works offline thereafter.
+
+            ### macOS Gatekeeper
+            Right-click the app → Open → Open to bypass Gatekeeper on first launch.
+          files: release-assets/*

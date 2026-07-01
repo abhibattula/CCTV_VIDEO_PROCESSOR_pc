@@ -199,7 +199,8 @@ def test_export_endpoint_accepts_formats_md_only(client, tmp_path, monkeypatch):
     # Create a dummy thumbnail so renderer doesn't crash
     (tmp_path / "thumb_001.jpg").write_bytes(b"")
     # Mock heavy operations to avoid actual Florence-2 / PDF generation
-    monkeypatch.setattr("app.api.job.FrameAnalyzer", type("FA", (), {"is_available": staticmethod(lambda: False), "analyze": staticmethod(lambda p: {"caption": "", "object_caption": "", "detections": [], "clip_embedding_path": None})}), raising=False)
+    _fa_stub = {"is_available": staticmethod(lambda: False), "analyze": staticmethod(lambda p: {"caption": "", "object_caption": "", "detections": [], "clip_embedding_path": None}), "analyze_event": staticmethod(lambda thumbnail, source_path, start_s, end_s: {"caption": "", "object_caption": "", "detections": [], "clip_embedding_path": None})}
+    monkeypatch.setattr("app.api.job.FrameAnalyzer", type("FA", (), _fa_stub), raising=False)
     monkeypatch.setattr("app.api.job.LLMSynthesizer", type("LS", (), {"is_available": staticmethod(lambda: False)}), raising=False)
     response = client.post("/api/job/intel-report/export", json={"formats": ["md"]})
     assert response.status_code == 200
@@ -224,7 +225,8 @@ def test_export_response_has_required_ai_fields(client, tmp_path, monkeypatch):
         source_info={"duration_s": 15.0, "fps": 25.0, "width": 1280, "height": 720},
     )
     (tmp_path / "thumb_002.jpg").write_bytes(b"")
-    monkeypatch.setattr("app.api.job.FrameAnalyzer", type("FA", (), {"is_available": staticmethod(lambda: False), "analyze": staticmethod(lambda p: {"caption": "", "object_caption": "", "detections": [], "clip_embedding_path": None})}), raising=False)
+    _fa_stub2 = {"is_available": staticmethod(lambda: False), "analyze": staticmethod(lambda p: {"caption": "", "object_caption": "", "detections": [], "clip_embedding_path": None}), "analyze_event": staticmethod(lambda thumbnail, source_path, start_s, end_s: {"caption": "", "object_caption": "", "detections": [], "clip_embedding_path": None})}
+    monkeypatch.setattr("app.api.job.FrameAnalyzer", type("FA", (), _fa_stub2), raising=False)
     monkeypatch.setattr("app.api.job.LLMSynthesizer", type("LS", (), {"is_available": staticmethod(lambda: False)}), raising=False)
     response = client.post("/api/job/intel-report/export", json={"formats": ["md"]})
     assert response.status_code == 200

@@ -1,0 +1,72 @@
+name: Build Raspberry Pi Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version string matching a GitHub tag (e.g. v1.0.0)'
+        required: true
+      upload_to_release:
+        description: 'Upload .deb to existing GitHub release? (true/false)'
+        required: false
+        default: 'true'
+
+# Pi build is a manual-dispatch only job to avoid blocking regular releases.
+# QEMU emulated ARM64 builds take 45-90 minutes.
+
+jobs:
+  build-pi:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.inputs.version }}
+
+      - name: Build inside QEMU ARM64 (Raspberry Pi emulation)
+        uses: uraimo/run-on-arch-action@v2
+        with:
+          arch: aarch64
+          distro: ubuntu22.04
+          githubToken: ${{ github.token }}
+          install: |
+            apt-get update -qq
+            apt-get install -y python3.11 python3.11-venv python3-pip \
+              libgl1 libglib2.0-0 libxcb-xinerama0 \
+              dpkg-dev binutils xvfb
+            python3.11 -m pip install --upgrade pip setuptools wheel
+          run: |
+            set -euo pipefail
+            export APP_VERSION="${{ github.event.inputs.version }}"
+
+            # Install CPU-only torch for ARM64
+            pip install torch --index-url https://download.pytorch.org/whl/cpu
+
+            # Install project dependencies
+            pip install pyinstaller -r requirements.txt \
+              transformers open-clip-torch ultralytics huggingface_hub
+
+            # Build with PyInstaller (headless)
+            Xvfb :99 & export DISPLAY=:99
+            pyinstaller build/cctv_processor_linux.spec
+
+            # Create .deb
+            bash build/pi/create_deb.sh
+
+            echo "Build complete"
+
+      - name: List dist artifacts
+        run: ls -lh dist/
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: pi-deb
+          path: dist/cctv-video-processor_*_arm64.deb
+
+      - name: Upload to GitHub Release
+        if: ${{ github.event.inputs.upload_to_release == 'true' }}
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.event.inputs.version }}
+          files: dist/cctv-video-processor_*_arm64.deb

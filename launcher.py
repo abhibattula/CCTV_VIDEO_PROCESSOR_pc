@@ -115,6 +115,12 @@ def main():
     _sig_timer.timeout.connect(lambda: None)
     _sig_timer.start(200)
 
+    # ── First-run setup wizard ────────────────────────────────────────────────
+    from shell.setup_wizard import SetupWizard, setup_complete
+    if not setup_complete():
+        wizard = SetupWizard()
+        wizard.exec()
+
     # Pass the resolved port so the window loads the right URL
     from shell.main_window import MainWindow
     window = MainWindow(backend_port=backend_port, on_stop_backend=stop_backend)

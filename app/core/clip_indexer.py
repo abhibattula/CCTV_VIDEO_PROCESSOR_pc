@@ -16,12 +16,21 @@ class ClipIndexer:
 
     @classmethod
     def is_available(cls) -> bool:
-        """Return True if open-clip-torch is installed."""
+        """Return True if open-clip-torch is installed AND ViT-B-32.pt is on disk."""
         try:
             import open_clip  # noqa: F401
-            return True
         except Exception:
             return False
+        import os
+        clip_cache_dir = os.environ.get("CLIP_CACHE_DIR", "").strip()
+        xdg = os.environ.get("XDG_CACHE_HOME", "").strip()
+        if clip_cache_dir:
+            cache_root = Path(clip_cache_dir)
+        elif xdg:
+            cache_root = Path(xdg) / "clip"
+        else:
+            cache_root = Path.home() / ".cache" / "clip"
+        return (cache_root / "ViT-B-32.pt").exists()
 
     @classmethod
     def embed(cls, image_path: Path) -> Optional[str]:

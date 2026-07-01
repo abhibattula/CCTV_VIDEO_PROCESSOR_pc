@@ -71,9 +71,13 @@ class FrameAnalyzer:
         except Exception:
             cls._availability_cache = False
             return False
-        weights_dir = (
-            Path.home() / ".cache" / "huggingface" / "hub" / "models--microsoft--Florence-2-base"
+        import os
+        _hf_home = (
+            os.environ.get("HF_HOME")
+            or os.environ.get("HUGGINGFACE_HUB_CACHE")
+            or str(Path.home() / ".cache" / "huggingface")
         )
+        weights_dir = Path(_hf_home) / "hub" / "models--microsoft--Florence-2-base"
         cls._availability_cache = weights_dir.exists()
         return cls._availability_cache
 

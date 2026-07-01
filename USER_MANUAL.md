@@ -47,10 +47,49 @@ See "Stopping the Application" and "Starting a New Project" further down for det
 
 ## Requirements
 
-- **Python 3.11+** (tested on 3.12)
+- **Python 3.11+** (tested on 3.12) — OR use the distributable installer (no Python needed)
 - **Windows 10/11, macOS, or Linux** — fully cross-platform; file-dialog integration
   is native on each OS
 - FFmpeg is bundled automatically via `imageio-ffmpeg` — no manual install needed
+
+---
+
+## Distributable Installers (Non-Technical Users)
+
+If you don't want to install Python, download the pre-built installer for your platform from the [GitHub Releases](https://github.com/abhibattula/CCTV_VIDEO_PROCESSOR_pc/releases) page:
+
+| Platform | Installer file |
+|----------|---------------|
+| Windows 10/11 x64 | `CCTV-Video-Processor-*-windows-x64-setup.exe` |
+| macOS Apple Silicon | `CCTV-Video-Processor-*-macos-arm64.dmg` |
+| macOS Intel | `CCTV-Video-Processor-*-macos-intel.dmg` |
+| Linux x86_64 | `CCTV-Video-Processor-*-linux-x86_64.AppImage` |
+| Raspberry Pi 4/5 | `cctv-video-processor_*_arm64.deb` |
+
+**macOS Gatekeeper:** On first launch, right-click the app → Open → Open. This one-time step clears the Gatekeeper warning. Subsequent launches work normally.
+
+**Linux AppImage:** Run `chmod +x CCTV-Video-Processor-*.AppImage` then double-click (or run from terminal).
+
+**Raspberry Pi .deb:** Run `sudo dpkg -i cctv-video-processor_*_arm64.deb` then run `cctv-video-processor` from the terminal.
+
+---
+
+## First-Run Setup Wizard
+
+On your very first launch (installer or developer mode), a setup wizard appears before the main window opens:
+
+**Step 1 — System Check:** Shows your RAM and disk space. On Raspberry Pi with < 5 GB RAM, the wizard notes that AI captions (Florence-2) are unavailable — YOLO motion detection still works fully.
+
+**Step 2 — Downloading AI Models:** Click **Download AI Models** to download:
+- **YOLOv8n** (~6 MB) — object detection (always downloaded)
+- **Florence-2** (~444 MB) — AI image captions (skipped on Pi with < 5 GB RAM)
+- **CLIP ViT-B/32** (~354 MB) — semantic image search (skipped on Pi with < 5 GB RAM)
+
+A progress bar and log show download status. Each model is SHA256-verified after download.
+
+**Skip for Now:** Click this any time to launch immediately without AI models. The wizard will not appear again after you complete or skip it.
+
+> The wizard writes a sentinel file at `~/.cctv_processor/.setup_complete` to track completion. Delete this file to re-run the wizard (e.g., after moving to a new machine).
 
 ---
 

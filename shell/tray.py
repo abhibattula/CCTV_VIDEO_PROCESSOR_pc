@@ -32,5 +32,11 @@ class TrayIcon(QSystemTrayIcon):
         QApplication.quit()
 
     def _on_activated(self, reason):
-        if reason == QSystemTrayIcon.ActivationReason.DoubleClick:
-            self._show_window()
+        import sys
+        if sys.platform == "darwin":
+            # macOS 13+ Ventura dropped DoubleClick forwarding (Qt bug QTBUG-116766)
+            if reason == QSystemTrayIcon.ActivationReason.Trigger:
+                self._show_window()
+        else:
+            if reason == QSystemTrayIcon.ActivationReason.DoubleClick:
+                self._show_window()

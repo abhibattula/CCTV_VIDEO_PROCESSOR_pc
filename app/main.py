@@ -13,6 +13,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse, JSONResponse
 
 from app.config import JOBS_DIR, PREVIEW_DIR
+from app.utils.resource_path import get_resource_path
 from app.core.log_buffer import log_buffer
 import app.session as session_module
 from app.api.job import router as job_router
@@ -80,7 +81,7 @@ def create_app() -> FastAPI:
     app = FastAPI(title="CCTV Video Processor", lifespan=_lifespan)
 
     # ── Static root (resolved before any routes reference it) ─────────────────
-    static_root = Path(__file__).parent.parent / "static"
+    static_root = get_resource_path("static")
     _index = static_root / "index.html"
 
     # ── Health endpoint ────────────────────────────────────────────────────────
