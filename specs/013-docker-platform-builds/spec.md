@@ -11,6 +11,16 @@ The CCTV Video Processor has build scripts and packaging specs (Phase 12) but no
 
 ---
 
+## Clarifications
+
+### Session 2026-07-01
+
+- Q: How should Python dependencies be handled in Docker builds? → A: Two-stage build — a `Dockerfile.linux-base` / `Dockerfile.pi-base` bakes all Python dependencies (torch, transformers, open_clip, ultralytics) once; the build Dockerfiles (`Dockerfile.linux`, `Dockerfile.pi`) inherit from the base image and only run PyInstaller. First build ~45–60 min; subsequent source-only rebuilds ~5 min.
+- Q: How should Docker-built artifacts be transferred to the Windows `dist/` folder? → A: Volume bind-mount — `docker run -v ${PWD}/dist:/output ...`; PyInstaller writes the artifact directly to `/output/` inside the container, which is bind-mounted to `dist/` on the Windows host. No container lifecycle management or `docker cp` needed.
+- Q: Where does the version number come from for artifact naming? → A: A `VERSION` file at the repo root (e.g., containing `1.0.0`). `build_all.ps1` reads it automatically; an explicit `-Version x.y.z` parameter overrides it if supplied. CI/CD reads the same file for tag-triggered builds.
+
+---
+
 ## User Scenarios & Testing
 
 ### User Story 1 — Windows Installer Built and Tested (Priority: P1)
@@ -109,11 +119,11 @@ A developer runs a single PowerShell script (`build/build_all.ps1`) that orchest
 
 ### Functional Requirements
 
-- **FR-001**: A `build/docker/Dockerfile.linux` MUST define an Ubuntu 22.04 x86_64 image with Python 3.12, all CCTV app Python dependencies (CPU-only torch), PyInstaller 6.x, and the AppImage packaging tool (`appimageTool`).
-- **FR-002**: A `build/docker/Dockerfile.pi` MUST define an `arm64v8/ubuntu` (22.04-compatible) image with Python 3.12, all CCTV app Python dependencies (CPU-only torch for aarch64), PyInstaller 6.x, and `dpkg-deb`.
-- **FR-003**: `build/docker/build_linux.ps1` MUST run a Docker build targeting `linux/amd64` platform, mount the project source, execute PyInstaller inside the container, and copy the resulting `.AppImage` to `dist/` on the Windows host.
-- **FR-004**: `build/docker/build_pi.ps1` MUST register QEMU binfmt support if not already registered, then run a Docker build targeting `linux/arm64` platform, execute PyInstaller and `create_deb.sh` inside the container, and copy the resulting `.deb` to `dist/` on the Windows host.
-- **FR-005**: `build/build_all.ps1` MUST accept a `-Version` parameter (e.g., `1.0.0`), run Windows/Linux/Pi builds in sequence, report per-platform success or failure, and print final artifact paths.
+- **FR-001**: Two-stage Linux build image: `build/docker/Dockerfile.linux-base` installs Python 3.12, all CCTV app Python dependencies (CPU-only torch, transformers, open_clip, ultralytics, PyInstaller 6.x, imageio-ffmpeg) and `appimageTool` on Ubuntu 22.04 x86_64. `build/docker/Dockerfile.linux` inherits FROM the base image, COPYs project source, and runs PyInstaller. The base image is built once and reused for all subsequent builds.
+- **FR-002**: Two-stage Pi build image: `build/docker/Dockerfile.pi-base` installs Python 3.12, all CCTV app Python dependencies (CPU-only torch for aarch64), PyInstaller 6.x, and `dpkg-deb` on `arm64v8/ubuntu:22.04`. `build/docker/Dockerfile.pi` inherits FROM the base image, COPYs project source, and runs PyInstaller + `create_deb.sh`. The base image is built once and reused.
+- **FR-003**: `build/docker/build_linux.ps1` MUST build the Linux image (inheriting from the base), then run it with `-v "${PWD}/dist:/output"` bind-mount so the container writes the `.AppImage` directly to the Windows `dist/` folder. No `docker cp` step required.
+- **FR-004**: `build/docker/build_pi.ps1` MUST register QEMU binfmt support if not already registered, build the Pi image (inheriting from the Pi base), then run it with `-v "${PWD}/dist:/output"` bind-mount so the container writes the `.deb` directly to the Windows `dist/` folder.
+- **FR-005**: `build/build_all.ps1` MUST read the version from a `VERSION` file at the repo root by default; an optional `-Version x.y.z` parameter overrides this. The script runs Windows, Linux, and Pi builds in sequence, reports per-platform success or failure, and prints final artifact paths. A `VERSION` file MUST be created at the repo root (initial value `1.0.0`) as part of this phase.
 - **FR-006**: Each Docker build MUST copy only the application source (not the `dist/`, `build/work/`, or `.git/` directories) into the container to minimize build context size.
 - **FR-007**: All builds MUST be idempotent — re-running the same version produces the same output; existing files in `dist/` are overwritten without error.
 - **FR-008**: The build scripts MUST print clear prerequisite error messages if Docker Desktop is not running, Docker is in Windows-container mode, or PyInstaller is not installed.
