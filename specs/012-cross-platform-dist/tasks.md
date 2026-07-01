@@ -17,7 +17,7 @@
 
 **Purpose**: Create the new directory structure required by the build system
 
-- [ ] T001 Create build/ subdirectory tree: `build/windows/`, `build/macos/`, `build/linux/`, `build/pi/` (can use Write tool to create placeholder files in each)
+- [ ] T001 Create build/ subdirectory tree by running: `New-Item -ItemType Directory -Force build/windows, build/macos, build/linux, build/pi` (PowerShell) or `mkdir -p build/{windows,macos,linux,pi}` (bash). Verify all 4 directories exist before proceeding.
 
 ---
 
@@ -74,7 +74,7 @@
 **Independent Test**: Run the built `.exe` on a clean Windows 11 VM with no Python; confirm app starts, wizard appears, Skip works, main window opens (quickstart scenario 9).
 
 - [ ] T017 [US1] Create `build/cctv_processor_windows.spec`: PyInstaller onedir spec for Windows x64. Include: `Analysis(['launcher.py'], ...)`, `datas=[('../static', 'static'), ('../app/templates', 'app/templates')]` plus `collect_all('imageio_ffmpeg')`, `collect_all('torch')`, `collect_all('transformers')`, `collect_all('open_clip')`, `collect_all('ultralytics')`. `excludes=['torch.cuda', 'torch.distributed', 'caffe2', 'matplotlib', 'scipy', 'tkinter', 'IPython']`. `hiddenimports=['uvicorn', 'uvicorn.logging', 'uvicorn.loops', 'uvicorn.loops.auto', 'uvicorn.protocols', 'uvicorn.protocols.http', 'uvicorn.protocols.http.auto', 'aiofiles', 'fastapi', 'PyQt6.QtPrintSupport', 'imageio_ffmpeg']`. Output name: `CCTV-Video-Processor`.
-- [ ] T018 [US1] Create `build/windows/installer.iss`: Inno Setup 6 script. `[Setup]` section: `AppName=CCTV Video Processor`, `AppVersion={#AppVersion}` (passed via `/DAppVersion=x.y.z`), `DefaultDirName={autopf}\CCTV Video Processor`, `DefaultGroupName=CCTV Video Processor`, `OutputBaseFilename=CCTV-Processor-{#AppVersion}-win64-setup`, `Compression=lzma2/ultra64`, `SolidCompression=yes`. `[Files]`: recursive source from `..\dist\CCTV-Video-Processor\*`. `[Icons]`: Desktop shortcut + Start Menu entry pointing to `launcher.exe`. `[Run]`: optional post-install launch.
+- [ ] T018 [US1] Create `build/windows/installer.iss`: Inno Setup 6 script. `[Setup]` section: `AppName=CCTV Video Processor`, `AppVersion={#AppVersion}` (passed via `/DAppVersion=x.y.z`), `DefaultDirName={autopf}\CCTV Video Processor`, `DefaultGroupName=CCTV Video Processor`, `OutputBaseFilename=CCTV-Processor-{#AppVersion}-win64-setup`, `Compression=lzma2/ultra64`, `SolidCompression=yes`. `[Files]`: recursive source from `..\dist\CCTV-Video-Processor\*`. `[Icons]`: Desktop shortcut + Start Menu entry pointing to `launcher.exe`. `[Run]`: optional post-install launch. **FR-023/FR-024 COMPLIANCE**: The script MUST NOT include any `[UninstallDelete]` entries that match `{userdocs}`, `{userappdata}`, `{localappdata}`, or any path containing `cctv_processor`. The install destination (`{autopf}\CCTV Video Processor`) is entirely separate from the user data directory (`%USERPROFILE%\.cctv_processor`), so no explicit preservation action is needed — just do NOT delete it. Add a comment in the script: `; User data at %USERPROFILE%\.cctv_processor\ is NOT managed by this installer — it persists across upgrades and uninstalls.`
 
 **Checkpoint**: Windows packaging complete. Can run `pyinstaller build/cctv_processor_windows.spec` then `iscc build/windows/installer.iss /DAppVersion=dev` locally for smoke test (quickstart scenario 9).
 
@@ -136,7 +136,7 @@
 **Purpose**: Final validation, documentation, and verification that the complete feature works end-to-end.
 
 - [ ] T026 [P] Run `pytest tests/ -v` and confirm all tests pass (≥208 existing + new tests from T002, T007, T009, T013). Record final count.
-- [ ] T027 Run quickstart.md scenarios 1–8 (all automated scenarios): resource path dev mode, resource path frozen mode (via pytest), HF_HOME test, CLIP disk presence test, wizard sentinel logic, wizard low-RAM gate, regression check (all existing tests). Confirm all pass.
+- [ ] T027 Run quickstart.md scenarios 1–8 and scenario 10 (upgrade preservation): resource path dev mode, resource path frozen mode (via pytest), HF_HOME test, CLIP disk presence test, wizard sentinel logic, wizard low-RAM gate, regression check (all existing tests), and scenario 10 (delete sentinel → run → wizard appears → complete → relaunch → wizard does NOT appear; verifies FR-023/FR-024). Confirm all pass.
 
 ---
 

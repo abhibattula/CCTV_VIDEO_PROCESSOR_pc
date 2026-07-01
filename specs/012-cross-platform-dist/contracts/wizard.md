@@ -174,3 +174,120 @@ Tests in `tests/test_resource_path.py` MUST verify:
 1. Dev mode: returns path relative to project root that exists
 2. Frozen mode: returns path relative to `sys._MEIPASS` (monkeypatched)
 3. After test: `sys.frozen` and `sys._MEIPASS` are cleaned up (no leak between tests)
+
+---
+
+## Model Download Strategy (A1 Remediation)
+
+This section specifies the exact download mechanism for each AI model used by `DownloadWorker`.
+
+### YOLOv8n (~6 MB)
+
+**Strategy**: Use `ultralytics` library's built-in download, redirected to `MODEL_DIR`.
+
+```python
+import os
+from app.config import MODEL_DIR
+os.environ["YOLO_CONFIG_DIR"] = str(MODEL_DIR)
+from ultralytics import YOLO
+YOLO("yolov8n.pt")  # downloads to MODEL_DIR/yolov8n.pt automatically
+```
+
+**SHA256**: Ultralytics validates the downloaded model hash internally using its own manifest. The wizard does NOT need to separately SHA256-verify YOLOv8n — call `YOLO("yolov8n.pt")` and check the file exists at `MODEL_DIR / "yolov8n.pt"` after the call.
+
+**Progress**: Ultralytics prints download progress to stdout. The wizard can redirect stdout or simply emit a log message ("Downloading YOLOv8n...") and then ("YOLOv8n ready") after completion.
+
+**Alternative raw URL** (if direct HTTP needed for progress bar):
+`https://github.com/ultralytics/assets/releases/download/v0.0.0/yolov8n.pt`
+
+---
+
+### Florence-2 (~444 MB, 15+ files)
+
+**Strategy**: Use `huggingface_hub.snapshot_download()` with `tqdm_class` progress.
+
+```python
+from huggingface_hub import snapshot_download
+import os
+
+hf_home = (
+    os.environ.get("HF_HOME")
+    or os.environ.get("HUGGINGFACE_HUB_CACHE")
+    or str(Path.home() / ".cache" / "huggingface")
+)
+snapshot_download(
+    repo_id="microsoft/Florence-2-base",
+    local_dir=None,  # uses HF_HOME/hub/ by default
+    ignore_patterns=["*.msgpack", "flax_model*", "tf_model*"],
+)
+```
+
+**SHA256**: HuggingFace Hub performs SHA256 verification of every file automatically via `huggingface_hub`'s built-in integrity checks. The wizard does NOT need to re-verify — call `snapshot_download()` and check that `weights_dir.exists()` afterward.
+
+**Progress**: `snapshot_download()` accepts a `tqdm_class` parameter. For the wizard, emit `progress("Florence-2", pct)` signals by subclassing `tqdm` with a custom `update()` that calls `self.progress.emit(...)`.
+
+**`expected_sha256`**: Set to `None` in `AIModelSpec` for Florence-2 — HF Hub handles integrity.
+
+---
+
+### CLIP ViT-B/32 (~578 MB, single file)
+
+**Strategy**: Use `open_clip`'s built-in download via `create_model_and_transforms()`. The file downloads to `~/.cache/clip/ViT-B-32.pt` (or XDG_CACHE_HOME/clip/).
+
+```python
+import open_clip
+# Downloads ViT-B-32.pt to ~/.cache/clip/ on first call
+open_clip.create_model_and_transforms("ViT-B-32-quickgelu", pretrained="openai")
+```
+
+**SHA256**: The known SHA256 of `ViT-B-32.pt` (OpenAI pretrained) is:  
+`40d365715913c9da98579312b702a82c18be219cc2a73407c4526f58eba950af`
+
+The wizard MUST verify this hash after the download completes. If mismatch, delete and retry (up to 3 times).
+
+**Progress**: `open_clip` uses `urllib.request.urlretrieve` with a reporthook internally. The wizard can intercept by temporarily monkeypatching `urllib.request.urlretrieve` with a hook that calls `self.progress.emit("CLIP ViT-B/32", pct)`. Alternatively, use direct raw download:
+
+```python
+# Direct download with progress (alternative to open_clip's internal download):
+CLIP_URL = "https://openaipublic.azureedge.net/clip/models/40d36571/ViT-B-32.pt"
+```
+
+**`expected_sha256`**: `"40d365715913c9da98579312b702a82c18be219cc2a73407c4526f58eba950af"` — verify after download.
+
+---
+
+### AIModelSpec Instances (concrete values)
+
+```python
+YOLO_SPEC = AIModelSpec(
+    name="YOLOv8n",
+    url="https://github.com/ultralytics/assets/releases/download/v0.0.0/yolov8n.pt",
+    dest_path=MODEL_DIR / "yolov8n.pt",
+    expected_sha256=None,  # ultralytics validates internally
+    size_bytes=6_536_616,  # ~6.2 MB
+    required=True,
+    skip_if_low_ram=False,
+)
+
+FLORENCE2_SPEC = AIModelSpec(
+    name="Florence-2",
+    url=None,  # uses huggingface_hub.snapshot_download()
+    dest_path=None,  # HF Hub manages cache path
+    expected_sha256=None,  # HF Hub validates internally
+    size_bytes=444_000_000,  # ~444 MB (approx)
+    required=False,
+    skip_if_low_ram=True,
+)
+
+CLIP_SPEC = AIModelSpec(
+    name="CLIP ViT-B/32",
+    url="https://openaipublic.azureedge.net/clip/models/40d36571/ViT-B-32.pt",
+    dest_path=Path.home() / ".cache" / "clip" / "ViT-B-32.pt",
+    expected_sha256="40d365715913c9da98579312b702a82c18be219cc2a73407c4526f58eba950af",
+    size_bytes=353_976_371,  # ~338 MB actual
+    required=False,
+    skip_if_low_ram=True,
+)
+```
+
+`DownloadWorker` builds the models list at startup: always includes `YOLO_SPEC`; appends `FLORENCE2_SPEC` and `CLIP_SPEC` only if `AI_FEATURES_ENABLED=True`.
