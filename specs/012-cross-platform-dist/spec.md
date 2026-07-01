@@ -92,10 +92,11 @@ A developer pushes a git tag (`v1.0.0`) to GitHub. GitHub Actions automatically 
 
 ### Edge Cases
 
-- What happens if the user's internet drops mid-download in the setup wizard? The wizard shows an error message with a Retry button; no partial files are left on disk.
+- What happens if the user's internet drops mid-download in the setup wizard? The wizard shows an error message with a Retry button; partial files are deleted before retry so no corrupted data remains.
+- What happens if a downloaded model file's SHA256 hash does not match the expected value? The file is deleted immediately and the download is retried automatically (up to 3 attempts); if all retries fail, the user sees a clear error distinguishing hash mismatch from network failure.
 - What happens if the user has less than 2 GB of free disk space during setup? The wizard checks available disk space before downloading and shows a warning if insufficient.
 - What happens if a model download fails (server unreachable)? The wizard shows which models failed and allows retrying; YOLOv8n failure is treated as critical (blocks usage), Florence-2/CLIP failure is treated as non-critical (app continues without AI features).
-- What happens if the user runs the installer while an older version of the app is already installed? The installer replaces the existing version in-place. User data in `~/.cctv_processor/` is preserved.
+- What happens if the user runs the installer while an older version of the app is already installed? The installer replaces the application code in-place. All user data in `~/.cctv_processor/` — job history, exported clips, presets, settings, and previously downloaded AI model weights — is fully preserved. The setup wizard does NOT re-appear after an upgrade (sentinel file is preserved).
 - What happens if the app is already running when the user tries to launch a second instance? A second instance detects the running backend on port 5151 and reuses it, or shows a "already running" notification.
 - What happens on a Pi 4 2 GB model (1.7 GB usable)? The app still launches, but detection resolution is automatically reduced to 160×90 by the existing RAM-scaling logic. A warning banner is shown in the UI.
 
@@ -122,7 +123,7 @@ A developer pushes a git tag (`v1.0.0`) to GitHub. GitHub Actions automatically 
 - **FR-010**: On devices with less than 5 GB RAM, the setup wizard MUST skip Florence-2 and CLIP downloads and display a clear message explaining which features are unavailable and why (RAM requirement).
 - **FR-011**: On Raspberry Pi devices with 3–4 GB RAM specifically, the wizard MUST display a Pi-specific message: motion detection (YOLO) works fully, AI image descriptions are not available on this device.
 - **FR-012**: The setup wizard MUST provide a "Skip for now" option on every step; skipping records that setup was completed so the wizard does not reappear on next launch.
-- **FR-013**: If a model download fails, the wizard MUST show the error clearly, distinguish between critical failures (YOLOv8n) and non-critical failures (Florence-2, CLIP), and offer a Retry button.
+- **FR-013**: If a model download fails, the wizard MUST show the error clearly, distinguish between critical failures (YOLOv8n) and non-critical failures (Florence-2, CLIP), and offer a Retry button. After each model file downloads, the wizard MUST verify its SHA256 hash against the known published value; on mismatch the file is deleted and the download is automatically retried (up to 3 attempts) before showing an error to the user.
 - **FR-014**: The setup wizard MUST check available disk space before beginning downloads and warn the user if less than 3 GB is free.
 
 **Code Fixes (Pre-Packaging)**
@@ -131,6 +132,11 @@ A developer pushes a git tag (`v1.0.0`) to GitHub. GitHub Actions automatically 
 - **FR-016**: The Florence-2 AI model availability check MUST respect the `HF_HOME` and `HUGGINGFACE_HUB_CACHE` environment variables (not assume a hardcoded default cache path).
 - **FR-017**: The CLIP model availability check MUST verify the model weight file is physically present on disk before reporting the model as available (not just check that the library is installed).
 - **FR-018**: The macOS system tray icon MUST restore the main window on a single click on macOS 13 Ventura and later (where double-click is no longer forwarded by the OS).
+
+**Upgrade Behaviour**
+
+- **FR-023**: When a newer version is installed over an existing installation, all user data in the app data directory (`~/.cctv_processor/`) MUST be preserved — including job history, presets, settings, and downloaded AI model weights.
+- **FR-024**: After an upgrade, the first-run setup wizard MUST NOT reappear if it was already completed in a previous installation (the setup sentinel file is preserved through the upgrade).
 
 **CI/CD**
 
@@ -189,3 +195,5 @@ A developer pushes a git tag (`v1.0.0`) to GitHub. GitHub Actions automatically 
 - Q: Should AI be bundled or downloaded first-run? → A: First-run wizard downloads model weights; installer bundles Python + torch but not model weights
 - Q: macOS code signing? → A: No Apple Developer Account — ad-hoc signing + right-click Open instructions
 - Q: 3 GB RAM Pi support? → A: Pi 4 4 GB model (~3.7 GB usable) must work in YOLO-only mode; Florence-2 remains disabled below 5 GB
+- Q: Should model downloads be verified after download? → A: Yes — SHA256 hash verified after each download; mismatch deletes file and auto-retries up to 3 times
+- Q: What happens to user data on version upgrade? → A: All preserved — job history, presets, AI model weights in ~/.cctv_processor/ survive upgrade; setup wizard does not re-appear
