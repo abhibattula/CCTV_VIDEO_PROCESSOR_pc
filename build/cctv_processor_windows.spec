@@ -56,7 +56,15 @@ a = Analysis(
         "PyQt6.QtWebEngineCore",
         # imageio-ffmpeg
         "imageio_ffmpeg",
-        # AI hidden imports
+        # Florence-2 remote code imports these at model-load time; they are
+        # invisible to PyInstaller's static analysis (loaded via
+        # trust_remote_code), so they must be forced in here.
+        "einops",
+        "einops.layers",
+        "einops.layers.torch",
+        "timm",
+        "timm.layers",
+        "timm.models",
     ] + torch_hiddens + transformers_hiddens + open_clip_hiddens + ultralytics_hiddens,
     excludes=[
         "torch.cuda",

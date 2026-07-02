@@ -6,10 +6,7 @@ _http_download) are unit-testable without instantiating any Qt widget.
 """
 from __future__ import annotations
 
-import hashlib
 import logging
-import os
-import urllib.request
 from pathlib import Path
 from typing import Optional
 
@@ -40,81 +37,27 @@ def mark_setup_complete() -> None:
 
 
 # ---------------------------------------------------------------------------
-# Model list
+# Download primitives — canonical implementations live in
+# app/core/model_downloader.py (shared with the /api/system/ai-download
+# endpoint). These module-level wrappers are kept so existing tests can keep
+# monkeypatching shell.setup_wizard._http_download etc.
 # ---------------------------------------------------------------------------
+
+from app.core import model_downloader as _md
+
 
 def _build_model_list() -> list[dict]:
     """Return the list of model dicts to download, filtered by AI_FEATURES_ENABLED."""
-    from app.config import AI_FEATURES_ENABLED, MODEL_DIR
+    return _md.build_model_list()
 
-    models: list[dict] = [
-        {
-            "name": "YOLOv8n",
-            "url": "https://github.com/ultralytics/assets/releases/download/v0.0.0/yolov8n.pt",
-            "dest": MODEL_DIR / "yolov8n.pt",
-            "sha256": None,  # ultralytics validates internally
-            "size": 6_536_616,
-            "required": True,
-        }
-    ]
-
-    if AI_FEATURES_ENABLED:
-        models.append({
-            "name": "Florence-2",
-            "url": None,  # uses huggingface_hub.snapshot_download()
-            "dest": None,
-            "sha256": None,
-            "size": 444_000_000,
-            "required": False,
-        })
-        models.append({
-            "name": "CLIP ViT-B/32",
-            "url": "https://openaipublic.azureedge.net/clip/models/40d36571/ViT-B-32.pt",
-            "dest": Path.home() / ".cache" / "clip" / "ViT-B-32.pt",
-            "sha256": "40d365715913c9da98579312b702a82c18be219cc2a73407c4526f58eba950af",
-            "size": 353_976_371,
-            "required": False,
-        })
-
-    return models
-
-
-# ---------------------------------------------------------------------------
-# HTTP download helper (module-level so tests can monkeypatch it)
-# ---------------------------------------------------------------------------
 
 def _http_download(url: str, dest_path: Path, progress_cb=None) -> None:
     """Stream-download *url* to *dest_path*, calling progress_cb(bytes_so_far, total) per chunk."""
-    dest_path.parent.mkdir(parents=True, exist_ok=True)
-    tmp = dest_path.with_suffix(dest_path.suffix + ".part")
-
-    try:
-        with urllib.request.urlopen(url) as resp:
-            total = int(resp.headers.get("Content-Length", 0))
-            downloaded = 0
-            chunk = 65536
-            with open(tmp, "wb") as fh:
-                while True:
-                    data = resp.read(chunk)
-                    if not data:
-                        break
-                    fh.write(data)
-                    downloaded += len(data)
-                    if progress_cb and total:
-                        progress_cb(downloaded, total)
-        tmp.replace(dest_path)
-    except Exception:
-        if tmp.exists():
-            tmp.unlink(missing_ok=True)
-        raise
+    return _md.http_download(url, dest_path, progress_cb=progress_cb)
 
 
 def _verify_sha256(path: Path, expected: str) -> bool:
-    h = hashlib.sha256()
-    with open(path, "rb") as fh:
-        for chunk in iter(lambda: fh.read(65536), b""):
-            h.update(chunk)
-    return h.hexdigest() == expected
+    return _md.verify_sha256(path, expected)
 
 
 # ---------------------------------------------------------------------------
@@ -459,7 +402,8 @@ try:
             else:
                 self._done_label.setText(
                     f"Some optional models failed to download:\n{error_msg}\n\n"
-                    "The app will still work — you can retry later from Settings."
+                    "The app will still work — you can retry any time from the\n"
+                    "AI Models card on the Home page."
                 )
             self._stack.setCurrentIndex(2)
 

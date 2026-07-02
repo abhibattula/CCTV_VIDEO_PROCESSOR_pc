@@ -50,6 +50,14 @@ a = Analysis(
         "PyQt6.QtWebEngineWidgets",
         "PyQt6.QtWebEngineCore",
         "imageio_ffmpeg",
+        # Florence-2 remote code imports these at model-load time; invisible
+        # to static analysis (trust_remote_code), so force them in.
+        "einops",
+        "einops.layers",
+        "einops.layers.torch",
+        "timm",
+        "timm.layers",
+        "timm.models",
     ] + torch_hiddens + transformers_hiddens + open_clip_hiddens + ultralytics_hiddens,
     excludes=[
         "torch.cuda",

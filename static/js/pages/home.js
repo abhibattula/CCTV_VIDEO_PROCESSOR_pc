@@ -73,6 +73,12 @@ export function mount(container, params) {
 
       </div>
 
+      <!-- AI models status / installer -->
+      <div class="card hidden" id="ai-card">
+        <div class="settings-group__label">AI Models</div>
+        <div id="ai-card-body"></div>
+      </div>
+
       <!-- Start button -->
       <button class="btn btn-primary btn-lg" id="start-btn" disabled>Start Detection</button>
 
@@ -103,6 +109,81 @@ export function mount(container, params) {
       }
     }
   }).catch(() => {});
+
+  // ── AI Models card — lets users who skipped the first-run wizard check
+  //    status and download models later (FR: retry path after skip) ──────────
+  let aiPollTimer = null;
+
+  function stopAiPoll() {
+    if (aiPollTimer) { clearInterval(aiPollTimer); aiPollTimer = null; }
+  }
+
+  async function refreshAiCard() {
+    // If the page has been navigated away, stop polling
+    if (!document.body.contains(container)) { stopAiPoll(); return; }
+
+    const card = container.querySelector("#ai-card");
+    const body = container.querySelector("#ai-card-body");
+    if (!card || !body) { stopAiPoll(); return; }
+
+    let st;
+    try {
+      st = await fetch("/api/system/ai-status").then(r => r.json());
+    } catch (_e) {
+      return; // backend hiccup — try again on next poll / mount
+    }
+
+    card.classList.remove("hidden");
+    const dl = st.download || { state: "idle" };
+
+    if (dl.state === "running") {
+      const label = dl.model ? `${dl.model}: ${dl.pct}%` : "Starting…";
+      body.innerHTML = `
+        <p style="margin:0 0 6px">Downloading AI models… <strong>${label}</strong></p>
+        <progress max="100" value="${dl.pct || 0}" style="width:100%"></progress>
+        <p class="muted" style="margin:6px 0 0;font-size:0.85em">
+          You can keep using the app — motion detection works during the download.</p>`;
+      if (!aiPollTimer) aiPollTimer = setInterval(refreshAiCard, 2000);
+      return;
+    }
+    stopAiPoll();
+
+    if (!st.ai_supported) {
+      body.innerHTML = `
+        <p class="muted" style="margin:0">AI captions need 5&nbsp;GB+ RAM — this device has less.
+        Motion and object detection work fully without them.</p>`;
+      return;
+    }
+
+    if (st.florence_available && st.clip_available) {
+      body.innerHTML = `
+        <p style="margin:0">✅ AI models installed — AI Analysis is available.</p>`;
+      return;
+    }
+
+    const missing = [];
+    if (!st.florence_available) missing.push("Florence-2 (image captions)");
+    if (!st.clip_available) missing.push("CLIP (semantic search)");
+    const reason = st.florence_reason ? `<p class="muted" style="margin:4px 0 8px;font-size:0.85em">${st.florence_reason}</p>` : "";
+    const errNote = dl.state === "error"
+      ? `<p style="margin:4px 0 8px;color:var(--danger,#e5534b);font-size:0.85em">Last download failed: ${dl.error || "unknown error"}</p>`
+      : "";
+
+    body.innerHTML = `
+      <p style="margin:0 0 4px">AI Analysis is not set up — missing: ${missing.join(", ")}.</p>
+      ${reason}${errNote}
+      <button class="btn btn-primary" id="ai-download-btn">Download AI Models (~800 MB)</button>
+      <p class="muted" style="margin:6px 0 0;font-size:0.85em">
+        Requires an internet connection. Everything else in the app stays fully offline.</p>`;
+
+    body.querySelector("#ai-download-btn").addEventListener("click", async () => {
+      body.querySelector("#ai-download-btn").disabled = true;
+      try { await fetch("/api/system/ai-download", { method: "POST" }); } catch (_e) {}
+      refreshAiCard();
+    });
+  }
+
+  refreshAiCard();
 
   // Mode toggle
   container.querySelectorAll("[data-mode]").forEach(btn => {
