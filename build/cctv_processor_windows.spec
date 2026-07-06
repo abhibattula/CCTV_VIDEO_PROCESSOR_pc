@@ -92,6 +92,34 @@ a = Analysis(
     optimize=0,
 )
 
+# PyQt6 ships 2020-era VC++ runtime DLLs (14.26) inside Qt6/bin. In the
+# windowed app Qt loads first, so Windows resolves msvcp140.dll to that old
+# copy; torch's c10.dll needs the newer runtime and fails DLL init with
+# WinError 1114, silently disabling AI. Strip Qt's copies so every module
+# uses the single up-to-date runtime PyInstaller places in _internal/.
+_vc_runtime_dlls = {
+    "msvcp140.dll", "msvcp140_1.dll", "msvcp140_2.dll",
+    "vcruntime140.dll", "vcruntime140_1.dll", "concrt140.dll",
+}
+a.binaries = [
+    entry for entry in a.binaries
+    if not (
+        entry[0].replace("/", "\\").lower().startswith("pyqt6\\qt6\\bin\\")
+        and entry[0].replace("/", "\\").lower().rsplit("\\", 1)[-1] in _vc_runtime_dlls
+    )
+]
+
+# Qt6Core/Qt6Gui statically link msvcp140_1.dll and msvcp140_2.dll, which
+# only existed as Qt's stripped 14.26 copies. Ship the host's current
+# (>=14.40) runtime at the bundle root so clean machines without the VC++
+# redistributable still resolve them (the bootloader adds _internal to the
+# process-wide DLL search path).
+_sys32 = os.path.join(os.environ.get("SystemRoot", r"C:\Windows"), "System32")
+for _dll in ("msvcp140_1.dll", "msvcp140_2.dll"):
+    _src = os.path.join(_sys32, _dll)
+    if os.path.exists(_src):
+        a.binaries.append((_dll, _src, "BINARY"))
+
 pyz = PYZ(a.pure)
 
 exe = EXE(
