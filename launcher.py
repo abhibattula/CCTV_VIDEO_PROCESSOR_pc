@@ -13,6 +13,31 @@ import socket
 import sys
 import threading
 import time
+from pathlib import Path
+
+
+def _ensure_std_streams(log_path: Path | None = None) -> None:
+    """In a PyInstaller windowed build (console=False), sys.stdout and
+    sys.stderr are None. uvicorn's log formatter calls sys.stdout.isatty()
+    during uvicorn.Config() setup, which raises AttributeError and silently
+    kills the backend daemon thread — the UI then shows Chromium's
+    connection-refused page. Route both streams to a log file so uvicorn can
+    configure logging and backend errors stay visible.
+    """
+    if sys.stdout is not None and sys.stderr is not None:
+        return
+    if log_path is None:
+        log_path = Path.home() / ".cctv_processor" / "app.log"
+    log_path.parent.mkdir(parents=True, exist_ok=True)
+    stream = open(log_path, "a", buffering=1, encoding="utf-8", errors="replace")
+    if sys.stdout is None:
+        sys.stdout = stream
+    if sys.stderr is None:
+        sys.stderr = stream
+
+
+# Must run before uvicorn/app imports so nothing touches the None streams.
+_ensure_std_streams()
 
 import uvicorn
 
@@ -61,11 +86,17 @@ _uvicorn_server: uvicorn.Server | None = None
 
 def _start_backend(port: int):
     global _uvicorn_server
-    app = create_app()
-    config = uvicorn.Config(app, host=BACKEND_HOST, port=port, log_level="warning")
-    server = uvicorn.Server(config)
-    _uvicorn_server = server
-    server.run()
+    try:
+        app = create_app()
+        config = uvicorn.Config(app, host=BACKEND_HOST, port=port, log_level="warning")
+        server = uvicorn.Server(config)
+        _uvicorn_server = server
+        server.run()
+    except Exception:
+        # This runs in a daemon thread — without this, any startup failure
+        # disappears silently and the UI just shows a connection error.
+        import traceback
+        traceback.print_exc()
 
 
 def stop_backend():
@@ -114,6 +145,12 @@ def main():
     _sig_timer = QTimer()
     _sig_timer.timeout.connect(lambda: None)
     _sig_timer.start(200)
+
+    # ── First-run setup wizard ────────────────────────────────────────────────
+    from shell.setup_wizard import SetupWizard, setup_complete
+    if not setup_complete():
+        wizard = SetupWizard()
+        wizard.exec()
 
     # Pass the resolved port so the window loads the right URL
     from shell.main_window import MainWindow

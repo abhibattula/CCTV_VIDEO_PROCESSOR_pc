@@ -1,0 +1,21 @@
+# Linux x86_64 build image — inherits base deps, copies source, runs PyInstaller.
+#
+# Build (from project root — base image must exist):
+#   docker build -f build/docker/Dockerfile.linux -t cctv-linux-build:latest .
+#
+# Run with volume bind-mount to capture artifact on Windows host:
+#   docker run --rm -e APP_VERSION=1.0.0 -v "${PWD}/dist:/output" cctv-linux-build:latest
+
+FROM cctv-linux-base:latest
+
+ENV APP_VERSION=1.0.0
+
+WORKDIR /app
+
+# Copy project source (.dockerignore excludes dist/, .cache/, .git/, etc.)
+COPY . .
+
+# Make entrypoint executable (absolute path since WORKDIR is /app)
+RUN chmod +x /app/build/docker/linux-entrypoint.sh
+
+ENTRYPOINT ["/app/build/docker/linux-entrypoint.sh"]

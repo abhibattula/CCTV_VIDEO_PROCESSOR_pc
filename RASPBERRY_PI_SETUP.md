@@ -3,6 +3,13 @@
 This app runs on Pi 5 with a few system packages installed first.
 The Python code is identical — no separate Pi branch needed.
 
+**Pre-built .deb installer available** (no Python required):
+Download `cctv-video-processor_*_arm64.deb` from [GitHub Releases](https://github.com/abhibattula/CCTV_VIDEO_PROCESSOR_pc/releases) and run:
+```bash
+sudo dpkg -i cctv-video-processor_*_arm64.deb
+cctv-video-processor
+```
+
 ---
 
 ## What works / what's different
@@ -10,11 +17,13 @@ The Python code is identical — no separate Pi branch needed.
 | Feature | PC (Windows) | Pi 5 (Linux ARM64) |
 |---------|-------------|-------------------|
 | MOG2 detection | ✅ | ✅ (slower — ~1× real-time) |
-| YOLO detection | ✅ | ✅ (`pip install ultralytics`) |
+| YOLO detection | ✅ | ✅ (wizard downloads ~6 MB model) |
 | FFmpeg export | ✅ bundled binary | ✅ uses system `ffmpeg` |
 | Web UI (PyQt6 + WebEngine) | ✅ | ✅ but uses ~500 MB RAM |
 | System tray | ✅ | ✅ (needs desktop environment) |
 | Temperature readout | ❌ (Windows) | ✅ via `vcgencmd` fallback |
+| Florence-2 AI captions | ✅ (≥5 GB RAM) | ❌ (YOLO-only on ≤4 GB Pi) |
+| First-run setup wizard | ✅ | ✅ (shows Pi RAM note, skips AI models) |
 
 **RAM usage estimate on Pi 5 (2 GB):**
 

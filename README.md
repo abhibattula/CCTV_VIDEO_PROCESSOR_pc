@@ -29,6 +29,24 @@ python launcher.py
 
 FFmpeg is bundled automatically (via `imageio-ffmpeg`) — nothing to install separately.
 
+---
+
+## Distributable Installers (no Python required)
+
+Pre-built installers are available on the [GitHub Releases](https://github.com/abhibattula/CCTV_VIDEO_PROCESSOR_pc/releases) page — download and double-click, no Python or pip needed.
+
+| Platform | Download | Notes |
+|----------|----------|-------|
+| Windows 10/11 x64 | `*-win64-setup.exe` | Inno Setup installer |
+| macOS Apple Silicon | `*-macos-arm64.dmg` | Ad-hoc signed; right-click → Open on first launch |
+| macOS Intel | `*-macos-intel.dmg` | Ad-hoc signed; right-click → Open on first launch |
+| Linux x86_64 | `*-linux-x86_64.AppImage` | `chmod +x`, then run |
+| Raspberry Pi 4/5 | `*_arm64.deb` | `sudo dpkg -i`, manual dispatch from CI |
+
+**First-run wizard:** On first launch the app shows a setup wizard that downloads AI model weights (~1 GB). An internet connection is required for this step only; the app works fully offline after setup. Clicking "Skip for Now" launches the app immediately without AI features.
+
+**macOS Gatekeeper:** The installers are ad-hoc signed (no Apple Developer account). On first launch, right-click the app → Open → Open to clear the Gatekeeper warning. Subsequent launches work normally.
+
 **Optional — AI object detection mode** (tags events as Person/Car/Dog/etc. instead of
 generic motion):
 ```bash
@@ -110,6 +128,77 @@ Key differences from the desktop version:
   to keep CPU load manageable
 - Batch size and detection resolution are automatically tuned for 2 GB and 4 GB Pi models
 - Headless mode works; Qt desktop mode requires `libgl1-mesa-glx` and a display
+
+---
+
+## Building Installers (from Windows)
+
+All platform installers can be built from a single Windows 11 PC. The version number is read automatically from the `VERSION` file at the repository root.
+
+### Prerequisites
+
+| Tool | Required for | Install |
+|------|-------------|---------|
+| Python 3.12 + PyInstaller | Windows build | `pip install pyinstaller==6.21.0` |
+| Inno Setup 6 | Windows `.exe` | [jrsoftware.org/isdl.php](https://jrsoftware.org/isdl.php) |
+| Docker Desktop (Linux containers mode) | Linux + Pi builds | [docker.com/products/docker-desktop](https://www.docker.com/products/docker-desktop/) |
+
+### Build everything at once
+
+```powershell
+# From the project root
+./build/build_all.ps1
+```
+
+This builds Windows, Linux, and Pi in sequence; prints macOS instructions at the end.
+
+### Build individual platforms
+
+```powershell
+# Windows only (PyInstaller + Inno Setup)
+./build/build_all.ps1 -SkipLinux -SkipPi
+
+# Linux AppImage only (requires Docker Desktop)
+./build/docker/build_linux.ps1
+
+# Raspberry Pi .deb only (requires Docker Desktop + QEMU)
+./build/docker/build_pi.ps1
+```
+
+### macOS (via GitHub Actions)
+
+macOS binaries must be built on Apple hardware. Push a version tag to trigger the CI workflow, which uses free GitHub Actions macOS runners:
+
+```bash
+git tag v1.0.0 && git push origin v1.0.0
+```
+
+The Actions workflow (`.github/workflows/release.yml`) builds both Apple Silicon (ARM64) and Intel (x86_64) `.dmg` files and uploads them to the GitHub Release automatically.
+
+### Two-stage Docker images (fast rebuilds)
+
+The first Docker build bakes all Python dependencies (~45–90 min). Subsequent source-only rebuilds take ~5 min because they inherit the base layer:
+
+```powershell
+# First time or after requirements change — rebuild the base
+./build/docker/build_linux.ps1 -RebuildBase
+./build/docker/build_pi.ps1 -RebuildBase
+
+# Normal incremental build (source changes only — ~5 min)
+./build/docker/build_linux.ps1
+./build/docker/build_pi.ps1
+```
+
+### Artifacts
+
+All artifacts land in `dist/` with consistent naming:
+
+| Platform | File |
+|----------|------|
+| Windows | `dist/CCTV-Processor-{version}-win64-setup.exe` |
+| Linux | `dist/CCTV-Processor-{version}-linux-x86_64.AppImage` |
+| Raspberry Pi | `dist/CCTV-Processor-{version}-pi-arm64.deb` |
+| macOS | uploaded to GitHub Release by CI |
 
 ---
 
@@ -306,11 +395,13 @@ CCTV VIDEO PROCESSOR PC/
 │   ├── templates/
 │   │   └── report.html          ← standalone incident report template (base64 images, no external deps)
 │   └── utils/                   ← ffprobe, bundled-ffmpeg resolver, time/system helpers
+│       └── resource_path.py     ← get_resource_path() — frozen-bundle safe path resolution
 │
 ├── shell/                   ← PyQt6 desktop wrapper
 │   ├── main_window.py       ← QMainWindow + QWebEngineView, JS bridge, drag & drop,
 │   │                           Stop Application bridge flag
-│   ├── tray.py              ← system tray icon
+│   ├── tray.py              ← system tray icon (macOS 13+ Trigger fix)
+│   ├── setup_wizard.py      ← first-run setup wizard (AI model download)
 │   └── platform_utils.py    ← open_folder() per OS
 │
 ├── static/                  ← web UI (served by FastAPI, no build step)
@@ -326,6 +417,17 @@ CCTV VIDEO PROCESSOR PC/
 │       ├── session-state.js ← shared UI state (filters, selection, undo) across pages
 │       └── pages/           ← home.js, processing.js, timeline.js, export.js
 │
+├── build/                   ← PyInstaller specs + platform packaging scripts
+│   ├── cctv_processor_windows.spec
+│   ├── cctv_processor_macos.spec
+│   ├── cctv_processor_linux.spec
+│   ├── windows/installer.iss  ← Inno Setup script
+│   ├── macos/create_dmg.sh
+│   ├── linux/create_appimage.sh
+│   └── pi/create_deb.sh
+├── .github/workflows/
+│   ├── release.yml          ← builds Windows/macOS/Linux on v*.*.* tag push
+│   └── release-pi.yml       ← manual Pi ARM64 .deb build (45-90 min QEMU)
 ├── specs/                   ← spec-driven design docs per feature (spec/plan/tasks)
 ├── docs/superpowers/        ← implementation plans for AI-assisted work sessions
 └── tests/                   ← pytest suite (backend only — see below)
@@ -339,8 +441,8 @@ CCTV VIDEO PROCESSOR PC/
 python -m pytest tests/ -v
 ```
 
-Expected: **≥ 205 passed, ≤ 2 skipped** (the skips are pre-existing video-dependent
-cases; all Phase 11 tests run without a real video file, GPU, or display server).
+Expected: **≥ 220 passed, ≤ 2 skipped** (the skips are pre-existing video-dependent
+cases; all Phase 11–12 tests run without a real video file, GPU, or display server).
 
 The backend follows test-first development — every engine (`detection_engine`,
 `yolo_detector`, `export_engine`) is covered in isolation via its callback interface,

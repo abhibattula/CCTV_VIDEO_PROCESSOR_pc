@@ -1,0 +1,86 @@
+# Linux x86_64 base image — bakes all Python deps once.
+# Subsequent source-only rebuilds use Dockerfile.linux (inherits FROM this).
+#
+# Build (from project root):
+#   docker build -f build/docker/Dockerfile.linux-base -t cctv-linux-base:latest .
+#
+# First build: ~45-60 min (torch + transformers are large).
+# Rebuild only when requirements change.
+
+FROM ubuntu:22.04
+
+ARG PYTHON_VERSION=3.12
+
+ENV DEBIAN_FRONTEND=noninteractive
+
+# Base system packages + Python 3.12 via deadsnakes PPA
+# Notes:
+#  - python3.12-distutils does NOT exist (distutils was removed in 3.12);
+#    pip is bootstrapped below via get-pip.py which does not need it.
+#  - binutils provides objdump/objcopy, required by PyInstaller on Linux.
+RUN apt-get update && apt-get install -y \
+        software-properties-common \
+        curl \
+        ca-certificates \
+        binutils \
+    && add-apt-repository ppa:deadsnakes/ppa -y \
+    && apt-get update && apt-get install -y \
+        python${PYTHON_VERSION} \
+        python${PYTHON_VERSION}-venv \
+        python${PYTHON_VERSION}-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+# Make python3.12 the default python/python3
+RUN update-alternatives --install /usr/bin/python3 python3 /usr/bin/python${PYTHON_VERSION} 1 \
+    && update-alternatives --install /usr/bin/python  python  /usr/bin/python${PYTHON_VERSION} 1
+
+# Bootstrap pip for python 3.12 (deadsnakes does not bundle pip)
+RUN curl -sSL https://bootstrap.pypa.io/get-pip.py -o /tmp/get-pip.py \
+    && python /tmp/get-pip.py \
+    && rm /tmp/get-pip.py
+
+# System Qt/OpenGL libs required by PyInstaller analysis of PyQt6 modules
+# Without these, PyInstaller collect_all("PyQt6") fails silently or errors
+RUN apt-get update && apt-get install -y \
+        libgl1-mesa-glx \
+        libglib2.0-0 \
+        libxcb-xinerama0 \
+        libxcb-icccm4 \
+        libxcb-image0 \
+        libxcb-keysyms1 \
+        libxcb-randr0 \
+        libxcb-render-util0 \
+        libxcb-xkb1 \
+        libxkbcommon-x11-0 \
+        libegl1 \
+        libdbus-1-3 \
+        libfontconfig1 \
+    && rm -rf /var/lib/apt/lists/*
+
+# Upgrade pip to latest
+RUN python -m pip install --upgrade pip
+
+# CPU-only torch — separate layer so it caches independently of other deps
+RUN pip install torch torchvision --index-url https://download.pytorch.org/whl/cpu
+
+# All remaining app dependencies
+RUN pip install \
+        transformers \
+        open_clip_torch \
+        ultralytics \
+        "pyinstaller==6.21.0" \
+        imageio-ffmpeg \
+        PyQt6 \
+        fastapi \
+        uvicorn \
+        aiofiles \
+        Pillow \
+        opencv-python-headless
+
+# Pre-install appimagetool so build doesn't require network access per-run.
+# NOTE: GitHub release asset URLs are case-sensitive — the asset is
+# "appimagetool-x86_64.AppImage" (lowercase t).
+RUN curl -fsSL \
+        "https://github.com/AppImage/AppImageKit/releases/download/continuous/appimagetool-x86_64.AppImage" \
+        -o /usr/local/bin/appimagetool \
+    && chmod +x /usr/local/bin/appimagetool

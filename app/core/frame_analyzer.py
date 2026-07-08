@@ -55,6 +55,7 @@ class FrameAnalyzer:
     _model = None
     _processor = None
     _availability_cache: bool | None = None  # set on first is_available() call; stable for process lifetime
+    unavailable_reason: str | None = None    # human-readable reason when unavailable (for /api/system/ai-status)
 
     @classmethod
     def is_available(cls) -> bool:
@@ -64,18 +65,37 @@ class FrameAnalyzer:
         # Fast path: device has <5 GB RAM — AI disabled regardless of weights
         from app.config import AI_FEATURES_ENABLED
         if not AI_FEATURES_ENABLED:
+            cls.unavailable_reason = "This device has less than 5 GB RAM — AI captions are disabled."
             cls._availability_cache = False
             return False
         try:
             from transformers import AutoModelForCausalLM  # noqa: F401
-        except Exception:
+        except Exception as exc:
+            # In a packaged build a bad bundle makes this fail — surface why.
+            logger.warning("transformers import failed — AI unavailable", exc_info=True)
+            cls.unavailable_reason = f"transformers import failed: {exc}"
             cls._availability_cache = False
             return False
-        weights_dir = (
-            Path.home() / ".cache" / "huggingface" / "hub" / "models--microsoft--Florence-2-base"
+        import os
+        _hf_home = (
+            os.environ.get("HF_HOME")
+            or os.environ.get("HUGGINGFACE_HUB_CACHE")
+            or str(Path.home() / ".cache" / "huggingface")
         )
-        cls._availability_cache = weights_dir.exists()
-        return cls._availability_cache
+        weights_dir = Path(_hf_home) / "hub" / "models--microsoft--Florence-2-base"
+        if not weights_dir.exists():
+            cls.unavailable_reason = "Florence-2 model weights are not downloaded yet."
+            cls._availability_cache = False
+            return False
+        cls.unavailable_reason = None
+        cls._availability_cache = True
+        return True
+
+    @classmethod
+    def reset_availability_cache(cls) -> None:
+        """Force a fresh availability check (e.g. after model weights download)."""
+        cls._availability_cache = None
+        cls.unavailable_reason = None
 
     @classmethod
     def analyze(cls, image_path: Path) -> dict:

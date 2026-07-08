@@ -186,3 +186,93 @@ def test_no_warnings_during_inference(monkeypatch, tmp_path):
     assert len(user_or_dep) == 0, (
         f"Inference warnings not suppressed: {[str(x.message) for x in user_or_dep]}"
     )
+
+
+# ---------------------------------------------------------------------------
+# HF_HOME / HUGGINGFACE_HUB_CACHE env var (Phase 12 — FR-016)
+# ---------------------------------------------------------------------------
+
+def test_is_available_respects_hf_home(monkeypatch, tmp_path):
+    """is_available() must use HF_HOME env var instead of hardcoded ~/.cache/huggingface."""
+    import app.core.frame_analyzer as fa
+    import app.config as cfg
+
+    # Ensure AI features appear enabled so the RAM gate doesn't short-circuit
+    monkeypatch.setattr(cfg, "AI_FEATURES_ENABLED", True)
+
+    # Simulate transformers being importable
+    monkeypatch.setattr(fa, "_clean_caption", fa._clean_caption)  # no-op, just ensure module loaded
+
+    # Create a fake weights directory under a custom HF_HOME
+    fake_hf_home = tmp_path / "custom_hf_home"
+    weights_dir = fake_hf_home / "hub" / "models--microsoft--Florence-2-base"
+    weights_dir.mkdir(parents=True, exist_ok=True)
+
+    monkeypatch.setenv("HF_HOME", str(fake_hf_home))
+    monkeypatch.delenv("HUGGINGFACE_HUB_CACHE", raising=False)
+
+    # Patch import of transformers so we don't need it installed
+    import sys
+    mock_transformers = type(sys)("transformers")
+    mock_transformers.AutoModelForCausalLM = object
+    monkeypatch.setitem(sys.modules, "transformers", mock_transformers)
+
+    fa.FrameAnalyzer._availability_cache = None
+    result = fa.FrameAnalyzer.is_available()
+    fa.FrameAnalyzer._availability_cache = None  # reset after test
+
+    assert result is True, (
+        f"is_available() returned False despite weights at {weights_dir}; "
+        "HF_HOME env var was not respected"
+    )
+
+
+def test_is_available_false_when_weights_absent_in_hf_home(monkeypatch, tmp_path):
+    """is_available() returns False when HF_HOME is set but weights dir absent."""
+    import app.core.frame_analyzer as fa
+    import app.config as cfg
+
+    monkeypatch.setattr(cfg, "AI_FEATURES_ENABLED", True)
+
+    empty_hf_home = tmp_path / "empty_hf_home"
+    empty_hf_home.mkdir(parents=True, exist_ok=True)
+
+    monkeypatch.setenv("HF_HOME", str(empty_hf_home))
+    monkeypatch.delenv("HUGGINGFACE_HUB_CACHE", raising=False)
+
+    import sys
+    mock_transformers = type(sys)("transformers")
+    mock_transformers.AutoModelForCausalLM = object
+    monkeypatch.setitem(sys.modules, "transformers", mock_transformers)
+
+    fa.FrameAnalyzer._availability_cache = None
+    result = fa.FrameAnalyzer.is_available()
+    fa.FrameAnalyzer._availability_cache = None
+
+    assert result is False
+
+
+def test_is_available_respects_huggingface_hub_cache(monkeypatch, tmp_path):
+    """Falls back to HUGGINGFACE_HUB_CACHE when HF_HOME is absent."""
+    import app.core.frame_analyzer as fa
+    import app.config as cfg
+
+    monkeypatch.setattr(cfg, "AI_FEATURES_ENABLED", True)
+
+    fake_hub_cache = tmp_path / "hub_cache"
+    weights_dir = fake_hub_cache / "hub" / "models--microsoft--Florence-2-base"
+    weights_dir.mkdir(parents=True, exist_ok=True)
+
+    monkeypatch.delenv("HF_HOME", raising=False)
+    monkeypatch.setenv("HUGGINGFACE_HUB_CACHE", str(fake_hub_cache))
+
+    import sys
+    mock_transformers = type(sys)("transformers")
+    mock_transformers.AutoModelForCausalLM = object
+    monkeypatch.setitem(sys.modules, "transformers", mock_transformers)
+
+    fa.FrameAnalyzer._availability_cache = None
+    result = fa.FrameAnalyzer.is_available()
+    fa.FrameAnalyzer._availability_cache = None
+
+    assert result is True

@@ -1,0 +1,18 @@
+# Default: normalize line endings to LF in the repo, CRLF on Windows checkout
+* text=auto
+
+# Shell scripts must always use LF (they run in Linux containers)
+*.sh text eol=lf
+
+# Dockerfiles must use LF (they are interpreted by Docker daemon on Linux)
+Dockerfile* text eol=lf
+
+# PowerShell scripts use CRLF on Windows
+*.ps1 text eol=crlf
+
+# Python source — LF everywhere (cross-platform project)
+*.py text eol=lf
+
+# These specific entrypoint scripts must always be LF
+build/docker/linux-entrypoint.sh text eol=lf
+build/docker/pi-entrypoint.sh text eol=lf

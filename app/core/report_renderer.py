@@ -8,11 +8,11 @@ string. No file I/O, no session access, no business logic lives here —
 that all belongs to the caller, matching the same separation-of-concerns
 style export_engine.py and thumbnail_gen.py already follow.
 """
-from pathlib import Path
-
 import jinja2
 
-_TEMPLATES_DIR = Path(__file__).parent.parent / "templates"
+from app.utils.resource_path import get_resource_path
+
+_TEMPLATES_DIR = get_resource_path("app/templates")
 
 _env = jinja2.Environment(
     loader=jinja2.FileSystemLoader(str(_TEMPLATES_DIR)),

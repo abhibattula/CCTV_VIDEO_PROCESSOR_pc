@@ -51,6 +51,7 @@ YOLO_FRAME_SKIP: int = 6 if IS_PI else 3  # process 1 in N frames for YOLO (Pi s
 
 # ── AI feature gate ───────────────────────────────────────────────────────────
 AI_FEATURES_ENABLED: bool = _total_gb >= 5.0  # Florence-2 needs ~3GB weights + OS/Qt overhead
+IS_LOW_RAM_PI: bool = IS_PI and not AI_FEATURES_ENABLED  # Pi with <5 GB RAM: YOLO-only mode
 
 # ── RAM guard (detection loop) ────────────────────────────────────────────────
 RAM_GUARD_PERCENT: int = 85    # pause detection if system RAM usage exceeds this %

@@ -1,0 +1,21 @@
+# Raspberry Pi ARM64 build image — inherits base deps, copies source, runs PyInstaller.
+#
+# Build (from project root — Pi base image must exist, QEMU must be registered):
+#   docker build --platform linux/arm64 -f build/docker/Dockerfile.pi -t cctv-pi-build:latest .
+#
+# Run with volume bind-mount to capture artifact on Windows host:
+#   docker run --rm --platform linux/arm64 -e APP_VERSION=1.0.0 -v "${PWD}/dist:/output" cctv-pi-build:latest
+
+FROM cctv-pi-base:latest
+
+ENV APP_VERSION=1.0.0
+
+WORKDIR /app
+
+# Copy project source (.dockerignore excludes dist/, .cache/, .git/, etc.)
+COPY . .
+
+# Make entrypoint executable (absolute path since WORKDIR is /app)
+RUN chmod +x /app/build/docker/pi-entrypoint.sh
+
+ENTRYPOINT ["/app/build/docker/pi-entrypoint.sh"]
