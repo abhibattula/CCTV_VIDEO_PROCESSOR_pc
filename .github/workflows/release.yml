@@ -38,9 +38,11 @@ jobs:
       - name: Build with PyInstaller
         run: pyinstaller build/cctv_processor_windows.spec
 
+      - name: Install Inno Setup
+        run: choco install innosetup -y --no-progress
+
       - name: Build Inno Setup installer
         shell: cmd
-        # Inno Setup 6 (ISCC) is preinstalled on GitHub windows-latest runners
         run: iscc /DAppVersion=${{ env.APP_VERSION }} build\windows\installer.iss
 
       - uses: actions/upload-artifact@v4
@@ -86,8 +88,10 @@ jobs:
           path: dist/CCTV-Video-Processor-*-macos-arm64.dmg
 
   # ── macOS Intel ────────────────────────────────────────────────────────────
+  # macos-13 (the old Intel runner) was retired 2025-12-04; macos-15-intel is
+  # the free x86_64 replacement until Fall 2027.
   build-macos-intel:
-    runs-on: macos-13
+    runs-on: macos-15-intel
     env:
       APP_VERSION: ${{ github.ref_type == 'tag' && github.ref_name || inputs.version || 'dev' }}
     steps:
