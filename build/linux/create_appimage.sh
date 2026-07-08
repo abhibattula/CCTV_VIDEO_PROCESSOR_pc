@@ -75,6 +75,8 @@ if [ ! -f "${APPIMAGETOOL}" ]; then
 fi
 
 echo "[appimage] Building AppImage…"
-ARCH=x86_64 "${APPIMAGETOOL}" "${APPDIR}" "${PROJECT_ROOT}/dist/${OUTPUT_NAME}"
+# APPIMAGE_EXTRACT_AND_RUN=1: appimagetool is itself an AppImage and needs
+# libfuse2 to mount; CI runners and Docker containers don't have FUSE.
+ARCH=x86_64 APPIMAGE_EXTRACT_AND_RUN=1 "${APPIMAGETOOL}" "${APPDIR}" "${PROJECT_ROOT}/dist/${OUTPUT_NAME}"
 
 echo "[appimage] Done: dist/${OUTPUT_NAME}"
