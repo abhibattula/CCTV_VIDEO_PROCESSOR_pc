@@ -50,12 +50,17 @@ cp "${APPDIR}/usr/share/applications/cctv-video-processor.desktop" "${APPDIR}/"
 if [ -f "${PROJECT_ROOT}/static/favicon.png" ]; then
   cp "${PROJECT_ROOT}/static/favicon.png" \
      "${APPDIR}/usr/share/icons/hicolor/256x256/apps/cctv-video-processor.png"
-  cp "${PROJECT_ROOT}/static/favicon.png" "${APPDIR}/.DirIcon"
 else
   # Create a 1x1 pixel placeholder PNG
   printf '\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x00\x00\x01\x00\x00\x00\x01\x08\x02\x00\x00\x00\x90wS\xde\x00\x00\x00\x0cIDATx\x9cc\xf8\x0f\x00\x00\x01\x01\x00\x05\x18\xd8N\x00\x00\x00\x00IEND\xaeB`\x82' \
     > "${APPDIR}/usr/share/icons/hicolor/256x256/apps/cctv-video-processor.png"
 fi
+# appimagetool refuses to build unless the icon named by the .desktop file's
+# Icon= key also exists at the AppDir root; .DirIcon is the thumbnail.
+cp "${APPDIR}/usr/share/icons/hicolor/256x256/apps/cctv-video-processor.png" \
+   "${APPDIR}/cctv-video-processor.png"
+cp "${APPDIR}/usr/share/icons/hicolor/256x256/apps/cctv-video-processor.png" \
+   "${APPDIR}/.DirIcon"
 
 # AppRun entry point
 cat > "${APPDIR}/AppRun" <<'APPRUNEOF'
@@ -65,11 +70,15 @@ exec "${HERE}/usr/bin/CCTV-Video-Processor" "$@"
 APPRUNEOF
 chmod +x "${APPDIR}/AppRun"
 
-# Download appimagetool if not present
+# Download appimagetool if not present. The maintained build lives in
+# AppImage/appimagetool; AppImage/AppImageKit hosts an obsolete 2023 build
+# kept only as a fallback mirror.
 APPIMAGETOOL="${PROJECT_ROOT}/dist/appimagetool-x86_64.AppImage"
 if [ ! -f "${APPIMAGETOOL}" ]; then
   echo "[appimage] Downloading appimagetool…"
   curl -fsSL -o "${APPIMAGETOOL}" \
+    "https://github.com/AppImage/appimagetool/releases/download/continuous/appimagetool-x86_64.AppImage" \
+  || curl -fsSL -o "${APPIMAGETOOL}" \
     "https://github.com/AppImage/AppImageKit/releases/download/continuous/appimagetool-x86_64.AppImage"
   chmod +x "${APPIMAGETOOL}"
 fi
