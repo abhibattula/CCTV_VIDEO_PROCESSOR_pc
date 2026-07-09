@@ -42,8 +42,25 @@ jobs:
         run: choco install innosetup -y --no-progress
 
       - name: Build Inno Setup installer
-        shell: cmd
-        run: iscc /DAppVersion=${{ env.APP_VERSION }} build\windows\installer.iss
+        shell: pwsh
+        # Output tail is surfaced as a ::error:: annotation so compile
+        # failures are diagnosable from the public checks API.
+        run: |
+          Get-PSDrive C | Format-Table -AutoSize | Out-String | Write-Host
+          if (-not (Test-Path "dist/CCTV-Video-Processor")) {
+            Write-Host "::error title=Installer input missing::dist/CCTV-Video-Processor not found after PyInstaller"
+            exit 1
+          }
+          Remove-Item build\cctv_processor_windows -Recurse -Force -ErrorAction SilentlyContinue
+          $iscc = (Get-Command iscc -ErrorAction SilentlyContinue).Source
+          if (-not $iscc) { $iscc = "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" }
+          $out = & $iscc "/DAppVersion=$env:APP_VERSION" build\windows\installer.iss 2>&1 | Out-String
+          Write-Host $out
+          if ($LASTEXITCODE -ne 0) {
+            $tail = (($out -split "`r?`n") | Where-Object { $_ } | Select-Object -Last 12) -join ' || '
+            Write-Host "::error title=ISCC failed with exit $LASTEXITCODE::$tail"
+            exit 1
+          }
 
       - uses: actions/upload-artifact@v4
         with:
@@ -158,7 +175,18 @@ jobs:
           DISPLAY=:99 pyinstaller build/cctv_processor_linux.spec
 
       - name: Create AppImage
-        run: bash build/linux/create_appimage.sh
+        # Output tail is surfaced as a ::error:: annotation so failures are
+        # diagnosable from the public checks API.
+        run: |
+          set +e
+          out=$(bash build/linux/create_appimage.sh 2>&1)
+          code=$?
+          echo "$out"
+          if [ $code -ne 0 ]; then
+            tail_msg=$(echo "$out" | tail -n 12 | tr '\n' '|')
+            echo "::error title=create_appimage.sh failed with exit ${code}::${tail_msg}"
+            exit $code
+          fi
         env:
           APP_VERSION: ${{ env.APP_VERSION }}
 
