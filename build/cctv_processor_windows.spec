@@ -120,6 +120,18 @@ for _dll in ("msvcp140_1.dll", "msvcp140_2.dll"):
     if os.path.exists(_src):
         a.binaries.append((_dll, _src, "BINARY"))
 
+# torch >= 2.13 ships a deeply nested third-party license tree inside its
+# dist-info (…licenses\third_party\kineto\libkineto\third_party\dynolog\…)
+# whose paths blow past MAX_PATH once prefixed with an install directory.
+# The Inno Setup compiler is not long-path aware and aborts with "The
+# system cannot find the path specified". Keep each package's top-level
+# LICENSE; drop only the nested third_party copies.
+a.datas = [
+    entry for entry in a.datas
+    if ".dist-info\\licenses\\third_party\\"
+    not in entry[0].replace("/", "\\").lower()
+]
+
 pyz = PYZ(a.pure)
 
 exe = EXE(
