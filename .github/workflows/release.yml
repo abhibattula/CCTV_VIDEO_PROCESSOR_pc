@@ -4,6 +4,10 @@ on:
   push:
     tags:
       - 'v*.*.*'
+      # Pi build-trigger tags (v1.0.0-pi, v1.0.0-pi2, …) belong to
+      # release-pi.yml only — without this exclusion they also match
+      # v*.*.* and spawn a full desktop release run + junk release.
+      - '!v*.*.*-pi*'
   workflow_dispatch:
     inputs:
       version:
