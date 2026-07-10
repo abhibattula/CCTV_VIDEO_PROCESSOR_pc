@@ -14,6 +14,18 @@ from app.config import FFMPEG_THREADS, JOBS_DIR, PREVIEW_DIR, MP4_AUDIO_SAFE
 from app.utils.ffmpeg_path import get_ffmpeg
 
 
+def _sanitize_drawtext(label: str) -> str:
+    """Strip characters that break FFmpeg's drawtext filter value.
+
+    Zone labels are free-text (users rename them in the ROI editor), so an
+    apostrophe closes the single-quoted value early, '%' triggers strftime
+    text-expansion, and '\\'/':' are filter metacharacters — any of which
+    corrupts the filtergraph and crashes the export. Keep a readable
+    whitelist; the timestamp is machine-generated and never passes through here.
+    """
+    return "".join(c for c in str(label) if c.isalnum() or c in " _.-")[:60]
+
+
 def _build_burnin_filter(start_s: float, zone_label, recording_start) -> str:
     """Return an FFmpeg drawtext filter string with timestamp [and label] overlay."""
     from app.utils.time_utils import seconds_to_clock
@@ -25,7 +37,8 @@ def _build_burnin_filter(start_s: float, zone_label, recording_start) -> str:
         s = int(start_s) % 60
         timestamp = f"{h:02d}:{m:02d}:{s:02d}"
     # Explicit conditional per T029: use bullet separator when label present
-    text = f"{timestamp} - {zone_label}" if zone_label else timestamp
+    safe_label = _sanitize_drawtext(zone_label) if zone_label else ""
+    text = f"{timestamp} - {safe_label}" if safe_label else timestamp
     return (
         f"drawtext=text='{text}':fontsize=18:fontcolor=white"
         f":box=1:boxcolor=black@0.5:boxborderw=4:x=10:y=(h-th-10)"

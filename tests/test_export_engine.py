@@ -354,6 +354,21 @@ class TestBurnIn:
         assert "Person" in " ".join(calls[0])
         assert "Car" in " ".join(calls[1])
 
+    def test_burn_in_sanitizes_unsafe_label_chars(self):
+        """A label with an apostrophe / percent / colon must not corrupt the
+        single-quoted drawtext value (which would crash the ffmpeg export)."""
+        import app.core.export_engine as eng
+        f = eng._build_burnin_filter(65.0, "John's Lot 50%: A/B", None)
+        # The single-quoted text value must open and close exactly once — a
+        # stray apostrophe from the label would add extra quotes.
+        assert f.count("'") == 2, f
+        # Breaking characters are gone; readable label content survives.
+        for bad in ("'", "%", "/"):
+            assert bad not in f.split("text='")[1].split("'")[0]
+        assert "John" in f and "Lot" in f
+        # Timestamp colons are preserved (machine-generated, inside the quotes).
+        assert "01:05" in f
+
     def test_no_burn_in_when_disabled(self, tmp_path, monkeypatch):
         """When burn_in=False (default), no drawtext filter in commands."""
         import app.core.export_engine as eng

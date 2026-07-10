@@ -2,10 +2,13 @@
 # Install: pip install -r requirements.txt
 
 # Web framework
-fastapi==0.111.0
+# fastapi 0.118 pulls a patched starlette (>=0.48) — fixes the DoS/parse CVEs
+# in the 0.37.2 that fastapi 0.111 pinned. python-multipart removed: the app
+# has no form/upload endpoints (JSON only), so it was an unused dependency
+# carrying 7 CVEs of its own.
+fastapi==0.118.0
 uvicorn[standard]==0.29.0
 aiofiles==23.2.1
-python-multipart==0.0.9
 Jinja2==3.1.6
 
 # Video processing
@@ -20,7 +23,7 @@ imageio-ffmpeg==0.5.1
 psutil==5.9.8
 
 # HTTP client (used by PyQt6 shell health-check)
-requests==2.31.0
+requests==2.34.2
 
 # Desktop GUI
 PyQt6==6.7.0
