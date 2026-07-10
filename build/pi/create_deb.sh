@@ -41,7 +41,7 @@ Maintainer: CCTV Video Processor Project
 Description: AI-powered CCTV video analysis for Raspberry Pi
  Processes CCTV footage with YOLOv8 object detection and optional
  Florence-2 AI captions (requires 5 GB+ RAM). Includes a web UI.
-Depends: libgl1, libglib2.0-0
+Depends: libgl1, libglib2.0-0, xdg-utils
 Homepage: https://github.com/your-repo/cctv-video-processor
 CTRLEOF
 

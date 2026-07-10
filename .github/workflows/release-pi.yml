@@ -12,7 +12,9 @@ on:
         default: 'true'
   push:
     tags:
-      - 'v*.*.*-pi'   # e.g. v1.0.0-pi → builds this commit, attaches to release v1.0.0
+      # e.g. v1.0.0-pi, v1.0.0-pi2 → builds this commit, attaches to release
+      # v1.0.0. The numeric suffix allows re-triggering with a fresh tag.
+      - 'v*.*.*-pi*'
 
 # Pi build is kept out of the main release workflow to avoid blocking it:
 # QEMU emulated ARM64 builds take 45-90 minutes.
@@ -39,7 +41,7 @@ jobs:
           if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
             echo "RELEASE_TAG=${{ github.event.inputs.version }}" >> $GITHUB_ENV
           else
-            echo "RELEASE_TAG=${GITHUB_REF_NAME%-pi}" >> $GITHUB_ENV
+            echo "RELEASE_TAG=${GITHUB_REF_NAME%-pi*}" >> $GITHUB_ENV
           fi
 
       - name: Build inside QEMU ARM64 (Raspberry Pi emulation)
@@ -71,8 +73,12 @@ jobs:
             python3.11 -m pip install torch --index-url https://download.pytorch.org/whl/cpu \
               || python3.11 -m pip install torch
 
-            # Install project dependencies
-            python3.11 -m pip install pyinstaller -r requirements.txt \
+            # Install project dependencies — WITHOUT PyQt6: its aarch64
+            # wheels need glibc >= 2.39 (Pi OS Bookworm has 2.36) and 6.7.0
+            # has no aarch64 wheel at all. The Pi build is headless; the
+            # launcher serves the web UI to the system browser instead.
+            grep -viE '^pyqt6' requirements.txt > /tmp/requirements-pi.txt
+            python3.11 -m pip install pyinstaller -r /tmp/requirements-pi.txt \
               transformers open-clip-torch ultralytics huggingface_hub
 
             # Build with PyInstaller (headless)

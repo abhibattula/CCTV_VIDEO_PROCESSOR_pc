@@ -51,14 +51,15 @@ RUN python -m pip install --upgrade pip
 # CPU-only torch for aarch64 — the whl/cpu index includes ARM64 wheels
 RUN pip install torch torchvision --index-url https://download.pytorch.org/whl/cpu
 
-# All remaining app dependencies (installed as aarch64 binaries automatically)
+# All remaining app dependencies (installed as aarch64 binaries automatically).
+# No PyQt6: its aarch64 wheels need glibc >= 2.39 (Pi OS Bookworm has 2.36),
+# so the Pi build is headless — launcher.py serves the web UI to the browser.
 RUN pip install \
         transformers \
         open_clip_torch \
         ultralytics \
         "pyinstaller==6.21.0" \
         imageio-ffmpeg \
-        PyQt6 \
         fastapi \
         uvicorn \
         aiofiles \
