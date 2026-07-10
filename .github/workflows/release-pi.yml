@@ -14,23 +14,21 @@ on:
     tags:
       # e.g. v1.0.0-pi, v1.0.0-pi2 → builds this commit, attaches to release
       # v1.0.0. The numeric suffix allows re-triggering with a fresh tag.
+      # (release.yml excludes these tags so only this workflow runs.)
       - 'v*.*.*-pi*'
 
-# Pi build is kept out of the main release workflow to avoid blocking it:
-# QEMU emulated ARM64 builds take 45-90 minutes.
+# Native ARM64 runner (free for public repos since Jan 2025) — QEMU
+# emulation segfaults on torch import and took 45-90 min; native takes ~15.
+# ubuntu-22.04-arm has glibc 2.35 < Pi OS Bookworm's 2.36, so the
+# PyInstaller output runs on the Pi.
 
 jobs:
   build-pi:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04-arm
     permissions:
       contents: write
     steps:
       - uses: actions/checkout@v4
-
-      - name: Free runner disk space
-        run: |
-          sudo rm -rf /usr/local/lib/android /usr/share/dotnet /opt/ghc /usr/local/.ghcup
-          df -h /
 
       - name: Resolve versions
         # APP_VERSION (deb version) comes from the VERSION file — dpkg
@@ -44,53 +42,51 @@ jobs:
             echo "RELEASE_TAG=${GITHUB_REF_NAME%-pi*}" >> $GITHUB_ENV
           fi
 
-      - name: Build inside QEMU ARM64 (Raspberry Pi emulation)
-        uses: uraimo/run-on-arch-action@v2
+      - uses: actions/setup-python@v5
         with:
-          arch: aarch64
-          distro: ubuntu22.04
-          githubToken: ${{ github.token }}
-          install: |
-            apt-get update -qq
-            # gcc + python3.11-dev: pinned deps without aarch64 wheels
-            # (e.g. psutil 5.9.8) are built from source by pip.
-            apt-get install -y python3.11 python3.11-venv python3.11-dev python3-pip \
-              gcc libgl1 libglib2.0-0 libxcb-xinerama0 \
-              dpkg-dev binutils xvfb
-            python3.11 -m pip install --upgrade pip setuptools wheel
-          run: |
-            set -euo pipefail
-            exec > >(tee /tmp/build.log) 2>&1
-            on_err() { echo "::error title=Pi build failed::$(tail -n 12 /tmp/build.log | tr '\n' '|')"; }
-            trap on_err ERR
+          python-version: '3.11'
 
-            # dpkg requires a digit-leading version — use the VERSION file.
-            export APP_VERSION="$(cat VERSION)"
+      - name: Install system packages
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y libgl1 libglib2.0-0 libxcb-xinerama0 \
+            dpkg-dev binutils xvfb
 
-            # Use python3.11 explicitly — bare `pip`/`pyinstaller` resolve to
-            # the system Python 3.10 install and would build with the wrong
-            # interpreter.
-            # CPU-only torch for ARM64; fall back to PyPI (aarch64 wheels
-            # there are CPU-only anyway) if the cpu index has no aarch64 build.
-            python3.11 -m pip install torch --index-url https://download.pytorch.org/whl/cpu \
-              || python3.11 -m pip install torch
+      - name: Install CPU-only torch
+        # Fall back to PyPI (aarch64 wheels there are CPU-only anyway) if
+        # the cpu index has no aarch64 build for this Python.
+        run: |
+          pip install torch --index-url https://download.pytorch.org/whl/cpu \
+            || pip install torch
 
-            # Install project dependencies — WITHOUT PyQt6: its aarch64
-            # wheels need glibc >= 2.39 (Pi OS Bookworm has 2.36) and 6.7.0
-            # has no aarch64 wheel at all. The Pi build is headless; the
-            # launcher serves the web UI to the system browser instead.
-            grep -viE '^pyqt6' requirements.txt > /tmp/requirements-pi.txt
-            python3.11 -m pip install pyinstaller -r /tmp/requirements-pi.txt \
-              transformers open-clip-torch ultralytics huggingface_hub
+      - name: Install dependencies (no PyQt6 — headless Pi build)
+        # PyQt6 aarch64 wheels need glibc >= 2.39 (Pi OS Bookworm has 2.36)
+        # and the pinned 6.7.0 has no aarch64 wheel at all. The Pi build is
+        # headless; the launcher serves the web UI to the system browser.
+        run: |
+          grep -viE '^pyqt6' requirements.txt > /tmp/requirements-pi.txt
+          pip install pyinstaller -r /tmp/requirements-pi.txt \
+            transformers open-clip-torch ultralytics huggingface_hub
 
-            # Build with PyInstaller (headless)
-            Xvfb :99 & export DISPLAY=:99
-            python3.11 -m PyInstaller build/cctv_processor_linux.spec
+      - name: Build with PyInstaller (headless display)
+        run: |
+          Xvfb :99 &
+          DISPLAY=:99 pyinstaller build/cctv_processor_linux.spec
 
-            # Create .deb
-            bash build/pi/create_deb.sh
-
-            echo "Build complete"
+      - name: Create .deb
+        # Output tail is surfaced as a ::error:: annotation so failures are
+        # diagnosable from the public checks API.
+        run: |
+          set +e
+          out=$(bash build/pi/create_deb.sh 2>&1)
+          code=$?
+          echo "$out"
+          if [ $code -ne 0 ]; then
+            echo "::error title=create_deb.sh failed with exit ${code}::$(echo "$out" | tail -n 12 | tr '\n' '|')"
+            exit $code
+          fi
+        env:
+          APP_VERSION: ${{ env.APP_VERSION }}
 
       - name: List dist artifacts
         run: ls -lh dist/
