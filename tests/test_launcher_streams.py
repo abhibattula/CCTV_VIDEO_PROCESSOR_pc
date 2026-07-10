@@ -55,3 +55,31 @@ def test_uvicorn_config_succeeds_after_stream_fix(monkeypatch, tmp_path):
     config = uvicorn.Config(FastAPI(), host="127.0.0.1", port=59999, log_level="warning")
     server = uvicorn.Server(config)
     assert server is not None
+
+
+def test_launcher_headless_fallback_when_pyqt6_missing():
+    """The Raspberry Pi build ships without PyQt6 (no usable aarch64 wheels).
+
+    Importing launcher without PyQt6 must succeed and set QT_AVAILABLE=False
+    so main() takes the headless web-UI path instead of crashing.
+    """
+    import importlib
+
+    assert launcher.QT_AVAILABLE is True  # dev env has PyQt6
+    # Setting an entry to None forces ImportError; submodules must be blocked
+    # too or the cached PyQt6.QtWidgets satisfies the import directly.
+    saved = {
+        name: sys.modules[name]
+        for name in list(sys.modules)
+        if name == "PyQt6" or name.startswith("PyQt6.")
+    }
+    for name in saved:
+        sys.modules[name] = None
+    try:
+        importlib.reload(launcher)
+        assert launcher.QT_AVAILABLE is False
+        assert callable(launcher._run_headless)
+    finally:
+        sys.modules.update(saved)
+        importlib.reload(launcher)  # restore Qt-enabled module state
+    assert launcher.QT_AVAILABLE is True

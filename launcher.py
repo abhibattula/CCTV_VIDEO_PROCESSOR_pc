@@ -48,11 +48,20 @@ from app.main import create_app
 # ---------------------------------------------------------------------------
 # Fix 1: Qt WebEngine requires this attribute before QCoreApplication exists.
 # Import and set it before anything else touches Qt.
+#
+# PyQt6 publishes no aarch64 wheels usable on Raspberry Pi OS Bookworm
+# (they require glibc >= 2.39; Bookworm has 2.36), so the Pi build ships
+# without Qt entirely. When Qt is absent, run headless: serve the same web
+# UI and open it in the system browser instead of an embedded window.
 # ---------------------------------------------------------------------------
-from PyQt6.QtWidgets import QApplication
-from PyQt6.QtCore import Qt, QTimer
+try:
+    from PyQt6.QtWidgets import QApplication
+    from PyQt6.QtCore import Qt, QTimer
 
-QApplication.setAttribute(Qt.ApplicationAttribute.AA_ShareOpenGLContexts)
+    QApplication.setAttribute(Qt.ApplicationAttribute.AA_ShareOpenGLContexts)
+    QT_AVAILABLE = True
+except ImportError:
+    QT_AVAILABLE = False
 
 
 def _port_is_free(host: str, port: int) -> bool:
@@ -107,6 +116,25 @@ def stop_backend():
         _uvicorn_server.should_exit = True
 
 
+def _run_headless(port: int) -> None:
+    """Headless mode (no Qt bundled, e.g. Raspberry Pi): the backend daemon
+    thread serves the web UI; open it in the system browser and keep the
+    main thread alive until Ctrl+C."""
+    import webbrowser
+
+    url = f"http://{BACKEND_HOST}:{port}"
+    print(f"CCTV Video Processor — web UI at {url}  (Ctrl+C to quit)")
+    threading.Timer(2.0, lambda: webbrowser.open(url)).start()
+    try:
+        while True:
+            time.sleep(1)
+    except KeyboardInterrupt:
+        pass
+    finally:
+        stop_backend()
+        shutil.rmtree(PREVIEW_DIR, ignore_errors=True)
+
+
 def main():
     # ── Fix 2: smart port selection ───────────────────────────────────────────
     # Case A: preferred port is free          → bind it normally
@@ -134,6 +162,10 @@ def main():
         )
         backend_thread.start()
         backend_started = True
+
+    if not QT_AVAILABLE:
+        _run_headless(backend_port)
+        return
 
     # ── Qt application ────────────────────────────────────────────────────────
     qt_app = QApplication(sys.argv)
