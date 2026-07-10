@@ -52,8 +52,10 @@ jobs:
           githubToken: ${{ github.token }}
           install: |
             apt-get update -qq
-            apt-get install -y python3.11 python3.11-venv python3-pip \
-              libgl1 libglib2.0-0 libxcb-xinerama0 \
+            # gcc + python3.11-dev: pinned deps without aarch64 wheels
+            # (e.g. psutil 5.9.8) are built from source by pip.
+            apt-get install -y python3.11 python3.11-venv python3.11-dev python3-pip \
+              gcc libgl1 libglib2.0-0 libxcb-xinerama0 \
               dpkg-dev binutils xvfb
             python3.11 -m pip install --upgrade pip setuptools wheel
           run: |

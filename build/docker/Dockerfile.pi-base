@@ -29,6 +29,7 @@ RUN apt-get update && apt-get install -y \
         curl \
         ca-certificates \
         binutils \
+        gcc \
         dpkg-dev \
         libgl1 \
         libglib2.0-0 \
