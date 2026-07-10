@@ -1,29 +1,42 @@
-# Running on Raspberry Pi 5 (2 GB / 4 GB)
+# Running on Raspberry Pi 4 / 5
 
-This app runs on Pi 5 with a few system packages installed first.
-The Python code is identical — no separate Pi branch needed.
+This app runs on Raspberry Pi OS Bookworm (64-bit). The Python code is
+identical to the desktop version — no separate Pi branch needed.
 
-**Pre-built .deb installer available** (no Python required):
+**Recommended: the pre-built .deb installer** (no Python required):
 Download `cctv-video-processor_*_arm64.deb` from [GitHub Releases](https://github.com/abhibattula/CCTV_VIDEO_PROCESSOR_pc/releases) and run:
 ```bash
-sudo dpkg -i cctv-video-processor_*_arm64.deb
+sudo apt install ./cctv-video-processor_*_arm64.deb
 cctv-video-processor
 ```
+
+**The Pi version is headless.** PyQt6 publishes no ARM64 wheels compatible with
+Pi OS Bookworm (they require glibc ≥ 2.39; Bookworm has 2.36), so instead of an
+embedded desktop window the launcher starts the backend and opens the web UI in
+the Pi's own browser (Chromium). Everything else — detection, timeline review,
+export, reports — works exactly like the desktop version. Press Ctrl+C in the
+terminal to quit; if the browser doesn't open automatically, browse to
+`http://127.0.0.1:5151`.
+
+There is no first-run wizard on the Pi (it was a Qt dialog) — download AI models
+from the **AI Models card on the Home page** instead. On Pis with less than 5 GB
+RAM the card explains that AI captions are disabled; YOLO and MOG2 detection
+still work fully.
 
 ---
 
 ## What works / what's different
 
-| Feature | PC (Windows) | Pi 5 (Linux ARM64) |
+| Feature | PC (Windows) | Pi 4/5 (Linux ARM64) |
 |---------|-------------|-------------------|
 | MOG2 detection | ✅ | ✅ (slower — ~1× real-time) |
-| YOLO detection | ✅ | ✅ (wizard downloads ~6 MB model) |
+| YOLO detection | ✅ | ✅ (~6 MB model via the AI Models card) |
 | FFmpeg export | ✅ bundled binary | ✅ uses system `ffmpeg` |
-| Web UI (PyQt6 + WebEngine) | ✅ | ✅ but uses ~500 MB RAM |
-| System tray | ✅ | ✅ (needs desktop environment) |
+| UI | ✅ embedded Qt window | ✅ same web UI, in the system browser (headless) |
+| System tray | ✅ | ❌ (no Qt shell) |
 | Temperature readout | ❌ (Windows) | ✅ via `vcgencmd` fallback |
-| Florence-2 AI captions | ✅ (≥5 GB RAM) | ❌ (YOLO-only on ≤4 GB Pi) |
-| First-run setup wizard | ✅ | ✅ (shows Pi RAM note, skips AI models) |
+| Florence-2 AI captions | ✅ (≥5 GB RAM) | ✅ on 8 GB Pi; ❌ below 5 GB RAM |
+| First-run setup wizard | ✅ | ❌ (Qt dialog) — use the Home page AI Models card |
 
 **RAM usage estimate on Pi 5 (2 GB):**
 
@@ -31,9 +44,9 @@ cctv-video-processor
 |-----------|------|
 | Pi OS + desktop | ~400 MB |
 | Python + FastAPI backend | ~120 MB |
-| PyQt6 + Chromium WebEngine | ~500 MB |
+| Chromium browser tab (web UI) | ~300–400 MB |
 | OpenCV detection (320×180) | ~80 MB |
-| **Total** | **~1.1 GB** — fits in 2 GB with headroom |
+| **Total** | **~1 GB** — fits in 2 GB with headroom |
 
 ---
 
@@ -58,15 +71,16 @@ sudo apt update && sudo apt install -y \
 cd ~/CCTV-VIDEO-PROCESSOR
 python3 -m venv .venv
 source .venv/bin/activate
-pip install -r requirements.txt
+grep -viE '^pyqt6' requirements.txt > /tmp/requirements-pi.txt
+pip install -r /tmp/requirements-pi.txt
 ```
 
-> **PyQt6-WebEngine on Pi:** The pip wheel for `PyQt6-WebEngine` is available for Linux aarch64 from PyPI since PyQt6 6.6. If pip can't find it, install from the system:
-> ```bash
-> sudo apt install python3-pyqt6.qtwebengine
-> # then use system Python instead of a venv, or:
-> pip install PyQt6-WebEngine --extra-index-url https://www.piwheels.org/simple/
-> ```
+> **Why skip PyQt6?** Its aarch64 wheels on PyPI require glibc ≥ 2.39, but Pi OS
+> Bookworm has 2.36 — pip would fail (or try a hopeless source build). The
+> launcher detects the missing Qt automatically and runs headless, serving the
+> web UI to your browser. If you specifically want the embedded Qt window, the
+> only route is Debian's own packages (`sudo apt install python3-pyqt6.qtwebengine`
+> with the **system** Python, not a venv) — unsupported, but it works.
 
 ---
 
@@ -77,19 +91,15 @@ source .venv/bin/activate
 python launcher.py
 ```
 
-The window opens in about 10 seconds on Pi 5 (Chromium-based WebEngine starts slowly on first launch).
+The backend starts in a few seconds and the web UI opens in the Pi's browser.
 
 ---
 
-## Headless / SSH use (no desktop)
+## SSH use (no desktop — access the UI from another computer)
 
-If you're running the Pi headlessly and want to access the UI from another computer, change one line in `app/config.py`:
-
-```python
-BACKEND_HOST: str = "0.0.0.0"   # was "127.0.0.1"
-```
-
-Then run only the backend (no Qt window):
+The app is already headless on the Pi; to reach the UI from a different machine on
+your network, bind the backend to all interfaces. Change one line in `app/config.py`
+(source install) or run the backend directly:
 
 ```bash
 python -c "
@@ -99,7 +109,8 @@ uvicorn.run(create_app(), host='0.0.0.0', port=5151)
 "
 ```
 
-Open `http://<pi-ip-address>:5151` in a browser on your PC. The file browse button won't work (it needs the Qt shell), but drag-and-drop via the web browser will. For headless use, add the video path by entering it directly in the browser address bar as a query: after loading the page type the path into the file input.
+Open `http://<pi-ip-address>:5151` in a browser on your PC. The file browse button
+won't work (it needs a local shell), but drag-and-drop into the browser will.
 
 ---
 
@@ -143,8 +154,8 @@ The YOLOv8n model (~6 MB) downloads automatically on first use. On Pi 5 with 2 G
 | Problem | Fix |
 |---------|-----|
 | `ffmpeg: command not found` | `sudo apt install ffmpeg` |
-| `PyQt6-WebEngine` wheel not found | Use piwheels: `pip install --extra-index-url https://www.piwheels.org/simple/ PyQt6-WebEngine` |
-| Window opens but stays white > 30s | Chromium first-run takes longer on Pi — wait or restart |
-| `DISPLAY` environment variable not set | Must run from a desktop session, not raw SSH — use `ssh -X` or VNC |
+| pip fails installing `PyQt6` | Expected — skip it (see Step 2); the app runs headless without it |
+| App starts but no browser opens | Browse to `http://127.0.0.1:5151` manually; check `xdg-utils` is installed (`sudo apt install xdg-utils`) |
+| AI captions unavailable | On Pis with < 5 GB RAM this is by design; on an 8 GB Pi, download the models from the Home page AI Models card |
 | Detection extremely slow | Normal on Pi — a 1h video takes ~30 min; let it run |
 | Export fails with codec error | System FFmpeg might be older than bundled Windows one; try `sudo apt upgrade ffmpeg` |

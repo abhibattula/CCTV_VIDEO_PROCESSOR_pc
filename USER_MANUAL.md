@@ -70,7 +70,7 @@ If you don't want to install Python, download the pre-built installer for your p
 
 **Linux AppImage:** Run `chmod +x CCTV-Video-Processor-*.AppImage` then double-click (or run from terminal).
 
-**Raspberry Pi .deb:** Run `sudo dpkg -i cctv-video-processor_*_arm64.deb` then run `cctv-video-processor` from the terminal.
+**Raspberry Pi .deb:** Run `sudo apt install ./cctv-video-processor_*_arm64.deb` (apt resolves the dependencies automatically), then run `cctv-video-processor`. The Pi version is **headless**: instead of opening its own window, it starts the app and opens the web UI in the Pi's browser (Chromium). Press Ctrl+C in the terminal to quit. If the browser doesn't open by itself, go to `http://127.0.0.1:5151` manually.
 
 ---
 
@@ -87,9 +87,26 @@ On your very first launch (installer or developer mode), a setup wizard appears 
 
 A progress bar and log show download status. Each model is SHA256-verified after download.
 
-**Skip for Now:** Click this any time to launch immediately without AI models. The wizard will not appear again after you complete or skip it.
+**Skip for Now:** Click this any time to launch immediately without AI models. The wizard will not appear again after you complete or skip it — but skipping is never a dead end; see the AI Models card below.
 
 > The wizard writes a sentinel file at `~/.cctv_processor/.setup_complete` to track completion. Delete this file to re-run the wizard (e.g., after moving to a new machine).
+
+> The Raspberry Pi (headless) version has no wizard — use the AI Models card instead.
+
+---
+
+## AI Models Card (Home Page)
+
+The Home page shows an **AI Models** card whenever there is something worth knowing about AI availability. It has four states:
+
+| State | What you see | What to do |
+|-------|--------------|------------|
+| **Models missing** | The reason AI is unavailable + a **Download AI Models (~800 MB)** button | Click the button — the download runs in the background |
+| **Downloading** | A live progress bar with the current model name and a log | Keep using the app; it refreshes every 2 seconds |
+| **Ready** | "✅ AI models installed" | Nothing — Intelligence Reports are fully enabled |
+| **Not supported** | A note that this device has less than 5 GB RAM | AI captions can't run on this hardware; motion/YOLO detection still works fully |
+
+This is the recovery path if you clicked "Skip for Now" in the setup wizard, if a download was interrupted (it resumes safely), or on the Raspberry Pi where the wizard doesn't exist. Downloads are SHA256-verified and already-downloaded models are skipped.
 
 ---
 
@@ -121,8 +138,10 @@ explaining why — MOG2 motion detection still works fully.
 sudo apt install libgl1-mesa-glx libglib2.0-0
 ```
 
-**Raspberry Pi** — see [`RASPBERRY_PI_SETUP.md`](RASPBERRY_PI_SETUP.md). The AI
-Analysis feature (Florence-2) is automatically disabled on devices with ≤ 4 GB RAM.
+**Raspberry Pi** — see [`RASPBERRY_PI_SETUP.md`](RASPBERRY_PI_SETUP.md). The Pi
+version runs headless (web UI in the system browser — PyQt6 is not available for
+Pi OS), and the AI Analysis feature (Florence-2) is automatically disabled on
+devices with less than 5 GB RAM.
 
 ---
 
@@ -479,6 +498,9 @@ If the app crashes during export, the next launch will automatically:
 | Bulk-excluding everything shows a warning, not an error | By design — it's a heads-up that export will have nothing to do until you include something again | Adjust filters or re-include events |
 | Export is very slow | Source codec requires re-encoding | Normal — 720p/480p, burn-in, or PCM audio trigger re-encode. Let it run. |
 | Preview takes a long time to load | Full-resolution clips take longer to re-encode for in-app playback (a 1080p clip can take 15–20s) | Wait for it — the "Generating preview clip…" state covers this; the export itself isn't affected |
+| "AI Analysis unavailable" after installing | Model weights not downloaded (wizard skipped or interrupted) | Open the Home page — the **AI Models card** shows the exact reason and a Download button; the download resumes safely if interrupted |
+| AI card says "not supported on this device" | Less than 5 GB total RAM | AI captions can't run on this hardware; MOG2 and YOLO detection still work fully |
+| (Raspberry Pi) app starts but no window appears | The Pi build is headless by design | The web UI opens in the Pi's browser; if it doesn't, browse to `http://127.0.0.1:5151` |
 | Not sure what the app is doing / something looks broken | No visibility into console/network errors | Open the **🐛 Debug** drawer (nav bar) to see live console, fetch, and error activity; **Copy** it if reporting an issue |
 
 ---
@@ -489,7 +511,7 @@ If the app crashes during export, the next launch will automatically:
 python -m pytest tests/ -v
 ```
 
-Expected result: **≥ 193 passed, ≤ 2 skipped** (the skips are pre-existing video-dependent cases; all Phase 10 tests run without a real video, GPU, or display). There is no frontend test runner; frontend behaviour is verified by driving the real app directly.
+Expected result: **≥ 239 passed, ≤ 2 skipped** (the skips are pre-existing video-dependent cases; all tests run without a real video, GPU, or display). There is no frontend test runner; frontend behaviour is verified by driving the real app directly.
 
 ---
 
@@ -615,6 +637,7 @@ This runs Windows, Linux, and Pi builds in sequence and prints macOS tag-push in
 ./build/docker/build_linux.ps1
 
 # Raspberry Pi ARM64 .deb only (Docker + QEMU required)
+# Prefer the CI path below — torch collection can segfault under QEMU
 ./build/docker/build_pi.ps1
 
 # Rebuild Docker base images (only after requirements.txt changes)
@@ -622,16 +645,22 @@ This runs Windows, Linux, and Pi builds in sequence and prints macOS tag-push in
 ./build/docker/build_pi.ps1   -RebuildBase
 ```
 
-### macOS
+### macOS and Raspberry Pi (GitHub Actions — recommended)
 
-macOS binaries cannot be built on non-Apple hardware. Push a version tag to trigger GitHub Actions:
+macOS binaries cannot be built on non-Apple hardware, and the Pi `.deb` builds most reliably on GitHub's free native ARM64 runners. Push tags to trigger the workflows:
 
 ```bash
+# Desktop release: Windows + Linux + both macOS .dmg files → GitHub Release
 git tag v1.0.0
 git push origin v1.0.0
+
+# Raspberry Pi .deb (~15 min on a native ARM64 runner), attached to the
+# matching release; append -pi2, -pi3… for re-runs
+git tag v1.0.0-pi
+git push origin v1.0.0-pi
 ```
 
-The workflow at `.github/workflows/release.yml` builds Apple Silicon (ARM64) and Intel (x86_64) `.dmg` files and attaches them to the GitHub Release automatically.
+The Pi workflow can also be run manually from the repository's Actions tab ("Build Raspberry Pi Release" → Run workflow, entering the release tag).
 
 ### Expected artifacts
 
@@ -639,8 +668,13 @@ The workflow at `.github/workflows/release.yml` builds Apple Silicon (ARM64) and
 |----------|----------------|
 | Windows 10/11 x64 | `CCTV-Processor-{version}-win64-setup.exe` |
 | Linux x86_64 | `CCTV-Processor-{version}-linux-x86_64.AppImage` |
-| Raspberry Pi 4/5 | `CCTV-Processor-{version}-pi-arm64.deb` |
+| Raspberry Pi 4/5 (local Docker) | `CCTV-Processor-{version}-pi-arm64.deb` |
+| Raspberry Pi 4/5 (CI) | `cctv-video-processor_{version}_arm64.deb` on the GitHub Release |
 | macOS (CI only) | Uploaded to GitHub Release |
+
+> **Note:** the Raspberry Pi build ships without PyQt6 (no ARM64 wheels are
+> compatible with Pi OS Bookworm), so it runs headless — the launcher serves the
+> web UI to the Pi's own browser. All other platforms bundle the Qt desktop window.
 
 ### First Docker build timing
 

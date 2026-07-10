@@ -41,9 +41,9 @@ Pre-built installers are available on the [GitHub Releases](https://github.com/a
 | macOS Apple Silicon | `*-macos-arm64.dmg` | Ad-hoc signed; right-click → Open on first launch |
 | macOS Intel | `*-macos-intel.dmg` | Ad-hoc signed; right-click → Open on first launch |
 | Linux x86_64 | `*-linux-x86_64.AppImage` | `chmod +x`, then run |
-| Raspberry Pi 4/5 | `*_arm64.deb` | `sudo dpkg -i`, manual dispatch from CI |
+| Raspberry Pi 4/5 | `*_arm64.deb` | `sudo apt install ./cctv-video-processor_*_arm64.deb` — headless: serves the web UI to the Pi's browser |
 
-**First-run wizard:** On first launch the app shows a setup wizard that downloads AI model weights (~1 GB). An internet connection is required for this step only; the app works fully offline after setup. Clicking "Skip for Now" launches the app immediately without AI features.
+**First-run wizard:** On first launch the app shows a setup wizard that downloads AI model weights (~1 GB). An internet connection is required for this step only; the app works fully offline after setup. Clicking "Skip for Now" launches the app immediately without AI features — you can download the models later from the **AI Models card on the Home page**, which shows download progress and explains exactly why AI is unavailable (models missing, or a device with < 5 GB RAM).
 
 **macOS Gatekeeper:** The installers are ad-hoc signed (no Apple Developer account). On first launch, right-click the app → Open → Open to clear the Gatekeeper warning. Subsequent launches work normally.
 
@@ -117,17 +117,28 @@ uvicorn app.main:app --host 0.0.0.0 --port 5151
 
 Then open `http://<server-ip>:5151/` in any browser.
 
-### Raspberry Pi (2 GB / 4 GB)
+### Raspberry Pi (4 / 5)
 
-See [`RASPBERRY_PI_SETUP.md`](RASPBERRY_PI_SETUP.md) for full install instructions.
+The easiest path is the pre-built `.deb` from [GitHub Releases](https://github.com/abhibattula/CCTV_VIDEO_PROCESSOR_pc/releases):
+
+```bash
+sudo apt install ./cctv-video-processor_*_arm64.deb
+cctv-video-processor
+```
+
+See [`RASPBERRY_PI_SETUP.md`](RASPBERRY_PI_SETUP.md) for full instructions.
 
 Key differences from the desktop version:
-- **AI Analysis (Florence-2) is automatically disabled** on devices with ≤ 4 GB RAM
+- **The Pi build is headless** — PyQt6 publishes no ARM64 wheels compatible with
+  Pi OS Bookworm (they require glibc ≥ 2.39; Bookworm has 2.36), so instead of an
+  embedded desktop window the app starts its backend and opens the same web UI in
+  the Pi's own browser (Chromium). `launcher.py` detects the missing Qt at runtime
+  automatically — the Python code is identical.
+- **AI Analysis (Florence-2) is automatically disabled** on devices with < 5 GB RAM
   (the AI gate checks total RAM at startup — no manual config required)
 - **YOLO frame skip** is 2× more aggressive on Pi (1-in-6 frames vs 1-in-3 on PC)
   to keep CPU load manageable
 - Batch size and detection resolution are automatically tuned for 2 GB and 4 GB Pi models
-- Headless mode works; Qt desktop mode requires `libgl1-mesa-glx` and a display
 
 ---
 
@@ -162,18 +173,25 @@ This builds Windows, Linux, and Pi in sequence; prints macOS instructions at the
 ./build/docker/build_linux.ps1
 
 # Raspberry Pi .deb only (requires Docker Desktop + QEMU)
+# NOTE: prefer the CI path below — PyInstaller's torch collection is known
+# to segfault under QEMU emulation; CI uses a native ARM64 runner instead.
 ./build/docker/build_pi.ps1
 ```
 
-### macOS (via GitHub Actions)
+### macOS + Raspberry Pi (via GitHub Actions — recommended)
 
-macOS binaries must be built on Apple hardware. Push a version tag to trigger the CI workflow, which uses free GitHub Actions macOS runners:
+macOS binaries must be built on Apple hardware, and the Pi `.deb` builds fastest on GitHub's free native ARM64 runners. Push a version tag to trigger CI:
 
 ```bash
+# Builds Windows, Linux, and both macOS .dmg files, publishes the GitHub Release
 git tag v1.0.0 && git push origin v1.0.0
+
+# Builds the Pi .deb on a native ARM64 runner (~15 min) and attaches it
+# to the matching release; use -pi2, -pi3… suffixes to re-trigger
+git tag v1.0.0-pi && git push origin v1.0.0-pi
 ```
 
-The Actions workflow (`.github/workflows/release.yml`) builds both Apple Silicon (ARM64) and Intel (x86_64) `.dmg` files and uploads them to the GitHub Release automatically.
+The Pi workflow (`.github/workflows/release-pi.yml`) can also be started from the Actions tab ("Build Raspberry Pi Release" → Run workflow) with the release tag as input.
 
 ### Two-stage Docker images (fast rebuilds)
 
@@ -197,7 +215,8 @@ All artifacts land in `dist/` with consistent naming:
 |----------|------|
 | Windows | `dist/CCTV-Processor-{version}-win64-setup.exe` |
 | Linux | `dist/CCTV-Processor-{version}-linux-x86_64.AppImage` |
-| Raspberry Pi | `dist/CCTV-Processor-{version}-pi-arm64.deb` |
+| Raspberry Pi (local Docker build) | `dist/CCTV-Processor-{version}-pi-arm64.deb` |
+| Raspberry Pi (CI build) | `cctv-video-processor_{version}_arm64.deb` on the GitHub Release |
 | macOS | uploaded to GitHub Release by CI |
 
 ---
@@ -230,6 +249,9 @@ The app is two processes glued together by `launcher.py`:
 - **Shell** (`shell/`) — the native window: opens file dialogs, handles drag-and-drop
   from Explorer, bridges native OS features into the web UI via a small JS bridge,
   and manages the system tray icon.
+- **Headless fallback** — when PyQt6 isn't bundled (the Raspberry Pi build),
+  `launcher.py` detects this at startup and serves the same web UI to the system
+  browser instead of an embedded window; the backend and frontend are unchanged.
 
 ### The processing pipeline
 
@@ -344,6 +366,10 @@ review/filter on a timeline → export.
   descriptions; 90 s hard timeout per task (64 max tokens) so the report always
   completes; CLIP ViT-B/32 indexes frames as semantic embeddings (`.clip.npy` sidecars)
   for future natural-language search
+- **AI Models card (Home page)** — shows AI availability at a glance and downloads the
+  model weights (~800 MB) in the background with live progress, so skipping the setup
+  wizard is never a dead end; when AI can't run it says exactly why (weights missing
+  vs. device below the 5 GB RAM requirement)
 - **Report format choice** — a pre-generation modal lets you pick Markdown, PDF, or
   both; choice is remembered across sessions
 - **Real-time 4-stage report progress** — live SSE bars for Thumbnails → AI Analysis
@@ -427,7 +453,8 @@ CCTV VIDEO PROCESSOR PC/
 │   └── pi/create_deb.sh
 ├── .github/workflows/
 │   ├── release.yml          ← builds Windows/macOS/Linux on v*.*.* tag push
-│   └── release-pi.yml       ← manual Pi ARM64 .deb build (45-90 min QEMU)
+│   └── release-pi.yml       ← Pi ARM64 .deb on native ARM runner (~15 min);
+│                               v*.*.*-pi* tag push or manual dispatch
 ├── specs/                   ← spec-driven design docs per feature (spec/plan/tasks)
 ├── docs/superpowers/        ← implementation plans for AI-assisted work sessions
 └── tests/                   ← pytest suite (backend only — see below)
@@ -441,8 +468,8 @@ CCTV VIDEO PROCESSOR PC/
 python -m pytest tests/ -v
 ```
 
-Expected: **≥ 220 passed, ≤ 2 skipped** (the skips are pre-existing video-dependent
-cases; all Phase 11–12 tests run without a real video file, GPU, or display server).
+Expected: **≥ 239 passed, ≤ 2 skipped** (the skips are pre-existing video-dependent
+cases; all Phase 11–13 tests run without a real video file, GPU, or display server).
 
 The backend follows test-first development — every engine (`detection_engine`,
 `yolo_detector`, `export_engine`) is covered in isolation via its callback interface,
