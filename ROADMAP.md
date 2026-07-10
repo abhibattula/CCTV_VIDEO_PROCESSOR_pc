@@ -16,7 +16,12 @@ suppression, FrameAnalyzer availability cache; Phase 10: test coverage gaps —
 path fixes; Phase 12: PyInstaller distributable — Windows .exe, macOS .dmg,
 Linux .AppImage, Pi .deb; first-run AI model download wizard; GitHub Actions
 CI/CD; HF_HOME env var chain; CLIP disk-presence check; macOS tray Trigger fix;
-~220 tests total). Nothing here is scheduled or committed — when one of these gets
+Phase 13: v1.0.0 released on GitHub with all 5 platform installers built from
+CI — windowed-exe stream fix, PyQt6 stale VC++ runtime fix (torch c10.dll
+WinError 1114), in-app AI Models download card + availability diagnostics,
+headless Pi build (web UI in system browser; PyQt6 has no Bookworm-compatible
+aarch64 wheels), native ARM64 CI runner for the Pi .deb; ~240 tests total).
+Nothing here is scheduled or committed — when one of these gets
 picked up, it should run through the project's normal speckit pipeline
 (`/speckit.specify` → `/speckit.clarify` → `/speckit.plan` → `/speckit.tasks` →
 `/speckit.analyze` → `/speckit.implement`) and get its own numbered spec under
