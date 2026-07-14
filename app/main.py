@@ -22,6 +22,7 @@ from app.api.shell_bridge import router as shell_router
 from app.api.preview import router as preview_router
 from app.api.system import router as system_router
 from app.api.presets import router as presets_router
+from app.api.search import router as search_router
 
 logger = logging.getLogger(__name__)
 
@@ -104,6 +105,7 @@ def create_app() -> FastAPI:
     app.include_router(preview_router, prefix="/api")
     app.include_router(system_router, prefix="/api")
     app.include_router(presets_router, prefix="/api")
+    app.include_router(search_router, prefix="/api")
 
     # ── Static files ───────────────────────────────────────────────────────────
     if static_root.exists():
