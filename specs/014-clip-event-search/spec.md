@@ -106,6 +106,8 @@ unchanged.
 
 ### Edge Cases
 
+- Detection still running → the search box is disabled until the run
+  completes; the index is always built over the final event set.
 - Query submitted while indexing is still running → user sees the indexing
   progress state, not an error; query runs when ready (or user retries).
 - Empty or whitespace-only query → treated as clearing the search, never sent.
