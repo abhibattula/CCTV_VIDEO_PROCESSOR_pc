@@ -367,9 +367,16 @@ review/filter on a timeline → export.
   completes; CLIP ViT-B/32 indexes frames as semantic embeddings (`.clip.npy` sidecars)
   for future natural-language search
 - **AI Models card (Home page)** — shows AI availability at a glance and downloads the
-  model weights (~800 MB) in the background with live progress, so skipping the setup
+  model weights (~1 GB) in the background with live progress, so skipping the setup
   wizard is never a dead end; when AI can't run it says exactly why (weights missing
   vs. device below the 5 GB RAM requirement)
+- **Natural-language event search** — type a plain-English description on the Timeline
+  ("person in a red jacket", "white van at the gate") and every event card gets a
+  relevance badge from CLIP visual similarity; sort by relevance or keep chronological
+  order, and dim weak matches with a threshold slider. The index builds itself in the
+  background on first use (seconds, reusing embeddings from any prior Intelligence
+  Report) and search stays cleanly disabled with an explanation when the AI models
+  aren't installed
 - **Report format choice** — a pre-generation modal lets you pick Markdown, PDF, or
   both; choice is remembered across sessions
 - **Real-time 4-stage report progress** — live SSE bars for Thumbnails → AI Analysis

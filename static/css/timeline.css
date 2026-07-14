@@ -192,3 +192,46 @@
   width: 100%;
   justify-content: center;
 }
+
+/* ── Natural-language search (014-clip-event-search) ─────────────────────── */
+.search-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  padding: 6px 0;
+}
+.search-bar input[type="text"] {
+  flex: 1 1 260px;
+  min-width: 200px;
+  padding: 7px 10px;
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+  background: var(--surface2);
+  color: var(--text);
+  font-size: 13px;
+}
+.search-bar input[type="text"]:disabled { opacity: 0.55; cursor: not-allowed; }
+.search-bar #search-clear { padding: 4px 10px; font-size: 12px; }
+.search-controls {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+}
+.search-controls label { margin: 0; text-transform: none; letter-spacing: 0; font-size: 12px; }
+.search-controls #sort-toggle { padding: 4px 10px; font-size: 12px; }
+.search-bar #search-status { font-size: 12px; }
+
+.relevance-badge {
+  background: var(--accent, #4f8ef7);
+  color: #fff;
+  border-radius: 10px;
+  padding: 2px 8px;
+  font-size: 11px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+/* Dimmed by the relevance slider — dims, never hides (spec FR-004) */
+.event-card.search-dimmed { opacity: 0.35; }

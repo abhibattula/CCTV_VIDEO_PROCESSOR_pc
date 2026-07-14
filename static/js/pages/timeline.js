@@ -31,6 +31,19 @@ export function mount(container) {
   container.innerHTML = `
     <div class="timeline-layout">
       <div class="timeline-toolbar" id="tl-toolbar">
+        <div class="search-bar" id="search-bar">
+          <input type="text" id="search-input" autocomplete="off"
+            placeholder="Describe what you're looking for — e.g. person in a red jacket" disabled>
+          <button class="btn hidden" id="search-clear" title="Clear search">✕</button>
+          <div class="search-controls hidden" id="search-controls">
+            <label>Sort:</label>
+            <button class="btn" id="sort-toggle">Chronological</button>
+            <label>Relevance ≥</label>
+            <input type="range" id="relevance-threshold" min="0" max="100" step="5" value="0">
+            <span id="relevance-val">0%</span>
+          </div>
+          <span class="muted" id="search-status"></span>
+        </div>
         <div class="filter-bar" id="filter-bar"></div>
         <div style="display:flex;align-items:center;gap:var(--gap);flex-wrap:wrap;padding:6px 0">
           <div class="score-slider-wrap">
@@ -67,6 +80,17 @@ export function mount(container) {
   let job    = {};
   let focusedIdx = null;
 
+  // Search state is page-local by design: it resets on every page entry /
+  // New Project (specs/014-clip-event-search — research.md D6).
+  const search = {
+    scores: null,          // Map(event_index -> raw cosine score) | null
+    query: '',
+    sortMode: 'chrono',    // 'chrono' | 'relevance'
+    threshold: 0,          // relevance % below which cards dim
+    pollTimer: null,
+    indexRequested: false,
+  };
+
   // ── Data loading ───────────────────────────────────────────────────────────
 
   async function load() {
@@ -77,6 +101,7 @@ export function mount(container) {
     buildFilterBar();
     renderFiltered();
     buildLabelSummary();
+    updateSearchAvailability();
   }
 
   // ── Filter helpers ─────────────────────────────────────────────────────────
@@ -138,8 +163,24 @@ export function mount(container) {
 
   // ── Render ─────────────────────────────────────────────────────────────────
 
+  function relevancePct(ev) {
+    if (!search.scores) return null;
+    const s = search.scores.get(ev.event_index);
+    if (s === undefined) return null;   // embed failed for this event → no badge
+    return Math.round(Math.max(s, 0) * 100);
+  }
+
   function renderFiltered() {
-    const visible = getVisibleEvents();
+    let visible = getVisibleEvents();
+    // Relevance sort is view-only: it reorders the rendered cards and nothing
+    // else (include/exclude state, canvas strip, export are untouched).
+    if (search.scores && search.sortMode === 'relevance') {
+      visible = [...visible].sort((a, b) => {
+        const sa = search.scores.get(a.event_index);
+        const sb = search.scores.get(b.event_index);
+        return (sb === undefined ? -2 : sb) - (sa === undefined ? -2 : sa);
+      });
+    }
     container.querySelector('#ev-count').textContent =
       `${visible.length} shown / ${events.length} total`;
     drawCanvas();
@@ -180,16 +221,21 @@ export function mount(container) {
       const isFocused  = focusedIdx === idx;
       const hasClockTime = ev.start_clock && ev.end_clock;
 
+      const relPct = relevancePct(ev);
+      const dimmed = relPct !== null && relPct < search.threshold;
+
       const card = document.createElement('div');
       card.className = 'event-card'
         + (ev.included ? '' : ' excluded')
         + (isSelected  ? ' selected' : '')
-        + (isFocused   ? ' focused'  : '');
+        + (isFocused   ? ' focused'  : '')
+        + (dimmed      ? ' search-dimmed' : '');
       card.dataset.idx = idx;
 
       card.innerHTML = `
         <input type="checkbox" class="card-checkbox" ${isSelected ? 'checked' : ''}>
         <div class="event-idx">#${idx + 1}</div>
+        ${relPct !== null ? `<span class="relevance-badge" title="Relevance to “${escapeHtml(search.query)}”">${relPct}%</span>` : ''}
         <div class="event-times">
           <div class="primary">${hasClockTime ? `${ev.start_clock} → ${ev.end_clock}` : `${fmt(ev.start_s)} → ${fmt(ev.end_s)}`}</div>
           <div class="secondary muted">
@@ -508,6 +554,164 @@ export function mount(container) {
 
   container.querySelector('#quick-export-btn').addEventListener('click', () => window.go('/export'));
 
+  // ── Natural-language search (014-clip-event-search) ───────────────────────
+
+  const searchInput    = container.querySelector('#search-input');
+  const searchClear    = container.querySelector('#search-clear');
+  const searchControls = container.querySelector('#search-controls');
+  const searchStatus   = container.querySelector('#search-status');
+  const sortToggle     = container.querySelector('#sort-toggle');
+  const relSlider      = container.querySelector('#relevance-threshold');
+  const relVal         = container.querySelector('#relevance-val');
+
+  function setSearchDisabled(reason) {
+    searchInput.disabled = true;
+    searchInput.title = reason;
+    searchStatus.textContent = reason;
+  }
+
+  function stopSearchPoll() {
+    if (search.pollTimer) { clearInterval(search.pollTimer); search.pollTimer = null; }
+  }
+
+  async function updateSearchAvailability() {
+    if (!job.job_id || events.length === 0) {
+      setSearchDisabled(events.length === 0 && job.job_id
+        ? 'No events to search'
+        : 'Load a video and run detection first');
+      return;
+    }
+    if (job.status === 'detecting') {
+      setSearchDisabled('Search is available after detection completes');
+      return;
+    }
+    try {
+      const st = await fetch('/api/search/status').then(r => r.json());
+      if (st.state === 'unavailable') {
+        setSearchDisabled(
+          (st.reason || 'AI search is unavailable on this device.')
+          + ' — download AI models from the Home page AI Models card.');
+        return;
+      }
+      searchInput.disabled = false;
+      searchInput.title = '';
+      searchStatus.textContent = st.state === 'ready' ? '' : '';
+    } catch {
+      setSearchDisabled('Search status unavailable');
+    }
+  }
+
+  async function ensureIndex() {
+    if (search.indexRequested) return;
+    search.indexRequested = true;
+    try {
+      const resp = await fetch('/api/search/index', { method: 'POST' });
+      const body = await resp.json();
+      if (!resp.ok) {
+        setSearchDisabled(body.detail || 'Search indexing failed');
+        return;
+      }
+      handleIndexStatus(body.status);
+    } catch (err) {
+      searchStatus.textContent = 'Indexing failed: ' + err.message;
+    }
+  }
+
+  function handleIndexStatus(st) {
+    if (st.state === 'ready') {
+      stopSearchPoll();
+      searchStatus.textContent = '';
+      return;
+    }
+    if (st.state === 'unavailable' || st.state === 'error') {
+      stopSearchPoll();
+      setSearchDisabled(
+        (st.reason || 'Search unavailable')
+        + (st.state === 'unavailable'
+           ? ' — download AI models from the Home page AI Models card.' : ''));
+      return;
+    }
+    // indexing (or idle about to flip) — show progress and poll
+    searchStatus.textContent = `Indexing ${st.done} of ${st.total} events…`;
+    if (!search.pollTimer) {
+      search.pollTimer = setInterval(async () => {
+        if (!document.body.contains(container)) { stopSearchPoll(); return; }
+        try {
+          const cur = await fetch('/api/search/status').then(r => r.json());
+          handleIndexStatus(cur);
+          if (cur.state === 'ready' && searchInput.value.trim()) runQuery();
+        } catch { /* transient — next tick retries */ }
+      }, 1000);
+    }
+  }
+
+  async function runQuery() {
+    const text = searchInput.value.trim();
+    if (!text) { clearSearch(); return; }
+    try {
+      const resp = await fetch('/api/search/query', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text }),
+      });
+      if (resp.status === 409) {
+        const body = await resp.json();
+        handleIndexStatus(body.detail.status || { state: 'error', reason: '' });
+        return;
+      }
+      if (!resp.ok) return;
+      const { results } = await resp.json();
+      search.query  = text;
+      search.scores = new Map(results.map(r => [r.event_index, r.score]));
+      searchClear.classList.remove('hidden');
+      searchControls.classList.remove('hidden');
+      searchStatus.textContent = '';
+      renderFiltered();
+    } catch (err) {
+      searchStatus.textContent = 'Search failed: ' + err.message;
+    }
+  }
+
+  function clearSearch() {
+    search.query = '';
+    search.scores = null;
+    search.sortMode = 'chrono';
+    search.threshold = 0;
+    searchInput.value = '';
+    sortToggle.textContent = 'Chronological';
+    relSlider.value = 0;
+    relVal.textContent = '0%';
+    searchClear.classList.add('hidden');
+    searchControls.classList.add('hidden');
+    searchStatus.textContent = '';
+    renderFiltered();
+  }
+
+  let searchDebounce = null;
+  searchInput.addEventListener('focus', ensureIndex, { once: false });
+  searchInput.addEventListener('input', () => {
+    clearTimeout(searchDebounce);
+    if (!searchInput.value.trim()) { clearSearch(); return; }
+    searchDebounce = setTimeout(runQuery, 450);
+  });
+  searchInput.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') { e.preventDefault(); clearTimeout(searchDebounce); runQuery(); }
+    if (e.key === 'Escape') { clearSearch(); searchInput.blur(); }
+  });
+  searchClear.addEventListener('click', clearSearch);
+
+  sortToggle.addEventListener('click', () => {
+    search.sortMode = search.sortMode === 'chrono' ? 'relevance' : 'chrono';
+    sortToggle.textContent = search.sortMode === 'relevance' ? 'Relevance' : 'Chronological';
+    renderFiltered();
+  });
+
+  relSlider.addEventListener('input', () => {
+    search.threshold = parseInt(relSlider.value, 10);
+    relVal.textContent = `${search.threshold}%`;
+    renderFiltered();
+  });
+
   // ── Events-list keyboard nav (T024) ───────────────────────────────────────
 
   const listEl = container.querySelector('#events-list');
@@ -592,9 +796,15 @@ export function mount(container) {
   container._cleanup = () => {
     window.removeEventListener('resize', drawCanvas);
     window.removeEventListener('keydown', onWindowKey);
+    stopSearchPoll();
   };
 
   load();
+}
+
+function escapeHtml(s) {
+  return String(s).replace(/[&<>"']/g, c =>
+    ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 }
 
 function fmt(s) {

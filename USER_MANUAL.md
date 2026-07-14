@@ -264,6 +264,33 @@ After detection completes, you're taken to the Timeline page.
 
 - If a bulk-exclude (or a string of individual toggles) leaves **zero events included**, a warning appears: *"No events selected for export — adjust filters or include more events."* It clears itself as soon as anything is included again.
 
+#### Searching events by description (AI)
+
+Above the filter bar is a **search box**: type what you're looking for in plain
+English — "person in a red jacket", "white van near the gate", "someone at the
+door at night" — and press Enter (or just pause typing).
+
+- **First use per video:** the app indexes your events in the background —
+  "Indexing N of M events…" appears for a few seconds, then search activates.
+  If you already generated an Intelligence Report, its AI data is reused and
+  indexing is instant.
+- **Relevance badges:** every indexed event card gets a percentage showing how
+  visually similar its thumbnail is to your description. Higher = closer match.
+- **Sort toggle:** switch between **Chronological** (time order, badges shown
+  in place) and **Relevance** (best matches first). This is view-only — it
+  never changes which events are included for export.
+- **Relevance ≥ slider:** dims events below the chosen relevance so strong
+  matches stand out. Dimmed events are still there (and still exportable) —
+  unlike the label filter, nothing is hidden.
+- **Clearing** the box (✕ or Escape) restores the normal timeline instantly.
+- Search **combines** with the label chips and score slider — all filters
+  apply together.
+
+Search requires the AI models (same ones as the Intelligence Report). Without
+them the box is disabled with a note pointing to the Home page **AI Models
+card**. Search looks at each event's representative thumbnail — one frame per
+event, not every video frame.
+
 #### Keyboard shortcuts
 
 The whole review step can be done without a mouse:
