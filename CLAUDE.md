@@ -1,5 +1,5 @@
 <!-- SPECKIT START -->
 For additional context about technologies to be used, project structure,
 shell commands, and other important information, read the current plan
-at specs/013-docker-platform-builds/plan.md
+at specs/014-clip-event-search/plan.md
 <!-- SPECKIT END -->
