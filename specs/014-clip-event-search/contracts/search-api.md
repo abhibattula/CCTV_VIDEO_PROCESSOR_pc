@@ -17,6 +17,7 @@ Start (or join) the on-demand index build for the current job.
 | Detection running | 400 | `{"detail": "Detection is still in progress"}` |
 | Started new build | 200 | `{"started": true,  "status": {…IndexStatus}}` |
 | Build already running / already ready for this job | 200 | `{"started": false, "status": {…IndexStatus}}` |
+| Previous build ended in `error` for this job | 200 | `{"started": true, "status": {…}}` — an index request from `error` always retries with a fresh build |
 | CLIP unavailable | 200 | `{"started": false, "status": {"state": "unavailable", "reason": "...", …}}` |
 
 Idempotent: any number of calls yields at most one build thread per job.

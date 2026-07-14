@@ -24,6 +24,7 @@ are UI-level only.
 | 10 | During detection | Start a detection run; open Timeline mid-run | Search box disabled ("available after detection"); enables after completion |
 | 11 | Selection/export untouched | With relevance sort active, multi-select + exclude two events, then export | Include/exclude and export behave identically to chronological mode |
 | 12 | Pi headless smoke (optional, hardware) | On the Pi build with AI models, repeat scenarios 1–2 in the system browser | Same behavior; indexing slower but functional |
+| 13 | SC-003 quality trial | On real footage with ≥ 20 events, run 10 queries each describing distinctive visible content of a specific event; record the described event's rank each time | Described event ranks in the top 3 for at least 8 of the 10 queries |
 
 Record PASS/FAIL per scenario in the PR description before marking the
 corresponding frontend tasks complete.

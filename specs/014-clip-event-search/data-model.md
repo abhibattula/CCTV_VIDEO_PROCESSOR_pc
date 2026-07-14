@@ -54,6 +54,9 @@ Principle I note in plan.md).
 
 - `start_background_index()` is idempotent: returns `False` (no new thread)
   when `state == indexing` for the same job (FR-009).
+- `error` is recoverable without a job change: a new
+  `start_background_index()` request from `error` discards the failed run and
+  starts fresh (`started: true`) — errors never wedge a job.
 - Staleness: a request whose `(job_id, event_count)` differs from the stored
   pair resets to `idle` and rebuilds (FR-010 + detection re-run edge case).
 - Per-event embed failure: logged, event skipped, `done` still advances —

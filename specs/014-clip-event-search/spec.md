@@ -26,8 +26,9 @@ higher relevance percentage than unrelated events.
 **Acceptance Scenarios**:
 
 1. **Given** a completed detection with events and a ready search index,
-   **When** the user submits a text query, **Then** every event card shows a
-   relevance percentage for that query within 2 seconds.
+   **When** the user submits a text query, **Then** every successfully
+   indexed event's card shows a relevance percentage for that query within
+   2 seconds (events whose embedding failed show no badge — see US3).
 2. **Given** a submitted query, **When** the user switches the sort toggle to
    "Relevance", **Then** events reorder best-match-first; switching back to
    "Chronological" restores time order while keeping the badges.
@@ -124,8 +125,8 @@ unchanged.
 ### Functional Requirements
 
 - **FR-001**: Users MUST be able to enter a free-text description on the
-  Timeline page and receive a per-event relevance score for the current job's
-  events.
+  Timeline page and receive a relevance score for each successfully indexed
+  event of the current job.
 - **FR-002**: Relevance MUST be displayed on each event card as a percentage
   badge (0–100), where higher means visually closer to the description.
 - **FR-003**: Users MUST be able to toggle between relevance-ordered and
@@ -171,7 +172,8 @@ unchanged.
 ### Measurable Outcomes
 
 - **SC-001**: For a job of 50 events with a ready index, submitting a query
-  updates every event's relevance badge in under 2 seconds.
+  updates the relevance badge of every successfully indexed event in under
+  2 seconds.
 - **SC-002**: First-time indexing of 50 events completes in under 90 seconds
   on a typical desktop CPU, with visible progress throughout.
 - **SC-003**: A query describing distinctive visible content in one event

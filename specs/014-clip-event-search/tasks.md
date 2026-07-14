@@ -55,7 +55,7 @@
 ## Phase 6: Polish & Cross-Cutting
 
 - [ ] T018 Run the full suite `python -m pytest tests/ -q`: everything green, ≥ 12 new tests total (SC-006), zero pre-existing failures (SC-005).
-- [ ] T019 [P] Execute quickstart.md scenarios 1–11 against the running app (scenario 12 optional/hardware) and record PASS/FAIL in the PR description; fix any UI defects found and re-verify.
+- [ ] T019 [P] Execute quickstart.md scenarios 1–11 and 13 (the SC-003 8-of-10 quality trial) against the running app (scenario 12 optional/hardware) and record PASS/FAIL in the PR description; fix any UI defects found and re-verify.
 - [ ] T020 [P] Documentation: README.md Features list + USER_MANUAL.md new "Searching events by description" section (search box, badges, sort toggle, slider, indexing wait, unavailable state); note thumbnails-only scope.
 
 ## Dependencies & Execution Order
