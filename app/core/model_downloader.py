@@ -49,15 +49,20 @@ def build_model_list() -> list[dict]:
             "url": None,  # uses huggingface_hub.snapshot_download()
             "dest": None,
             "sha256": None,
+            "hf_repo": "microsoft/Florence-2-base",
             "size": 444_000_000,
             "required": False,
         })
         models.append({
+            # The direct openaipublic.azureedge.net URL is dead (404 — the CDN
+            # was retired); open_clip 3.x reads the OpenAI checkpoint from
+            # this HF hub repo, so download it there via huggingface_hub.
             "name": "CLIP ViT-B/32",
-            "url": "https://openaipublic.azureedge.net/clip/models/40d36571/ViT-B-32.pt",
-            "dest": Path.home() / ".cache" / "clip" / "ViT-B-32.pt",
-            "sha256": "40d365715913c9da98579312b702a82c18be219cc2a73407c4526f58eba950af",
-            "size": 353_976_371,
+            "url": None,
+            "dest": None,
+            "sha256": None,
+            "hf_repo": "timm/vit_base_patch32_clip_224.openai",
+            "size": 605_000_000,
             "required": False,
         })
 
@@ -106,18 +111,32 @@ def verify_sha256(path: Path, expected: str) -> bool:
 # Download orchestration (plain functions — callable from any thread)
 # ---------------------------------------------------------------------------
 
-def download_florence2(log_cb: LogCb = None, progress_cb: ProgressCb = None) -> None:
-    """Download Florence-2 weights via HuggingFace Hub. Raises on failure."""
-    _log(log_cb, "Florence-2: downloading via HuggingFace Hub")
+def download_hf_snapshot(
+    repo_id: str,
+    log_cb: LogCb = None,
+    progress_cb: ProgressCb = None,
+    name: str = "",
+) -> None:
+    """Download a model repo via HuggingFace Hub into the HF cache. Raises on failure."""
+    label = name or repo_id
+    _log(log_cb, f"{label}: downloading via HuggingFace Hub ({repo_id})")
     from huggingface_hub import snapshot_download
     snapshot_download(
-        repo_id="microsoft/Florence-2-base",
+        repo_id=repo_id,
         local_dir=None,
         ignore_patterns=["*.msgpack", "flax_model*", "tf_model*"],
     )
-    _log(log_cb, "Florence-2: downloaded OK")
+    _log(log_cb, f"{label}: downloaded OK")
     if progress_cb:
-        progress_cb("Florence-2", 100)
+        progress_cb(label, 100)
+
+
+def download_florence2(log_cb: LogCb = None, progress_cb: ProgressCb = None) -> None:
+    """Download Florence-2 weights via HuggingFace Hub. Raises on failure."""
+    download_hf_snapshot(
+        "microsoft/Florence-2-base", log_cb=log_cb, progress_cb=progress_cb,
+        name="Florence-2",
+    )
 
 
 def download_one(model: dict, progress_cb: ProgressCb = None, log_cb: LogCb = None) -> bool:
@@ -131,8 +150,14 @@ def download_one(model: dict, progress_cb: ProgressCb = None, log_cb: LogCb = No
     dest: Optional[Path] = model.get("dest")
     sha256: Optional[str] = model.get("sha256")
 
-    # Florence-2: HuggingFace Hub handles caching/download
+    # HF-hub-hosted models (Florence-2, CLIP): huggingface_hub handles
+    # caching/download/verification.
+    hf_repo: Optional[str] = model.get("hf_repo")
+    if hf_repo:
+        download_hf_snapshot(hf_repo, log_cb=log_cb, progress_cb=progress_cb, name=name)
+        return True
     if url is None and dest is None:
+        # Legacy shape (pre-hf_repo Florence entry) — kept for compatibility
         download_florence2(log_cb=log_cb, progress_cb=progress_cb)
         return True
 

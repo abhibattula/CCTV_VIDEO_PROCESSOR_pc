@@ -16,7 +16,13 @@ class ClipIndexer:
 
     @classmethod
     def is_available(cls) -> bool:
-        """Return True if open-clip-torch is installed AND ViT-B-32.pt is on disk."""
+        """Return True if open-clip-torch is installed AND CLIP weights are on disk.
+
+        open_clip 3.x downloads the OpenAI checkpoint from the HF hub (the old
+        openaipublic.azureedge.net URL is dead), so weights may live in either:
+        - the legacy clip cache: <clip cache root>/ViT-B-32.pt, or
+        - the HF hub cache: <hf cache>/hub/models--timm--vit_base_patch32_clip_224.openai
+        """
         try:
             import open_clip  # noqa: F401
         except Exception:
@@ -30,7 +36,16 @@ class ClipIndexer:
             cache_root = Path(xdg) / "clip"
         else:
             cache_root = Path.home() / ".cache" / "clip"
-        return (cache_root / "ViT-B-32.pt").exists()
+        if (cache_root / "ViT-B-32.pt").exists():
+            return True
+
+        hf_home = (
+            os.environ.get("HF_HOME")
+            or os.environ.get("HUGGINGFACE_HUB_CACHE")
+            or str(Path.home() / ".cache" / "huggingface")
+        )
+        hub_dir = Path(hf_home) / "hub" / "models--timm--vit_base_patch32_clip_224.openai"
+        return hub_dir.exists()
 
     @classmethod
     def embed(cls, image_path: Path) -> Optional[str]:

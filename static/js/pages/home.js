@@ -172,7 +172,7 @@ export function mount(container, params) {
     body.innerHTML = `
       <p style="margin:0 0 4px">AI Analysis is not set up — missing: ${missing.join(", ")}.</p>
       ${reason}${errNote}
-      <button class="btn btn-primary" id="ai-download-btn">Download AI Models (~800 MB)</button>
+      <button class="btn btn-primary" id="ai-download-btn">Download AI Models (~1 GB)</button>
       <p class="muted" style="margin:6px 0 0;font-size:0.85em">
         Requires an internet connection. Everything else in the app stays fully offline.</p>`;
 

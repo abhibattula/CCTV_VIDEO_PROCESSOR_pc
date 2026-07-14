@@ -49,19 +49,42 @@ def test_embed_never_raises_to_caller(monkeypatch):
 # ---------------------------------------------------------------------------
 
 def test_is_available_requires_disk_file(monkeypatch, tmp_path):
-    """is_available() must return False when open_clip is importable but ViT-B-32.pt absent."""
+    """is_available() must return False when open_clip is importable but no
+    weights exist at either the legacy clip cache or the HF hub cache."""
     import sys
 
     # Simulate open_clip installed
     mock_open_clip = type(sys)("open_clip")
     monkeypatch.setitem(sys.modules, "open_clip", mock_open_clip)
 
-    # Point CLIP_CACHE_DIR to tmp_path (no ViT-B-32.pt there yet)
+    # Point both cache roots at empty tmp dirs (isolate from the real machine)
     monkeypatch.setenv("CLIP_CACHE_DIR", str(tmp_path))
     monkeypatch.delenv("XDG_CACHE_HOME", raising=False)
+    monkeypatch.setenv("HF_HOME", str(tmp_path / "hf"))
+    monkeypatch.delenv("HUGGINGFACE_HUB_CACHE", raising=False)
 
     result = ClipIndexer.is_available()
-    assert result is False, "is_available() should be False when ViT-B-32.pt absent"
+    assert result is False, "is_available() should be False when no weights exist anywhere"
+
+
+def test_is_available_true_when_hf_hub_cache_present(monkeypatch, tmp_path):
+    """open_clip 3.x downloads OpenAI CLIP weights from the HF hub (the old
+    openaipublic.azureedge.net URL is dead) — is_available() must recognise
+    the HF hub cache location, not just the legacy ~/.cache/clip file."""
+    import sys
+
+    mock_open_clip = type(sys)("open_clip")
+    monkeypatch.setitem(sys.modules, "open_clip", mock_open_clip)
+
+    hf_home = tmp_path / "hf"
+    (hf_home / "hub" / "models--timm--vit_base_patch32_clip_224.openai").mkdir(parents=True)
+
+    monkeypatch.setenv("CLIP_CACHE_DIR", str(tmp_path / "empty-clip"))
+    monkeypatch.delenv("XDG_CACHE_HOME", raising=False)
+    monkeypatch.setenv("HF_HOME", str(hf_home))
+    monkeypatch.delenv("HUGGINGFACE_HUB_CACHE", raising=False)
+
+    assert ClipIndexer.is_available() is True
 
 
 def test_is_available_true_when_weight_file_present(monkeypatch, tmp_path):

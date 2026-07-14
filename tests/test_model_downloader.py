@@ -32,6 +32,27 @@ def test_build_model_list_all_models_when_ai_enabled(monkeypatch):
     assert "CLIP ViT-B/32" in names
 
 
+def test_build_model_list_clip_downloads_via_hf_hub(monkeypatch):
+    """The direct openaipublic.azureedge.net URL is dead (404 — CDN retired);
+    the CLIP entry must delegate to the HF hub repo open_clip 3.x reads from."""
+    import app.config as cfg
+    monkeypatch.setattr(cfg, "AI_FEATURES_ENABLED", True)
+    clip = next(m for m in md.build_model_list() if m["name"] == "CLIP ViT-B/32")
+    assert clip.get("hf_repo") == "timm/vit_base_patch32_clip_224.openai"
+    assert clip.get("url") is None  # no dead direct URL
+
+
+def test_download_one_dispatches_hf_repo_models(monkeypatch):
+    """Any model carrying hf_repo must download via download_hf_snapshot."""
+    calls = []
+    monkeypatch.setattr(md, "download_hf_snapshot",
+                        lambda repo_id, log_cb=None, progress_cb=None, name="": calls.append(repo_id))
+    model = {"name": "CLIP ViT-B/32", "url": None, "dest": None, "sha256": None,
+             "hf_repo": "timm/vit_base_patch32_clip_224.openai", "size": 1, "required": False}
+    assert md.download_one(model) is True
+    assert calls == ["timm/vit_base_patch32_clip_224.openai"]
+
+
 # ---------------------------------------------------------------------------
 # verify_sha256
 # ---------------------------------------------------------------------------
