@@ -71,9 +71,9 @@
 
 ## Phase 6: Polish & Cross-Cutting
 
-- [ ] T022 Run the full suite `python -m pytest tests/ -q`: everything green, ≥ 12 new tests total (SC-005), zero pre-existing failures.
-- [ ] T023 [P] E2E benchmark + parity verification against the real app and reference asset (script in scratchpad, like Phase 14's e2e_search.py): create job → Thorough run (record wall time + events) → Balanced run (record wall time + events + selected decoder) → assert SC-001 (≥3×), SC-002 (count ±1, overlapping ranges), SC-007 (cancel mid-run → no ffmpeg process remains, immediate re-run works) → **forced-software Balanced run** (env flag/monkeypatch skipping hw candidates) asserting SC-004 (≥1.2× vs Thorough). Record all numbers in the PR description.
-- [ ] T024 [P] Execute quickstart.md scenarios 1–12 (visual scenarios need the user at the real UI; backend-driveable ones may be script-verified) and record PASS/FAIL in the PR description; fix any defects found and re-verify.
+- [x] T022 Run the full suite `python -m pytest tests/ -q`: everything green, ≥ 12 new tests total (SC-005), zero pre-existing failures.
+- [x] T023 [P] E2E benchmark + parity verification against the real app and reference asset (script in scratchpad, like Phase 14's e2e_search.py): create job → Thorough run (record wall time + events) → Balanced run (record wall time + events + selected decoder) → assert SC-001 (≥3×), SC-002 (count ±1, overlapping ranges), SC-007 (cancel mid-run → no ffmpeg process remains, immediate re-run works) → **forced-software Balanced run** (env flag/monkeypatch skipping hw candidates) asserting SC-004 (≥1.2× vs Thorough). Record all numbers in the PR description.
+- [ ] T024 [P] (PARTIAL 2026-07-15: backend-driveable scenarios verified by e2e_fastscan.py against the real app — #2 balanced 16.1s w/ qsv, #3 thorough 84.0s, #4 SC-001 5.21x + parity, #7 cancel no-orphan + 14.1s re-run, #10 fallback via unit tests, #12 docs done. REMAINING: visual scenarios 1, 5, 6, 8, 9, 11 need a human at the UI.) Execute quickstart.md scenarios 1–12 (visual scenarios need the user at the real UI; backend-driveable ones may be script-verified) and record PASS/FAIL in the PR description; fix any defects found and re-verify.
 - [x] T025 [P] Documentation: README.md (Features + performance note), USER_MANUAL.md ("Scan speed" section: presets, trade-offs, acceleration status line, 24-hour-footage guidance recommending Balanced).
 
 ## Dependencies & Execution Order
