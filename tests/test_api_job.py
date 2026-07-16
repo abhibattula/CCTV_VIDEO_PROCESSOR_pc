@@ -593,3 +593,40 @@ def test_create_job_cancels_inflight_detection_mocked(client, monkeypatch):
     job_module._cancel_event.clear()
     client.post("/api/job/create", json={"source_path": "/fake/video.mp4"})
     assert job_module._cancel_event.is_set()
+
+
+# ── Phase 15 T008: scan_speed on POST /job/start ──────────────────────────────
+
+@pytest.fixture
+def _no_detection(monkeypatch):
+    import app.core.detection_engine as detection_engine
+    monkeypatch.setattr(detection_engine, "run", lambda **kw: None)
+
+
+def test_start_default_scan_speed_is_balanced(client, ready_session, _no_detection):
+    import app.session as session
+    resp = client.post("/api/job/start", json={})
+    assert resp.status_code == 200
+    snap = session.snapshot()
+    assert snap["settings"]["scan_speed"] == "balanced"
+
+
+def test_start_accepts_every_preset(client, ready_session, _no_detection):
+    import app.session as session
+    for speed in ("thorough", "balanced", "fast"):
+        session.update(status="ready")
+        resp = client.post("/api/job/start", json={"scan_speed": speed})
+        assert resp.status_code == 200, f"{speed}: {resp.text}"
+        assert session.snapshot()["settings"]["scan_speed"] == speed
+
+
+def test_start_invalid_scan_speed_rejected(client, ready_session, _no_detection):
+    resp = client.post("/api/job/start", json={"scan_speed": "warp"})
+    assert resp.status_code == 422
+    assert "scan_speed" in resp.text
+
+
+def test_start_legacy_body_without_scan_speed_works(client, ready_session, _no_detection):
+    resp = client.post("/api/job/start",
+                       json={"mode": "mog2", "sensitivity": "high", "frame_skip": 2})
+    assert resp.status_code == 200

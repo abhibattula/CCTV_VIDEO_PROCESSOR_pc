@@ -47,6 +47,17 @@ export function mount(container, params) {
             </div>
           </div>
           <div class="settings-group">
+            <div class="settings-group__label">Scan Speed</div>
+            <div class="seg-group">
+              <button class="seg-btn" data-speed="thorough" title="Analyze every frame — slowest, identical to older versions">Thorough</button>
+              <button class="seg-btn active" data-speed="balanced" title="Sample 5 frames per second — several times faster, finds the same events">Balanced</button>
+              <button class="seg-btn" data-speed="fast" title="Sample 2 frames per second — fastest; very brief events may merge">Fast</button>
+            </div>
+            <div class="muted" style="font-size:0.78em;margin-top:4px;text-transform:none;letter-spacing:0">
+              Balanced is several times faster and finds the same events. Use Thorough to analyze every single frame.
+            </div>
+          </div>
+          <div class="settings-group">
             <div class="settings-group__label">Recording Start <span style="text-transform:none;letter-spacing:0;font-weight:400">(optional)</span></div>
             <input type="text" id="recording-start" placeholder="HH:MM:SS" class="recording-start-input">
           </div>
@@ -77,6 +88,7 @@ export function mount(container, params) {
       <div class="card hidden" id="ai-card">
         <div class="settings-group__label">AI Models</div>
         <div id="ai-card-body"></div>
+        <div id="accel-status" class="muted" style="margin-top:8px;font-size:0.85em"></div>
       </div>
 
       <!-- Start button -->
@@ -88,6 +100,7 @@ export function mount(container, params) {
   let selectedPath = null;
   let selectedMode = "mog2";
   let selectedSens = "medium";
+  let selectedSpeed = "balanced";
   let roiHandle = null;
   let liveZones = [];
   // Guard against a late-resolving mount-time restore fetch clobbering a
@@ -96,7 +109,7 @@ export function mount(container, params) {
   // restore IIFE below for why.
   let restoreSuperseded = false;
 
-  // Check if YOLO is available and disable button if not
+  // Check capabilities: YOLO availability + active acceleration (SC-006)
   fetch("/api/system/capabilities").then(r => r.json()).then(caps => {
     if (!caps.yolo_available) {
       const yoloBtn = container.querySelector("[data-mode='yolo']");
@@ -107,6 +120,15 @@ export function mount(container, params) {
         yoloBtn.style.cursor = "not-allowed";
         yoloBtn.textContent = "Object Detection (not installed)";
       }
+    }
+    const accelEl = container.querySelector("#accel-status");
+    if (accelEl) {
+      const names = { qsv: "Intel Quick Sync", cuda: "NVIDIA GPU", software: "software (CPU)" };
+      const sel = (caps.decode_acceleration && caps.decode_acceleration.selected) || {};
+      const parts = Object.entries(sel).map(([codec, m]) => `${codec.toUpperCase()} via ${names[m] || m}`);
+      const decodeTxt = parts.length ? parts.join(", ") : "chosen automatically on first scan";
+      accelEl.textContent =
+        `Acceleration — video decode: ${decodeTxt} · AI compute: ${caps.ai_device || "cpu"}`;
     }
   }).catch(() => {});
 
@@ -201,6 +223,15 @@ export function mount(container, params) {
       container.querySelectorAll("[data-sens]").forEach(b => b.classList.remove("active"));
       btn.classList.add("active");
       selectedSens = btn.dataset.sens;
+    });
+  });
+
+  // Scan speed toggle (Fast Scan presets — Phase 15)
+  container.querySelectorAll("[data-speed]").forEach(btn => {
+    btn.addEventListener("click", () => {
+      container.querySelectorAll("[data-speed]").forEach(b => b.classList.remove("active"));
+      btn.classList.add("active");
+      selectedSpeed = btn.dataset.speed;
     });
   });
 
@@ -415,6 +446,7 @@ export function mount(container, params) {
     const body = {
       mode:            selectedMode,
       sensitivity:     selectedSens,
+      scan_speed:      selectedSpeed,
       frame_skip:      1,
       padding_s:       parseFloat(paddingSlider.value),
       min_gap_s:       parseFloat(paddingSlider.value),

@@ -104,10 +104,18 @@ class ClipIndexer:
             import open_clip
             cls._tokenizer = open_clip.get_tokenizer("ViT-B-32-quickgelu")
         tokens = cls._tokenizer([query])
+        if cls._device() != "cpu":
+            tokens = tokens.to(cls._device())
         with torch.no_grad():
             features = cls._model.encode_text(tokens)
         features = features / features.norm(dim=-1, keepdim=True)
         return features.squeeze(0).cpu().numpy().astype("float32")  # shape (512,)
+
+    @classmethod
+    def _device(cls) -> str:
+        """AI compute device — "cuda" on CUDA machines, else "cpu" (no-op)."""
+        from app.utils import ai_device
+        return ai_device.get_ai_device()
 
     @classmethod
     def _ensure_model(cls) -> None:
@@ -118,6 +126,8 @@ class ClipIndexer:
                 "ViT-B-32-quickgelu", pretrained="openai"
             )
             cls._model.eval()
+            if cls._device() != "cpu":
+                cls._model.to(cls._device())
 
     @classmethod
     def _do_embed(cls, image_path: Path) -> Optional[str]:
@@ -128,6 +138,8 @@ class ClipIndexer:
         cls._ensure_model()
 
         image = cls._preprocess(Image.open(image_path).convert("RGB")).unsqueeze(0)
+        if cls._device() != "cpu":
+            image = image.to(cls._device())
         with torch.no_grad():
             features = cls._model.encode_image(image)
         features = features / features.norm(dim=-1, keepdim=True)

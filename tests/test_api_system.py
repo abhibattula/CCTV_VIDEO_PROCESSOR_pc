@@ -17,7 +17,44 @@ def test_system_capabilities_yolo_false_when_not_installed(client, monkeypatch):
     monkeypatch.setitem(sys.modules, "ultralytics", None)
     resp = client.get("/api/system/capabilities")
     assert resp.status_code == 200
-    assert resp.json() == {"yolo_available": False}
+    # Phase 15 extended the response shape; yolo_available semantics unchanged
+    assert resp.json()["yolo_available"] is False
+
+
+# ── Phase 15 T017: capabilities acceleration report ──────────────────────────
+
+def test_system_capabilities_acceleration_shape(client, monkeypatch):
+    import app.core.frame_source as fs
+    monkeypatch.setattr(
+        fs, "get_acceleration_status",
+        lambda: {"methods_available": ["qsv", "cuda"], "selected": {"hevc": "qsv"}},
+    )
+    import app.utils.ai_device as ai_device
+    monkeypatch.setattr(ai_device, "describe_ai_device", lambda: "cpu")
+
+    resp = client.get("/api/system/capabilities")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert "yolo_available" in data
+    assert data["ai_device"] == "cpu"
+    assert data["decode_acceleration"]["methods_available"] == ["qsv", "cuda"]
+    assert data["decode_acceleration"]["selected"] == {"hevc": "qsv"}
+
+
+def test_system_capabilities_survives_hwaccel_query_failure(client, monkeypatch):
+    import app.core.frame_source as fs
+
+    def boom():
+        raise OSError("no ffmpeg")
+
+    monkeypatch.setattr(fs, "_query_hwaccels", boom)
+    fs._reset_for_tests()
+    try:
+        resp = client.get("/api/system/capabilities")
+        assert resp.status_code == 200
+        assert resp.json()["decode_acceleration"]["methods_available"] == []
+    finally:
+        fs._reset_for_tests()
 
 
 def test_system_ai_status_shape(client):

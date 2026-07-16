@@ -132,3 +132,67 @@ def test_probe_handles_fractional_fps_mocked(monkeypatch):
     monkeypatch.setattr(_ffprobe_mod.subprocess, "run", _ffprobe_mock("30000/1001", "5.0"))
     result = _ffprobe_mod.probe("/fake.mp4")
     assert result["fps"] == pytest.approx(29.97, rel=0.01)
+
+
+# ── Phase 15 T002: rotation field ─────────────────────────────────────────────
+
+def _ffprobe_mock_with_stream_extras(extras: dict):
+    """ffprobe JSON mock whose video stream carries extra keys (side data, tags)."""
+    stream = {"codec_type": "video", "codec_name": "h264",
+              "width": 1280, "height": 720,
+              "avg_frame_rate": "30/1"}
+    stream.update(extras)
+    data = {"streams": [stream], "format": {"duration": "5.0"}}
+
+    def mock_run(cmd, **kw):
+        from unittest.mock import MagicMock
+        m = MagicMock()
+        m.returncode = 0
+        m.stdout = _json.dumps(data)
+        m.stderr = ""
+        return m
+
+    return mock_run
+
+
+def test_probe_rotation_zero_when_absent(monkeypatch):
+    monkeypatch.setattr(_ffprobe_mod, "get_ffprobe", lambda: "/usr/bin/ffprobe")
+    monkeypatch.setattr(_ffprobe_mod.subprocess, "run", _ffprobe_mock())
+    result = _ffprobe_mod.probe("/fake.mp4")
+    assert result["rotation"] == 0
+
+
+def test_probe_rotation_from_display_matrix(monkeypatch):
+    monkeypatch.setattr(_ffprobe_mod, "get_ffprobe", lambda: "/usr/bin/ffprobe")
+    monkeypatch.setattr(
+        _ffprobe_mod.subprocess, "run",
+        _ffprobe_mock_with_stream_extras({
+            "side_data_list": [{"side_data_type": "Display Matrix", "rotation": -90}]
+        }),
+    )
+    result = _ffprobe_mod.probe("/fake.mp4")
+    # Normalized to [0, 360)
+    assert result["rotation"] == 270
+
+
+def test_probe_rotation_from_rotate_tag(monkeypatch):
+    monkeypatch.setattr(_ffprobe_mod, "get_ffprobe", lambda: "/usr/bin/ffprobe")
+    monkeypatch.setattr(
+        _ffprobe_mod.subprocess, "run",
+        _ffprobe_mock_with_stream_extras({"tags": {"rotate": "90"}}),
+    )
+    result = _ffprobe_mod.probe("/fake.mp4")
+    assert result["rotation"] == 90
+
+
+def test_probe_rotation_unparseable_is_zero(monkeypatch):
+    monkeypatch.setattr(_ffprobe_mod, "get_ffprobe", lambda: "/usr/bin/ffprobe")
+    monkeypatch.setattr(
+        _ffprobe_mod.subprocess, "run",
+        _ffprobe_mock_with_stream_extras({
+            "side_data_list": [{"side_data_type": "Display Matrix", "rotation": "garbage"}],
+            "tags": {"rotate": "not-a-number"},
+        }),
+    )
+    result = _ffprobe_mod.probe("/fake.mp4")
+    assert result["rotation"] == 0

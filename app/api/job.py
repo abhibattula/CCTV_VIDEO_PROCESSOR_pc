@@ -11,7 +11,7 @@ import threading
 import uuid
 from datetime import datetime
 from pathlib import Path
-from typing import Optional
+from typing import Literal, Optional
 
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
@@ -42,6 +42,9 @@ class CreateJobRequest(BaseModel):
 class StartJobRequest(BaseModel):
     mode: str = "mog2"
     sensitivity: str = "medium"
+    # Fast Scan preset (Phase 15). "thorough" = legacy every-frame path;
+    # frame_skip below is honored only in thorough mode.
+    scan_speed: Literal["thorough", "balanced", "fast"] = "balanced"
     frame_skip: int = 1
     padding_s: float = 2.0
     min_gap_s: float = 2.0
@@ -772,7 +775,7 @@ async def start_job(req: StartJobRequest):
     settings = req.model_dump()
 
     _cancel_event.clear()
-    session.update(status="detecting", progress=0.0)
+    session.update(status="detecting", progress=0.0, settings=settings)
     # Clear events for a fresh run
     session.update(events=[], event_count=0)
 
@@ -792,7 +795,7 @@ async def start_job(req: StartJobRequest):
             else:
                 from app.core import detection_engine as detector
 
-            detector.run(
+            run_kwargs = dict(
                 source_path=source_path,
                 source_info=source_info,
                 settings=settings,
@@ -801,6 +804,12 @@ async def start_job(req: StartJobRequest):
                 on_event=session.append_event,
                 job_dir=_job_dir(job_id),
             )
+            # Engines that accept a logger get the SSE log function; passing it
+            # conditionally keeps older run() signatures (and test fakes) working.
+            import inspect as _inspect
+            if "logger" in _inspect.signature(detector.run).parameters:
+                run_kwargs["logger"] = log
+            detector.run(**run_kwargs)
 
             if _cancel_event.is_set():
                 session.update(status="cancelled")

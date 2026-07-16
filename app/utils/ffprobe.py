@@ -234,4 +234,23 @@ def probe(source_path: str) -> dict:
         "has_audio": has_audio,
         "audio_codec": audio_codec,
         "needs_reencode": needs_reencode,
+        "rotation": _extract_rotation(video),
     }
+
+
+def _extract_rotation(video_stream: dict) -> int:
+    """Rotation in degrees normalized to [0, 360); 0 when absent/unparseable.
+
+    Non-zero rotation makes frame_source skip hardware decode candidates
+    (autorotate is only dependable in the software chain)."""
+    for sd in video_stream.get("side_data_list") or []:
+        if "rotation" in sd:
+            try:
+                return int(float(sd["rotation"])) % 360
+            except (TypeError, ValueError):
+                continue
+    tags = video_stream.get("tags") or {}
+    try:
+        return int(float(tags.get("rotate", 0))) % 360
+    except (TypeError, ValueError):
+        return 0

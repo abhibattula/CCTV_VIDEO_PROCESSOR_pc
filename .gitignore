@@ -60,3 +60,7 @@ desktop.ini
 # Logs
 *.log
 uvicorn.log
+
+# Transient tool/debug artifacts
+.superpowers/
+_verify_shots/

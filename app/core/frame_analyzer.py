@@ -98,6 +98,12 @@ class FrameAnalyzer:
         cls.unavailable_reason = None
 
     @classmethod
+    def _device(cls) -> str:
+        """AI compute device — "cuda" on CUDA machines, else "cpu" (no-op)."""
+        from app.utils import ai_device
+        return ai_device.get_ai_device()
+
+    @classmethod
     def analyze(cls, image_path: Path) -> dict:
         """Run three Florence-2 tasks on image_path thumbnail.
 
@@ -173,7 +179,7 @@ class FrameAnalyzer:
                     cls._model = AutoModelForCausalLM.from_pretrained(
                         "microsoft/Florence-2-base",
                         dtype=torch.float32,
-                        device_map="cpu",
+                        device_map=cls._device(),
                         trust_remote_code=True,
                         attn_implementation="eager",
                     )
@@ -208,7 +214,7 @@ class FrameAnalyzer:
                 warnings.simplefilter("ignore", DeprecationWarning)
                 inputs = processor(
                     text=task, images=image, return_tensors="pt", truncation=False
-                ).to("cpu")
+                ).to(cls._device())
                 # use_cache=False: avoids EncoderDecoderCache format incompatibility in
                 # transformers 5.x — the custom Florence-2 model (trust_remote_code) was
                 # written for 4.x tuple-style past_key_values.
@@ -256,7 +262,7 @@ class FrameAnalyzer:
                     images=crop,
                     return_tensors="pt",
                     truncation=False,
-                ).to("cpu")
+                ).to(cls._device())
 
                 def _region_task():
                     with warnings.catch_warnings():
@@ -331,7 +337,7 @@ class FrameAnalyzer:
                 inputs = processor(
                     text="<MORE_DETAILED_CAPTION>", images=image,
                     return_tensors="pt", truncation=False,
-                ).to("cpu")
+                ).to(cls._device())
                 ids = model.generate(**inputs, max_new_tokens=100, num_beams=1, use_cache=False)
                 raw = processor.batch_decode(ids, skip_special_tokens=False)[0]
                 return processor.post_process_generation(

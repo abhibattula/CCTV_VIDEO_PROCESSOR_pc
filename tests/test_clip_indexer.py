@@ -192,3 +192,13 @@ def test_embed_text_real_model_long_query_integration():
     vec = ClipIndexer.embed_text(long_query)
     assert vec is not None and vec.shape == (512,)
     assert abs(float(np.linalg.norm(vec)) - 1.0) < 1e-4
+
+
+# ── Phase 15 T015: AI device helper ───────────────────────────────────────────
+
+def test_clip_indexer_device_follows_ai_device(monkeypatch):
+    import app.utils.ai_device as ai_device
+    from app.core.clip_indexer import ClipIndexer
+
+    monkeypatch.setattr(ai_device, "get_ai_device", lambda: "sentinel-device")
+    assert ClipIndexer._device() == "sentinel-device"

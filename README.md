@@ -341,6 +341,13 @@ it exists.
 **Core loop:** load → (optionally draw detection zones) → detect (MOG2 or YOLO) →
 review/filter on a timeline → export.
 
+- **Fast Scan (scan-speed presets)** — Balanced (default) analyses a 5 fps sample of
+  the video through an FFmpeg pipeline with automatic hardware-accelerated decoding
+  (Intel Quick Sync / NVIDIA, trial-verified per file with graceful software
+  fallback), making long recordings several times faster to scan with the same
+  events found; Fast samples 2 fps for maximum speed; Thorough keeps the classic
+  every-frame analysis. Active acceleration (video decode + AI compute device) is
+  shown on the Home page, and AI models use a CUDA GPU automatically when present
 - Region-of-interest zones — restrict detection to one or more drawn areas of the frame
 - **Activity heatmap** — after detection, an optional JET-colormapped overlay on the
   zone-drawing preview shows where motion accumulated across the whole run; toggle it

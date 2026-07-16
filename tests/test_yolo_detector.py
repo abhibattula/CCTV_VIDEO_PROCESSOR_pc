@@ -303,3 +303,183 @@ def test_yolo_frame_skip_config_accessible():
     from app.config import YOLO_FRAME_SKIP
     assert isinstance(YOLO_FRAME_SKIP, int)
     assert YOLO_FRAME_SKIP > 0
+
+
+# ── Phase 15 T010: sampled (Fast Scan) mode ───────────────────────────────────
+
+import numpy as np
+from types import SimpleNamespace
+
+
+def _fake_box():
+    return SimpleNamespace(cls=[0], conf=[0.9], xyxy=[[10, 10, 50, 50]])
+
+
+class _RecordingYOLO:
+    """Fake ultralytics model: detects a Person on every frame, records kwargs."""
+    def __init__(self, *a, **kw):
+        self.calls = []
+
+    def __call__(self, frame, **kw):
+        self.calls.append(kw)
+        return [SimpleNamespace(boxes=[_fake_box()])]
+
+
+class _FakeYoloStream:
+    def __init__(self, frames, sample_fps):
+        self._frames = frames
+        self.sample_fps = sample_fps
+        self.decoder = "software"
+        self.frames_delivered = 0
+
+    def __iter__(self):
+        for i, f in enumerate(self._frames):
+            self.frames_delivered += 1
+            yield f, i / self.sample_fps
+
+    @property
+    def returncode(self):
+        return 0
+
+    @property
+    def stderr_tail(self):
+        return ""
+
+    def close(self):
+        pass
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *exc):
+        pass
+
+
+_YOLO_INFO = {"fps": 30.0, "duration_s": 4.0, "width": 1920, "height": 1080,
+              "codec": "h264", "rotation": 0}
+_YOLO_SETTINGS = {"mode": "yolo", "sensitivity": "medium", "scan_speed": "balanced",
+                  "padding_s": 1.0, "min_event_s": 1.0, "min_gap_s": 1.0,
+                  "zones": [], "recording_start": None}
+
+
+def _install_fake_model(monkeypatch, yd, model):
+    fake_ultra = types.ModuleType("ultralytics")
+    fake_ultra.YOLO = lambda *a, **kw: model
+    monkeypatch.setitem(sys.modules, "ultralytics", fake_ultra)
+    yd._model_ready.set()
+    monkeypatch.setattr(yd, "_cached_yolo_model", model)
+
+
+def _yolo_frames(n):
+    return [np.zeros((360, 640, 3), dtype=np.uint8) for _ in range(n)]
+
+
+def test_yolo_sampled_uses_frame_source_and_maps_time(tmp_path, monkeypatch):
+    import importlib
+    import app.core.yolo_detector as yd
+    importlib.reload(yd)
+
+    model = _RecordingYOLO()
+    _install_fake_model(monkeypatch, yd, model)
+
+    record = {}
+
+    def fake_open(source_path, source_info, sample_fps, width, height, logger):
+        record.update(sample_fps=sample_fps, width=width, height=height)
+        return _FakeYoloStream(_yolo_frames(20), sample_fps)
+
+    monkeypatch.setattr(yd.frame_source, "open_frames", fake_open)
+
+    events, progress = [], []
+    yd.run(
+        source_path="/fake.mp4", source_info=_YOLO_INFO,
+        settings=dict(_YOLO_SETTINGS), cancel_event=threading.Event(),
+        on_progress=progress.append, on_event=events.append,
+        job_dir=Path(tmp_path),
+    )
+    # Frame geometry: 640×360 at the balanced preset rate
+    assert record["width"] == 640 and record["height"] == 360
+    assert record["sample_fps"] == 5.0
+    # Every sampled frame gets inference (no YOLO_FRAME_SKIP in sampled mode)
+    assert len(model.calls) == 20
+    # Constant detection → one event spanning the clip, t from i/sample_fps
+    assert len(events) == 1
+    assert events[0]["start_s"] == pytest.approx(0.0, abs=0.01)
+    assert events[0]["end_s"] == pytest.approx(20 / 5.0, abs=0.3)
+    assert events[0]["zone_label"] == "Person"
+    # Progress denominator is duration_s × sample_fps (4.0 s × 5 = 20 frames)
+    mid = [p for p in progress if 0.4 <= p <= 0.6]
+    assert mid, f"expected a ~0.5 progress tick from the sampled denominator, got {progress}"
+    assert max(progress) == 1.0
+
+
+def test_yolo_thorough_keeps_frame_skip_and_ignores_frame_source(tmp_path, monkeypatch):
+    import importlib
+    import app.core.yolo_detector as yd
+    importlib.reload(yd)
+    from app.config import YOLO_FRAME_SKIP
+
+    model = _RecordingYOLO()
+    _install_fake_model(monkeypatch, yd, model)
+
+    def _boom(*a, **kw):
+        raise AssertionError("frame_source must not be used in thorough mode")
+
+    monkeypatch.setattr(yd.frame_source, "open_frames", _boom)
+
+    import cv2
+
+    frames_total = 30
+    idx = [0]
+
+    class _Cap:
+        def __init__(self, *a): pass
+        def isOpened(self): return True
+        def read(self):
+            if idx[0] < frames_total:
+                idx[0] += 1
+                return True, np.zeros((240, 320, 3), dtype=np.uint8)
+            return False, None
+        def get(self, prop):
+            if prop == cv2.CAP_PROP_FRAME_COUNT: return float(frames_total)
+            if prop == cv2.CAP_PROP_FPS: return 25.0
+            if prop == cv2.CAP_PROP_FRAME_WIDTH: return 320.0
+            if prop == cv2.CAP_PROP_FRAME_HEIGHT: return 240.0
+            return 0.0
+        def release(self): pass
+
+    monkeypatch.setattr(cv2, "VideoCapture", _Cap)
+
+    settings = dict(_YOLO_SETTINGS, scan_speed="thorough")
+    yd.run(
+        source_path="/fake.mp4", source_info=_YOLO_INFO,
+        settings=settings, cancel_event=threading.Event(),
+        on_progress=lambda p: None, on_event=lambda ev: None,
+        job_dir=Path(tmp_path),
+    )
+    assert len(model.calls) == frames_total // YOLO_FRAME_SKIP
+
+
+# ── Phase 15 T015: explicit AI device on inference ────────────────────────────
+
+def test_yolo_inference_passes_ai_device(tmp_path, monkeypatch):
+    import importlib
+    import app.core.yolo_detector as yd
+    importlib.reload(yd)
+    import app.utils.ai_device as ai_device
+
+    monkeypatch.setattr(ai_device, "get_ai_device", lambda: "cpu")
+    model = _RecordingYOLO()
+    _install_fake_model(monkeypatch, yd, model)
+    monkeypatch.setattr(
+        yd.frame_source, "open_frames",
+        lambda *a, **kw: _FakeYoloStream(_yolo_frames(3), 5.0),
+    )
+
+    yd.run(
+        source_path="/fake.mp4", source_info=_YOLO_INFO,
+        settings=dict(_YOLO_SETTINGS), cancel_event=threading.Event(),
+        on_progress=lambda p: None, on_event=lambda ev: None,
+        job_dir=Path(tmp_path),
+    )
+    assert model.calls and all(kw.get("device") == "cpu" for kw in model.calls)

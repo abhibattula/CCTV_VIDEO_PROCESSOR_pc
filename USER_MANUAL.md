@@ -208,11 +208,30 @@ The heatmap is produced for both MOG2 and Object Detection modes.
 |---------|-------------|-------------|
 | **Detection Mode** | MOG2 = background subtraction (fast, unlabelled). Object Detection = YOLO AI (slower, labels each event) | MOG2 for general review; Object Detection when you need to filter by what's in frame |
 | **Sensitivity** | Low: only strong motion. Medium: balanced. High: catches subtle movement | Medium to start; bump to High if events are missed |
+| **Scan Speed** | Thorough: analyses every frame (slowest, identical to v1.0.x). Balanced: samples 5 frames/sec — several times faster, finds the same events. Fast: samples 2 frames/sec — fastest; very brief events may merge | **Balanced** (the default) for everything, especially long recordings; Thorough only if you need frame-perfect analysis |
 | **Padding (s)** | Extra seconds added before and after each detected moment | 2s — gives context around each event |
 | **Min Event Duration (s)** | Discard events shorter than this | 2s — filters out birds, headlights, reflections |
 | **Recording Started At** | Optional. Enter the wall-clock time the recording began (e.g. `08:30:00`) | Fill in if you want real timestamps on events and in burn-in overlays |
 
 If "Object Detection" is greyed out, `ultralytics` isn't installed — see Installation above, or just use MOG2.
+
+**How Scan Speed works.** In Balanced and Fast modes the app decodes, samples,
+and shrinks video frames in a highly optimized pipeline — using your graphics
+chip's hardware video decoder when it has one (Intel Quick Sync, NVIDIA) — and
+only analyses the sampled frames. Since real events must last at least your
+"Min Event Duration" (2 s default), sampling 5 frames every second still sees
+each event many times over; timestamps, thumbnails, exports, and reports are
+unaffected. The **AI Models card** on the Home page shows which acceleration is
+active ("Acceleration — video decode: … · AI compute: …"). If hardware decoding
+misbehaves on your machine (rare driver issues), set the environment variable
+`CCTV_FORCE_SW_DECODE=1` before launching to force software decoding — scans
+still work, just slower. On machines with an NVIDIA CUDA GPU and a CUDA build
+of PyTorch, AI analysis (object labels, captions, search indexing) runs on the
+GPU automatically; on every other machine it runs on the CPU exactly as before.
+
+**Reviewing a 24-hour recording?** Keep Balanced (or use Fast) — on a typical
+PC with Intel graphics that's the difference between an overnight job and
+roughly an hour of processing for heavy 1080p footage.
 
 ### Step 3 — Start Detection
 
@@ -226,7 +245,10 @@ Click **Start Detection**. You'll be taken to the Processing page, which shows:
 - **Live detection chart** — a bar per label updating in real time as events are found (one bar labelled "Motion" in MOG2 mode), plus an events/min rate once a minute of detection has elapsed — useful for catching a misconfigured sensitivity early (e.g. zero events after 20% of the video usually means sensitivity is too low)
 - A live log panel scrolling detection messages
 
-Detection typically runs at **2–5× real-time** on a modern PC (a 1-hour video in 12–30 minutes). Click **Cancel** at any time to stop early — events found so far are kept.
+Detection speed depends on Scan Speed: **Balanced** typically runs at **6–10×
+real-time** on a modern PC with hardware decoding (a 1-hour video in 6–10
+minutes), while **Thorough** runs at 2–5× real-time (every frame analysed).
+Click **Cancel** at any time to stop early — events found so far are kept.
 
 ### Step 4 — Review Events (Timeline)
 

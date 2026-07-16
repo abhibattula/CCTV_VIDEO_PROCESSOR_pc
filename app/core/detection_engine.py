@@ -18,6 +18,7 @@ import cv2
 import numpy as np
 
 import app.config as config
+from app.core import frame_source
 from app.utils.ffmpeg_path import get_ffmpeg
 from app.utils.time_utils import seconds_to_clock
 
@@ -25,6 +26,13 @@ from app.utils.time_utils import seconds_to_clock
 SENSITIVITY_HISTORY = {"low": 700, "medium": 500, "high": 200}
 SENSITIVITY_VAR_THR  = {"low": 32,  "medium": 16,  "high": 8}
 MOTION_THRESHOLD     = {"low": 0.01, "medium": 0.002, "high": 0.0005}
+
+# Sampled (Fast Scan) modes: MOG2 history is frame-denominated, so the
+# background adaptation window is kept constant in SECONDS of source time
+# (values ≈ the legacy frame counts at 25 fps).
+HISTORY_SECONDS = {"low": 28, "medium": 20, "high": 8}
+WARMUP_SECONDS  = 2.0
+NORMALIZE_WARN_DURATION_S = 1800.0  # >30 min inputs warn before full re-encode
 
 INITIAL_WARMUP = 30    # frames to feed MOG2 before event detection
 PROBE_FRAMES   = 60    # frames to test-read for malformation check
@@ -206,6 +214,15 @@ def _open_video(
                 f"[PROBE] VideoCapture read {probe_ok}/{PROBE_FRAMES} probe frames "
                 f"— video is malformed on this platform. Normalizing…"
             )
+            est_duration_s = total_frames / max(actual_fps, 1.0)
+            if est_duration_s > NORMALIZE_WARN_DURATION_S:
+                logger(
+                    f"[NORMALIZE] WARNING: this video is ~{est_duration_s / 60:.0f} minutes "
+                    f"({est_duration_s:.0f} s) long and needs a one-time repair before "
+                    f"analysis. The repair may take roughly as long as the video itself "
+                    f"and temporarily uses up to the source's size in extra disk space. "
+                    f"It runs once — later scans of this job reuse the repaired copy."
+                )
             ok = _normalize_via_vc(source_path, normalized_path, actual_fps, src_w, src_h, logger)
             if ok and norm_file.exists():
                 cap = cv2.VideoCapture(normalized_path)
@@ -239,12 +256,202 @@ def run(
     on_progress: Callable[[float], None],
     on_event: Callable[[dict], None],
     job_dir: Path,
+    logger: Optional[Callable[[str], None]] = None,
 ) -> None:
     """
-    Main MOG2 detection pipeline.
+    MOG2 detection entry point.
 
-    Calls on_progress(0.0–1.0) periodically and on_event(ev_dict) for each
-    confirmed motion event.  Runs to completion or until cancel_event is set.
+    scan_speed "balanced"/"fast" → FFmpeg-sampled Fast Scan path (falls back
+    to the legacy loop on any pipe failure); "thorough" or absent → the legacy
+    cv2.VideoCapture loop, unchanged (the API layer defaults to "balanced";
+    direct callers without the key keep pre-Phase-15 behavior).
+    """
+    _log = logger or (lambda msg: None)
+    scan_speed = settings.get("scan_speed", "thorough")
+
+    if scan_speed in ("balanced", "fast"):
+        try:
+            if _run_sampled(source_path, source_info, settings, cancel_event,
+                            on_progress, on_event, Path(job_dir), scan_speed, _log):
+                return
+        except frame_source.FrameSourceError as exc:
+            _log(f"[FASTSCAN] sampled pipeline failed mid-run: {exc}")
+        _log("[FASTSCAN] falling back to the legacy full-decode scan")
+
+    _run_legacy(source_path, source_info, settings, cancel_event,
+                on_progress, on_event, job_dir, _log)
+
+
+def _run_sampled(
+    source_path: str,
+    source_info: dict,
+    settings: dict,
+    cancel_event: threading.Event,
+    on_progress: Callable[[float], None],
+    on_event: Callable[[dict], None],
+    job_dir: Path,
+    scan_speed: str,
+    _log: Callable[[str], None],
+) -> bool:
+    """
+    Fast Scan: consume pre-scaled sampled frames from the FFmpeg pipe.
+
+    Events are buffered and emitted only on a completed (or cancelled) run so
+    a mid-run pipe failure can discard partial results and re-run the legacy
+    path without duplicating events. Returns True when the run is complete;
+    False when the caller should fall back to the legacy loop. Raises
+    FrameSourceError on mid-run pipe failure (also a fallback signal).
+    """
+    W = config.DETECT_WIDTH
+    H = config.DETECT_HEIGHT
+    job_dir.mkdir(parents=True, exist_ok=True)
+
+    sensitivity     = settings.get("sensitivity", "medium")
+    padding_s       = float(settings.get("padding_s", 2))
+    min_gap_s       = float(settings.get("min_gap_s", 2))
+    min_event_s     = float(settings.get("min_event_s", 2))
+    zones           = settings.get("zones", [])
+    recording_start = settings.get("recording_start")
+
+    source_fps        = float(source_info.get("fps") or 25.0)
+    source_duration_s = float(source_info.get("duration_s") or 0.0)
+    sample_fps = frame_source.sample_fps_for(scan_speed, source_fps)
+
+    history = max(1, int(HISTORY_SECONDS[sensitivity] * sample_fps))
+    mog2 = cv2.createBackgroundSubtractorMOG2(
+        history=history, varThreshold=SENSITIVITY_VAR_THR[sensitivity],
+        detectShadows=False,
+    )
+    motion_ratio_threshold = MOTION_THRESHOLD[sensitivity]
+    clahe  = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
+    kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (3, 3))
+    zone_mask = _build_zone_mask(zones)
+    heatmap_accum = np.zeros((H, W), dtype=np.float32)
+
+    warmup_frames  = max(5, int(WARMUP_SECONDS * sample_fps))
+    expected_total = max(source_duration_s * sample_fps, 1.0)
+    progress_every = max(1, int(sample_fps * 2))  # ~every 2 s of video
+
+    pending: list[dict] = []          # events buffered until the run completes
+    in_event          = False
+    event_start       = 0.0
+    event_start_clock = ""
+    silence_start: Optional[float] = None
+    peak_score        = 0.0
+    event_index       = 0
+    current_pts       = 0.0
+    frames_done       = 0
+    _last_progress_at = time.monotonic()
+
+    def _close_event(event_end: float) -> None:
+        nonlocal event_index
+        if event_end - event_start >= min_event_s:
+            pending.append({
+                "event_index":       event_index,
+                "start_s":           round(event_start, 3),
+                "end_s":             round(event_end, 3),
+                "start_clock":       event_start_clock,
+                "end_clock":         seconds_to_clock(event_end, recording_start),
+                "peak_motion_score": round(peak_score, 4),
+                "zone_label":        zones[0]["label"] if zones else None,
+                "included":          True,
+            })
+            event_index += 1
+
+    stream = frame_source.open_frames(source_path, source_info, sample_fps,
+                                      W, H, _log)
+    with stream:
+        for frame, pts in stream:
+            if cancel_event.is_set():
+                break
+            current_pts = pts
+            frames_done += 1
+
+            gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+            if sensitivity == "high":
+                gray = clahe.apply(gray)
+            fg_mask = mog2.apply(gray)
+
+            if frames_done <= warmup_frames:
+                continue
+
+            fg_mask = cv2.morphologyEx(fg_mask, cv2.MORPH_OPEN,  kernel)
+            fg_mask = cv2.morphologyEx(fg_mask, cv2.MORPH_CLOSE, kernel)
+            if zone_mask is not None:
+                fg_mask = cv2.bitwise_and(fg_mask, zone_mask)
+
+            heatmap_accum += (fg_mask > 0).astype(np.float32)
+
+            motion_ratio = cv2.countNonZero(fg_mask) / (W * H)
+            is_motion    = motion_ratio >= motion_ratio_threshold
+
+            if not in_event and is_motion:
+                in_event          = True
+                event_start       = max(0.0, current_pts - padding_s)
+                event_start_clock = seconds_to_clock(event_start, recording_start)
+                peak_score        = motion_ratio
+                silence_start     = None
+            elif in_event:
+                if is_motion:
+                    peak_score    = max(peak_score, motion_ratio)
+                    silence_start = None
+                else:
+                    if silence_start is None:
+                        silence_start = current_pts
+                    if current_pts - silence_start >= min_gap_s:
+                        _close_event(silence_start + padding_s)
+                        in_event      = False
+                        silence_start = None
+                        peak_score    = 0.0
+
+            _now = time.monotonic()
+            if frames_done % progress_every == 0 or _now - _last_progress_at >= 2.0:
+                on_progress(min(frames_done / expected_total, 0.99))
+                _last_progress_at = _now
+
+    if cancel_event.is_set():
+        for ev in pending:
+            on_event(ev)
+        _write_heatmap(heatmap_accum, source_info, job_dir)
+        return True
+
+    if frames_done == 0:
+        _log("[FASTSCAN] pipe delivered zero frames")
+        return False
+
+    rc = stream.returncode
+    delivered_s = frames_done / sample_fps
+    if rc not in (0, None) and source_duration_s > 0 \
+            and delivered_s < 0.95 * source_duration_s:
+        _log(f"[FASTSCAN] decoder exited {rc} after {delivered_s:.1f}s of "
+             f"{source_duration_s:.1f}s ({stream.stderr_tail or 'no stderr'})")
+        return False
+
+    if in_event:
+        _close_event(current_pts + padding_s)
+
+    for ev in pending:
+        on_event(ev)
+    on_progress(1.0)
+    _write_heatmap(heatmap_accum, source_info, job_dir)
+    _log(f"[FASTSCAN] complete — {frames_done} sampled frames "
+         f"({stream.decoder}), {len(pending)} event(s)")
+    return True
+
+
+def _run_legacy(
+    source_path: str,
+    source_info: dict,
+    settings: dict,
+    cancel_event: threading.Event,
+    on_progress: Callable[[float], None],
+    on_event: Callable[[dict], None],
+    job_dir: Path,
+    _log: Callable[[str], None],
+) -> None:
+    """
+    Legacy MOG2 pipeline (every frame via cv2.VideoCapture) — the Thorough
+    preset and the terminal fallback. Loop semantics unchanged from v1.0.x.
     """
     W = config.DETECT_WIDTH
     H = config.DETECT_HEIGHT
@@ -262,10 +469,6 @@ def run(
 
     source_fps        = float(source_info.get("fps") or 25.0)
     source_duration_s = float(source_info.get("duration_s") or 0.0)
-
-    def _log(msg: str) -> None:
-        # Local logger — caller can hook via on_event/on_progress; plain print for now
-        pass  # log lines are surfaced via the SSE log buffer in the API layer
 
     # ── Open video ────────────────────────────────────────────────────────────
     cap, total_frames, actual_fps = _open_video(source_path, job_dir, source_fps, _log)

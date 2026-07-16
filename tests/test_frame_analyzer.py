@@ -276,3 +276,13 @@ def test_is_available_respects_huggingface_hub_cache(monkeypatch, tmp_path):
     fa.FrameAnalyzer._availability_cache = None
 
     assert result is True
+
+
+# ── Phase 15 T015: AI device helper ───────────────────────────────────────────
+
+def test_frame_analyzer_device_follows_ai_device(monkeypatch):
+    import app.utils.ai_device as ai_device
+    from app.core.frame_analyzer import FrameAnalyzer
+
+    monkeypatch.setattr(ai_device, "get_ai_device", lambda: "sentinel-device")
+    assert FrameAnalyzer._device() == "sentinel-device"

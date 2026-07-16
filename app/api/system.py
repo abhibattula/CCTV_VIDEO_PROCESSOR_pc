@@ -27,7 +27,15 @@ async def system_capabilities():
         yolo_available = True
     except Exception:
         yolo_available = False
-    return JSONResponse({"yolo_available": yolo_available})
+
+    from app.core import frame_source
+    from app.utils import ai_device
+
+    return JSONResponse({
+        "yolo_available": yolo_available,
+        "ai_device": ai_device.describe_ai_device(),
+        "decode_acceleration": frame_source.get_acceleration_status(),
+    })
 
 
 @router.get("/system/ai-status")
