@@ -107,4 +107,5 @@ A user loads a very long file that turns out to be malformed in a way that previ
 - The user's own machine has Intel integrated graphics (hardware decode benefits apply) and no CUDA GPU (AI stays on CPU there); CUDA benefit applies only to installs with a CUDA-enabled AI stack — the shipped installers bundle a CPU-only stack, so GPU AI is effectively for source installs today.
 - The legacy `frame_skip` API field is retained for backward compatibility (honored in Thorough mode) but the new scan-speed presets supersede it; the UI never exposed it, so no UI migration is needed.
 - Heatmap, progress reporting, preview, and report generation consume whatever frames the detection loop processes; reduced sampling changes their granularity proportionally but not their correctness.
+- The event-parity requirement (FR-004/SC-002) applies to Balanced mode only. Fast mode is an explicit user-chosen recall trade-off: brief events may merge or shorten; no parity criterion is defined for it.
 - This phase ships in v1.1.0 together with Phase 14 (CLIP event search) and the CLIP download fix.

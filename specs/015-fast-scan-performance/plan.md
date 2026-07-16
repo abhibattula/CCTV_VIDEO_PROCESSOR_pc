@@ -112,7 +112,8 @@ def open_frames(source_path, source_info, sample_fps, width, height, logger)
   1. **Intel Quick Sync**: `-hwaccel qsv -c:v {codec}_qsv` +
      `-vf vpp_qsv=w=W:h=H,hwdownload,format=nv12,fps=N` (GPU-side scale before
      copy-back — the naive full-res copy-back variant measured *slower* than
-     software and is never used). Codec map: h264/hevc/vp9/av1/mpeg2 → `_qsv`.
+     software and is never used). Codec map: h264/hevc/vp9/av1/mpeg2 → `_qsv`;
+     codecs outside the map skip this candidate entirely (same rule for cuda).
   2. **NVIDIA**: `-hwaccel cuda -hwaccel_output_format cuda` +
      `-vf fps=N,scale_cuda=W:H,hwdownload,format=nv12`.
   3. **Software**: `-vf fps=N,scale=W:H`.
@@ -121,10 +122,21 @@ def open_frames(source_path, source_info, sample_fps, width, height, logger)
 - **Rotation**: if the probe reports rotation metadata, hardware candidates are
   skipped (FFmpeg's autorotate is reliable in the software chain; rotated CCTV
   is rare). Requires a small `rotation` addition to `app/utils/ffprobe.probe`.
-- `close()` terminates the child (`terminate` → `kill` after grace), releasing
-  the file handle — wired to cancellation so no orphaned FFmpeg survives (SC-007).
+- `close()` terminates the child (`terminate`, then `kill` after a 3 s grace),
+  releasing the file handle — called on completion, error, and cancellation so
+  no orphaned FFmpeg survives (SC-007).
+- **Stall watchdog**: a frame read that produces no bytes for 30 s while the
+  child is still alive is treated as a pipe failure (kill + raise) — the
+  "never hang" guarantee.
+- **Mid-run failure semantics**: if the child exits non-zero (or stalls) after
+  the trial passed but before the expected duration was delivered, the engine
+  discards partial results and re-runs the whole video via the legacy cv2 loop
+  (same handling as the zero-frame case, logged) — correctness over speed.
 - Module-level `get_acceleration_status()` returns the last/probed selection
   for the capabilities endpoint.
+- Env escape hatch: `CCTV_FORCE_SW_DECODE=1` skips hardware candidates —
+  used by the SC-004 benchmark run and as a user-side workaround for broken
+  GPU drivers (documented in USER_MANUAL troubleshooting).
 
 ### detection_engine.py integration
 

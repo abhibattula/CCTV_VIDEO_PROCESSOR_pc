@@ -131,6 +131,8 @@ chain, where FFmpeg autorotate is dependable.
 version/driver-fragile; rotated sources are rare in CCTV (fixed cameras), so
 trading acceleration for correctness there is the right default. Cheap to
 implement, removes a whole failure class from the trial/fallback path.
+The legacy (Thorough) path keeps whatever rotation behavior v1.0.x has today —
+unchanged by definition (D4), out of scope for this phase.
 
 ## D8 — Normalization guard threshold
 
