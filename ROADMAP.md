@@ -20,7 +20,14 @@ Phase 13: v1.0.0 released on GitHub with all 5 platform installers built from
 CI — windowed-exe stream fix, PyQt6 stale VC++ runtime fix (torch c10.dll
 WinError 1114), in-app AI Models download card + availability diagnostics,
 headless Pi build (web UI in system browser; PyQt6 has no Bookworm-compatible
-aarch64 wheels), native ARM64 CI runner for the Pi .deb; ~240 tests total).
+aarch64 wheels), native ARM64 CI runner for the Pi .deb; Phase 14: CLIP natural-language event
+search on the Timeline (relevance badges, sort toggle, dimming slider,
+on-demand background indexing) + CLIP download fix (dead CDN URL → HF hub);
+Phase 15: Fast Scan performance overhaul — scan-speed presets
+(Thorough/Balanced/Fast), FFmpeg sampled pipeline with trial-verified
+hardware decode (Intel Quick Sync/NVIDIA, measured 5.21× on the reference
+asset), opportunistic CUDA for AI models, acceleration visibility in
+capabilities/UI; 323 tests total).
 Nothing here is scheduled or committed — when one of these gets
 picked up, it should run through the project's normal speckit pipeline
 (`/speckit.specify` → `/speckit.clarify` → `/speckit.plan` → `/speckit.tasks` →
@@ -77,7 +84,7 @@ faster-to-ship first cut.
 sharing footage with a third party — that today requires manual redaction in
 another tool).
 
-### B2. Natural-language event search
+### B2. Natural-language event search — ✅ Shipped in Phase 14
 Search events by description ("show me the red car") instead of only by
 detected label or score threshold.
 
