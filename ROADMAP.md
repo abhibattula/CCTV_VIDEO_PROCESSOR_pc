@@ -155,6 +155,12 @@ zone-drawing preview after detection. All shipped in Phase 5.
 - **Desktop notifications** (Windows toast) when a long detection or export
   finishes, so the user isn't stuck babysitting the Processing page.
 - **Recent files** list on the Home page.
+- **Check for updates (manual, Phase 16 candidate — noted 2026-07-16)** — a
+  button (Home page or About), never automatic, preserving the offline-first
+  promise: on click, query the GitHub releases API, compare the latest tag
+  against the installed `VERSION`, and show "v X.Y.Z available — open download
+  page" linking to the release. The app has no updater today; installs are
+  manual over-the-top.
 
 **Why**: this is the layer that separates "functional" from "feels finished
 and professional" — none of these add new capability, but together they're
